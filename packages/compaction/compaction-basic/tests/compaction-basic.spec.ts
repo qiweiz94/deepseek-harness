@@ -855,6 +855,44 @@ describe('absolute pressure budget and bounded tail', () => {
     expect(session.surface.nodes[0]).toBeDefined()
   })
 
+  it('keeps walking past the nominal step/turn caps until the residual floor is met', () => {
+    const ctx = createContext(1_000_000)
+    // One turn of 40 token-cheap steps: the 15-step tail alone is far below any
+    // real floor, so the walk must extend past it to retain at least
+    // 'retainTokens' instead of silently landing far under the residual envelope.
+    const session = Session.create(SessionId('cheap-steps'))
+    session.append('turn/start', { turn: 1 })
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'kickoff' }],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    for (let step = 1; step <= 40; step += 1) {
+      session.append('step/start', { turn: 1, step })
+      session.append('assistant/message', {
+        turn: 1,
+        step,
+        message: createMessage({
+          role: 'assistant',
+          content: [{ type: 'text', text: `tiny ${step} `.repeat(20) }],
+          source: { kind: 'model', ...{ provider: MODEL, model: MODEL } },
+        }),
+      }, { surfaceOp: 'append' })
+      session.append('step/end', { turn: 1, step })
+    }
+
+    const priced = ctx.tokenMeter.measure(session)
+    // A floor only the last ~25 steps satisfy: 15 thrifty steps cannot reach it.
+    const floor = priced.nodes.slice(-25).reduce((sum, node) => sum + node.tokens, 0)
+    const range = selectCompactableRange(session, priced, floor)
+    expect(range).not.toBeNull()
+    const retained = priced.nodes.filter(node => node.seq > range!.end)
+    const retainedTokens = retained.reduce((sum, node) => sum + node.tokens, 0)
+    // The nominal step/turn caps must NOT carve the tail below the configured floor.
+    expect(retainedTokens).toBeGreaterThanOrEqual(floor)
+    // ... which is only possible by retaining well beyond 15 cheap steps.
+    expect(retained.length).toBeGreaterThan(15)
+  })
+
   it('records one compaction/range-pruned event per summary compaction', async () => {
     const compact = service({ auto: false, thresholdRatio: 0.5, retainTokens: 180 })
     const session = conversation(4)

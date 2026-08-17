@@ -1,7 +1,7 @@
 /** Model-visible continuation prompt for one same-session goal round. */
 
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
-import { codePointLength, truncateCodePoints } from '@deepseek-ai/dsh-output-retention'
+import { truncateCodePoints } from '@deepseek-ai/dsh-output-retention'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { GoalView } from '@deepseek-ai/dsh-goal'
 
@@ -18,13 +18,18 @@ export const MAX_ROUND_PROMPT_CHARS = 1000
  * @returns a code-point-safe prefix of at most `maxUnits` units.
  */
 function limitObjectiveToUnits(text: string, maxUnits: number): string {
-  let kept = text
-  while (kept.length > maxUnits) {
-    const next = truncateCodePoints(kept, codePointLength(kept) - 1)
-    if (next === kept) break
-    kept = next
+  if (text.length <= maxUnits) return text
+  let units = 0
+  let codePoints = 0
+  for (const codePoint of text) {
+    const unitCount = codePoint.length
+    if (units + unitCount > maxUnits) break
+    units += unitCount
+    codePoints += 1
   }
-  return kept
+  // One O(n) pass instead of dropping a single code point per iteration, then a
+  // single library truncation to the found code-point count.
+  return truncateCodePoints(text, codePoints)
 }
 
 /** Stable directive text; the objective line is the only variable part. */

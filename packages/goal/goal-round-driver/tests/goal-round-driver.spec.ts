@@ -245,6 +245,33 @@ describe('goal-round outcome policy', () => {
     expect(() => new TextEncoder().encode(block.text)).not.toThrow()
     expect(block.text).toMatch(/\n<\/goal_round>$/)
   })
+
+  it('truncates a mixed astral/ascii objective on a code-point boundary, unit-precise', () => {
+    const goal: GoalView = {
+      id: GoalId('goal-mixed-astral'),
+      revision: 1,
+      // 1800 code points / 2700 UTF-16 units: an alternating emoji+letter run the
+      // O(n) truncation must bound on a code-point boundary without a lone half.
+      objective: '\u{1F600}a'.repeat(900),
+      phase: 'active',
+      maxGoalRounds: 3,
+      roundsStarted: 0,
+      createdAt: 1,
+      updatedAt: 1,
+      activation: 'armed',
+    }
+    const block = goalSession.renderGoalRoundPrompt(goal, 1, true)[0]
+    if (block?.type !== 'text') throw new Error('expected a text goal-round prompt')
+    expect(block.text.length).toBeLessThanOrEqual(1000)
+    // A UTF-16 slice cut mid-pair would leave a lone surrogate; the cut must stay
+    // on a code-point boundary so the prompt can be encoded without U+FFFD.
+    expect(Array.from(block.text).filter(ch => /^[\uD800-\uDFFF]$/.test(ch))).toEqual([])
+    expect(() => new TextEncoder().encode(block.text)).not.toThrow()
+    // The over-budget objective is truncated with the marker and a clean close.
+    expect(block.text).toContain('…')
+    expect(block.text.match(/\n<\/goal_round>/g)).toHaveLength(1)
+    expect(block.text).toMatch(/\n<\/goal_round>$/)
+  })
 })
 
 describe('same-session goal driving', () => {
