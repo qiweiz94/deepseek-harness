@@ -1,5 +1,7 @@
 # MASTER PROMPT — DeepSeek Harness 3-Phase Work: Audit Complete + Closures (session 2026-08-17)
 
+English | [中文](SESSION-HANDOFF-2026-08-17.zh.md)
+
 You are continuing verified work in the DeepSeek Harness monorepo. Everything below was already done and green-verified by the prior session; your job is to (1) accept/verify the existing state, (2) execute the remaining decision/commit items at the end, without regressing any closed item. DO NOT re-do completed work.
 
 ## Environment
@@ -63,6 +65,13 @@ You are continuing verified work in the DeepSeek Harness monorepo. Everything be
 - When adding char caps anywhere in model-facing text, use codePointLength/truncateCodePoints from @deepseek-ai/dsh-output-retention (browser-safe), never String.slice on decoded text.
 - Dep-wiring pattern for output-retention: package.json (dependencies + devDependencies, or peer + devDependencies for pure-peer packages), a tsconfig references entry (use tsconfig.client.json only if the consumer is a client project AND output-retention ever gains one), then `pnpm install --lockfile-only`.
 
+## Unresolved gaps surfaced by the post-overhaul review (next session's mandate)
+
+The deep review of commits 5aa1dc7699 + 13e3443ac2 returned a clean GO (no BUG findings; all affected suites pass), but it flagged two design-level gaps to close before relying on the new envelopes, plus four cosmetic NITs:
+
+- GAP-1 (compaction region.ts:147-159): the new 15-step / 3-turn verbatim-tail caps can stop shrinking before the retainTokens token floor is met, so token-cheap sessions can land well below the configured targetResidualTokens envelope. Currently an untested path — add a test and/or a floor safeguard.
+- GAP-2 (goal-round-driver prompt.ts:20-31, 78-83): limitObjectiveToUnits is O(n²) (multi-second spike on a 33K objective), and a long objective is admitted at most once per revision, truncated to ~470 units, so the full text may never reach the model. Consider a linear scan and an explicit full-text admission.
+- NITs: agent-instructions digest-vs-framing wording; fetch.ts partial-footer wording; continuation digest suffix-overflow edge; spill-policy "chars"-vs-"units" label.
 ## Success bar
 
 All gates above pass, everything you ship has code-point-safe truncation and a regression test where behavior changed, fixtures are consistent with the code (verify with test:snapshot after any template/text change; re-record via test:snapshot:refresh if needed), and the work is committed path-scoped on a pushed session branch.
