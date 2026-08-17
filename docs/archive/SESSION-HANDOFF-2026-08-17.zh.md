@@ -72,6 +72,8 @@
 - GAP-1（compaction region.ts:147-159）：新的 15 步 / 3 轮逐字尾截断上限可能在达到 retainTokens token 下限之前就停止收缩，导致 token 廉价会话明显低于配置的 targetResidualTokens 包络。当前是未测试路径——补充测试和/或下限保护。
 - GAP-2（goal-round-driver prompt.ts:20-31, 78-83）：limitObjectiveToUnits 是 O(n²)（33K objective 上出现数秒尖峰），且长 objective 每版本最多只被接纳一次，截断到约 470 units，完整文本可能永远到不了模型。考虑改为线性扫描并显式接纳完整文本。
 - NIT：agent-instructions digest-vs-framing 措辞；fetch.ts partial-footer 措辞；continuation digest 后缀溢出边界；spill-policy “chars” vs “units” 标签。
+
+**已在 `d4530b8ebb` 解决（同一会话）：** GAP-1 已关闭——逐字尾截断上限不再在达到 `retainTokens` 下限之前就停止回退，token 廉价会话至少按配置保留下限逐字内容（上限与 `nodeStepTurns` 辅助函数已移除，并新增廉价步骤下限回归测试）。GAP-2 的 O(n²) 截断已改为单次 O(n) 代码点扫描加一次库截断，并新增混合 astral/ascii 单位精确回归测试；“每版本只接纳一次完整 objective”仍保留为刻意的缓存经济取舍，由“读取当前 goal”的指令兜底。四条 NIT 仍作为外观性后续项。
 ## 成功标准
 
 以上所有 gate 通过，你交付的所有内容都具备代码点安全截断，并且行为变化处都有回归测试，fixture 与代码一致（任何模板/文本变更后用 test:snapshot 验证；必要时用 test:snapshot:refresh 重录），工作已按路径作用域提交到已推送的会话分支。
