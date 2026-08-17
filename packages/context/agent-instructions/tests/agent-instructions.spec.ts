@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { chmod, mkdtemp, mkdir, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -1075,6 +1076,39 @@ describe('workspace context request injection', () => {
     }
   })
 
+  it('derives baseline contentDigest from included file contents joined by NUL', async () => {
+    const root = await tempRepo()
+    const home = await tempRepo()
+    try {
+      await mkdir(join(root, '.git'), { recursive: true })
+      await write(join(root, 'AGENTS.md'), 'repo rule')
+      await write(join(root, 'CLAUDE.md'), 'claude rule')
+      const ctx = new Context()
+      await mountWorkspaceContext(ctx, { dshHome: home, maxBytes: 65536 })
+      const agent = stubAgent(root)
+      await composeBaselinePrefix(ctx, agent)
+      const baseline = baselineEvents(agent)[0]
+      if (baseline?.type !== 'user/message') throw new Error('expected a baseline user/message')
+      const source = baseline.data.source as {
+        contentDigest?: string
+        changes: { action: string; scope: string; path: string; digest: string }[]
+      }
+      // Every emitted baseline carries its aggregate content digest.
+      expect(source.contentDigest).toMatch(/^[a-f0-9]{40}$/)
+      // Aggregate identity: SHA-1 of the included raw contents joined by NUL,
+      // in candidate order (AGENTS.md then CLAUDE.md).
+      expect(source.contentDigest)
+        .toBe(createHash('sha1').update('repo rule\u0000claude rule').digest('hex'))
+      // Per-file change digests stay SHA-1 of each file's raw content alone.
+      const byPath = new Map(source.changes.map(change => [change.path, change.digest]))
+      expect(byPath.get('AGENTS.md')).toBe(createHash('sha1').update('repo rule').digest('hex'))
+      expect(byPath.get('CLAUDE.md')).toBe(createHash('sha1').update('claude rule').digest('hex'))
+    } finally {
+      await rm(root, { recursive: true, force: true })
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
   it('retains one visible baseline across repeated session resumes', async () => {
     const root = await tempRepo()
     const home = await tempRepo()
@@ -1627,6 +1661,68 @@ describe('workspace context request injection', () => {
       expect(decision).toBe(downstream)
       expect(agent.inbox.nextStep).toHaveLength(1)
       expect(blocksText(agent.inbox.nextStep[0]?.content)).toContain('repo rule')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
+  it('queues the desired workspace context at the tail, preserving earlier queued input', async () => {
+    const root = await tempRepo()
+    const home = await tempRepo()
+    try {
+      await mkdir(join(root, '.git'), { recursive: true })
+      await write(join(root, 'AGENTS.md'), 'repo rule')
+      const ctx = new Context()
+      await mountWorkspaceContext(ctx, { dshHome: home, maxBytes: 65536 })
+      const agent = stubAgent(root)
+      const earlier = createUserMessage({
+        content: [{ type: 'text', text: 'earlier plugin notice' }],
+        source: { kind: 'plugin', plugin: 'test' },
+      })
+      agent.inbox.append('next-step', earlier)
+
+      await agentEvents(ctx, agent).waterfall(
+        'agent/pre-step',
+        { messages: [], turn: 1, step: 1, signal: AbortSignal.timeout(1000) },
+        () => Promise.resolve({ kind: 'reject' as const }),
+      )
+
+      // Append-only queueing: the instruction lands after, never before, queued input.
+      expect(agent.inbox.nextStep).toHaveLength(2)
+      expect(blocksText(agent.inbox.nextStep[0]?.content)).toBe('earlier plugin notice')
+      expect(blocksText(agent.inbox.nextStep[1]?.content)).toContain('repo rule')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
+  it('skips a re-render whose rendered-text digest already sits in the conversation', async () => {
+    const root = await tempRepo()
+    const home = await tempRepo()
+    try {
+      await mkdir(join(root, '.git'), { recursive: true })
+      await write(join(root, 'AGENTS.md'), 'repo rule')
+      const ctx = new Context()
+      await mountWorkspaceContext(ctx, { dshHome: home, maxBytes: 65536 })
+      const agent = stubAgent(root)
+      await composeBaselinePrefix(ctx, agent)
+      const original = baselineEvents(agent)[0]
+      if (original?.type !== 'user/message') throw new Error('expected a baseline user message')
+      const instructionMessages = (): SessionEvent[] => agent.session.events.filter(event =>
+        event.type === 'user/message' && event.data.source.kind === 'agent-instructions')
+
+      // A later re-render carries identical file contents under a drifted source identity.
+      agent.session.append('user/message', createUserMessage({
+        content: original.data.content,
+        source: { ...original.data.source, baselineIdentity: 'drifted-identity' },
+      }), { surfaceOp: 'append' })
+      const before = instructionMessages().length
+      await composeBaselinePrefix(ctx, agent)
+
+      // The file-content digest match suppressed the duplicate: no third instruction message.
+      expect(instructionMessages()).toHaveLength(before)
     } finally {
       await rm(root, { recursive: true, force: true })
       await rm(home, { recursive: true, force: true })
@@ -4238,7 +4334,7 @@ describe('dynamic nested workspace context injection', () => {
       const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => undefined)
       fs.entries.set(join(root, '.git'), { type: 'directory' })
       fs.entries.set(join(root, 'AGENTS.md'), { type: 'file', content: 'workspace rule' })
-      vi.spyOn(agent.inbox, 'prepend').mockImplementationOnce(() => { throw failure })
+      vi.spyOn(agent.inbox, 'append').mockImplementationOnce(() => { throw failure })
 
       ctx.emit('tools/result', stubToolExecution({
         signal: testToolSignal,

@@ -1,5 +1,6 @@
 /** Message value types, identity, and immutable construction helpers. */
 
+import { codePointLength, truncateCodePoints } from '@deepseek-ai/dsh-output-retention'
 import { MessageId, type CallId } from './brand.ts'
 import { deepFreeze } from './call-config.ts'
 import type { ContentBlock, StreamChunk, ToolResultBlock } from './types.ts'
@@ -117,9 +118,9 @@ export const CONTEXT_SUMMARY_MAX_CHARS = 120
  * @returns the account, ellipsized when it exceeds the bound.
  */
 export function boundContextSummary(summary: string): string {
-  return summary.length <= CONTEXT_SUMMARY_MAX_CHARS
+  return codePointLength(summary) <= CONTEXT_SUMMARY_MAX_CHARS
     ? summary
-    : `${summary.slice(0, CONTEXT_SUMMARY_MAX_CHARS - 1)}…`
+    : `${truncateCodePoints(summary, CONTEXT_SUMMARY_MAX_CHARS - 1)}…`
 }
 
 /** Any known message source, derived from {@link MessageSourceMap}; switch on `kind` and fall through unknowns (merge-extensible). */

@@ -140,14 +140,42 @@ describe('oversized plain-text replacement', () => {
 
     const text = textOf(result.content)
     expect(text).not.toBe(body)
-    expect(text.startsWith('HEAD')).toBe(true)
-    expect(text).toContain('Full formatted result stored at: /spill/big.txt')
-    expect(text).toContain('Use the stub retrieval path.')
-    expect(text).toContain('Omitted')
-    // The replacement (preview + blank line + notice) stays within the cap and
+    // The directive-style replacement: notice line, head preview, truncation
+    // marker, and tail preview.
+    expect(text.startsWith('[Output Exceeded 200 chars - Full content written to /spill/big.txt]')).toBe(true)
+    expect(text).toContain('--- Preview (First')
+    expect(text).toContain('chars truncated] ---')
+    expect(text).toContain('--- Tail (Last')
+    expect(text).toContain('HEAD')
+    expect(text).toContain('TAIL')
+    // The replacement (notice + separators + preview) stays within the cap and
     // is smaller than the original — the whole point of spilling.
     expect(Buffer.byteLength(text, 'utf8')).toBeLessThanOrEqual(200)
     expect(Buffer.byteLength(text, 'utf8')).toBeLessThan(body.length)
+  })
+
+  it('renders the full 2K-head / 1.5K-tail preview at the 15K deployment ceiling', async () => {
+    const { ctx, spill } = await setup({ maxInlineBytes: 15_000 })
+    // ~40K chars: head 2,000 + tail 1,500 stay inline, the rest is counted.
+    const head = 'H'.repeat(10_000)
+    const tail = 'T'.repeat(10_000)
+    const body = head + 'M'.repeat(20_000) + tail
+    ctx.tools.register(textTool('huge', body))
+    const result = await ctx.tools.execute(exec('huge'))
+
+    expect(result.isError).toBe(false)
+    expect(spill?.saves).toHaveLength(1)
+    expect(spill?.saves[0]?.content).toBe(body)
+    const text = textOf(result.content)
+    expect(text.startsWith('[Output Exceeded 15000 chars - Full content written to /spill/huge.txt]')).toBe(true)
+    expect(text).toContain('--- Preview (First 2000 chars) ---')
+    expect(text).toContain('H'.repeat(2_000))
+    expect(text).toContain('--- [36500 chars truncated] ---')
+    expect(text).toContain('--- Tail (Last 1500 chars) ---')
+    expect(text).toContain('T'.repeat(1_500))
+    // No raw middle content and no trailing raw blocks ever reach the model.
+    expect(text).not.toContain('M'.repeat(20))
+    expect(Buffer.byteLength(text, 'utf8')).toBeLessThanOrEqual(15_000)
   })
 
   it('keeps the inline result when the notice-only replacement would exceed the cap', async () => {
@@ -219,7 +247,7 @@ describe('outer Code Mode failure capture', () => {
     expect(saved[0]?.source.toolName).toBe('run_code')
     expect(saved[0]?.content).toContain('code run failed (output-limit)')
     expect(saved[0]?.content).toContain('HEAD-')
-    expect(textOf(result.content)).toContain('Full formatted result stored at: /spill/run_code.txt')
+    expect(textOf(result.content)).toContain('[Output Exceeded 200 chars - Full content written to /spill/run_code.txt]')
     expect(events).toEqual([])
   })
 })
@@ -277,7 +305,7 @@ describe('the durable dispatch-log arm', () => {
     expect(logged).toHaveLength(1)
     const loggedText = logged[0]!.text
     expect(Buffer.byteLength(loggedText, 'utf8')).toBeLessThanOrEqual(200)
-    expect(loggedText).toContain('Full formatted result stored at: /spill/huge_read.txt')
+    expect(loggedText).toContain('[Output Exceeded 200 chars - Full content written to /spill/huge_read.txt]')
     // The artifact holds the full text under the dispatch label and sub-call id.
     const save = spill.saves.find(entry => entry.source.label === 'dispatch')
     expect(save).toMatchObject({
@@ -523,7 +551,7 @@ describe('composition', () => {
 
     expect(downstreamDecision).toEqual({ kind: 'accept' })
     expect(spill?.saves[0]?.content).toContain('Full canonical result stored at /spill/search-results.txt.')
-    expect(textOf(result.content)).toContain('Full formatted result stored at')
+    expect(textOf(result.content)).toContain('[Output Exceeded 200 chars - Full content written to /spill/search.txt]')
   })
 
   it('bounds content a downstream post-execute listener replaced', async () => {
@@ -535,7 +563,7 @@ describe('composition', () => {
     ctx.tools.register(textTool('small', 'tiny'))
     const result = await ctx.tools.execute(exec('small'))
     expect(spill?.saves[0]?.content).toBe('z'.repeat(500))
-    expect(textOf(result.content)).toContain('Full formatted result stored at')
+    expect(textOf(result.content)).toContain('[Output Exceeded 200 chars - Full content written to /spill/small.txt]')
   })
 
   it('preserves downstream accept-decision contexts when spilling', async () => {
@@ -548,7 +576,7 @@ describe('composition', () => {
       ({ kind: 'accept', additionalContexts: [context] }))
     ctx.tools.register(textTool('big', 'x'.repeat(1000)))
     const result = await ctx.tools.execute(exec('big'))
-    expect(textOf(result.content)).toContain('Full formatted result stored at')
+    expect(textOf(result.content)).toContain('[Output Exceeded 200 chars - Full content written to /spill/big.txt]')
     expect(result.additionalContexts).toEqual([context])
   })
 
@@ -591,7 +619,7 @@ describe('disposal (HMR safety)', () => {
 
     // Live: the listener spills and replaces.
     const before = await ctx.tools.execute(exec('big'))
-    expect(textOf(before.content)).toContain('Full formatted result stored at')
+    expect(textOf(before.content)).toContain('[Output Exceeded 200 chars - Full content written to /spill/big.txt]')
     expect(spill?.saves).toHaveLength(1)
 
     // After disposal the listener is gone — the result passes through untouched

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { toolPairingBalancedAfter, toolPairingBalancedBefore } from '@deepseek-ai/dsh-compaction'
 import { createUserMessage, CONTEXT_WINDOW_EXCEEDED_CODE, LlmError, resolveRetryPolicy , createMessage } from '@deepseek-ai/dsh-llm'
@@ -230,8 +230,12 @@ describe('CBR-001: a real-loop checkpoint is a valid boundary on both sides', ()
 
       expect(agent.session.requestHeader()?.config.model).toBe('mock')
       expect(agent.session.events.some(event => event.type === 'compaction/summary')).toBe(true)
-      expect(agent.session.events.at(-1)).toMatchObject({
-        type: 'turn/end',
+      // The turn completed normally; the turn-end pressure pass may append its
+      // own compaction bracket after it, so assert on the final turn/end itself.
+      await vi.waitFor(() => {
+        expect(agent.session.events.some(event => event.type === 'compaction/end')).toBe(true)
+      })
+      expect(agent.session.events.filter(event => event.type === 'turn/end').at(-1)).toMatchObject({
         data: { reason: { kind: 'completed' } },
       })
     } finally {
@@ -421,6 +425,66 @@ describe('context-overflow recovery across the real loop and compaction-basic', 
         type: 'turn/end',
         data: { reason: { kind: 'completed' } },
       })
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+})
+
+describe('turn-end pressure compaction across the real loop', () => {
+  it('compacts a turn that closed above the absolute trigger as a standalone bracket', async () => {
+    class StaticSummaryEngine extends BasicCompactionEngine {
+      override async summarize(): Promise<{ summary: ContentBlock[]; provider: string; model: string }> {
+        return { summary: [{ type: 'text', text: 'CHECKPOINT' }], provider: 'mock', model: 'stub' }
+      }
+    }
+
+    const ctx = new Context()
+    await mountAgentLoopTestDependencies(ctx)
+    await mountInvariants(ctx)
+    await ctx.plugin(AgentLoop, { agents: [] })
+    await ctx.plugin(TokenMeter)
+    ctx.llm.registerAdapter(['mock'], new StepwiseToolAdapter(0))
+    await ctx.plugin(StaticSummaryEngine, {
+      triggerTokens: 300,
+      targetResidualTokens: 30,
+      maxTokens: 8192,
+    })
+
+    try {
+      const agent = ctx.agentLoop.create(SessionId('turn-end-pressure'), {
+        provider: 'mock',
+        model: 'mock',
+      })
+      // First three turns stay well under the 300-token trigger on every
+      // pre-step, so no pre-step compaction fires mid-run; the fourth turn's
+      // close is the first measurement at or above the trigger.
+      for (let turn = 1; turn <= 3; turn += 1) {
+        agent.followup(createUserMessage({ content: [{ type: 'text', text: 'x'.repeat(80) }], source: { kind: 'user' } }))
+      }
+      agent.followup(createUserMessage({ content: [{ type: 'text', text: 'x'.repeat(1600) }], source: { kind: 'user' } }))
+      await waitForIdle(ctx, agent)
+
+      // The turn that crossed the threshold compacts at idle via the turn-end path.
+      await vi.waitFor(() => {
+        expect(agent.session.events.some(event => event.type === 'compaction/end')).toBe(true)
+      })
+
+      const events = [...agent.session.events]
+      const lastTurnEnd = events.findLast(event => event.type === 'turn/end')
+      const start = events.find(event => event.type === 'compaction/start')
+      const end = events.findLast(event => event.type === 'compaction/end')
+      expect(lastTurnEnd).toBeDefined()
+      expect(start).toBeDefined()
+      // Standalone bracket: compaction/start owns no open turn and lands after
+      // the preceding turn closed, proving the turn-end (not pre-step) trigger.
+      expect(start!.data.turn).toBeNull()
+      expect(start!.seq).toBeGreaterThan(lastTurnEnd!.seq)
+      // The compaction committed cleanly and collapsed the surface head.
+      expect(end?.data.error).toBeUndefined()
+      const shadowed = events.find(event => event.type === 'compaction/summary')
+      expect(shadowed?.data.shadowedSeqs.length).toBeGreaterThan(0)
+      expect(agent.session.surface.nodes.length).toBeLessThan(8)
     } finally {
       await ctx.fiber.dispose()
     }

@@ -140,6 +140,22 @@ describe('Inbox', () => {
     inbox.clear()
     expect(session.events).toHaveLength(beforeClear + 2)
   })
+
+  it('appends to the tail and prepends to the head at their documented positions', () => {
+    const session = Session.create(SessionId('append-only-inbox'))
+    const inbox = new Inbox(session, { inserted: () => {}, discarded: () => {}, claimed: () => {} })
+    const tail = createUserMessage({ content: [{ type: 'text', text: 'tail' }], source: { kind: 'user' } })
+    const head = createUserMessage({ content: [{ type: 'text', text: 'head' }], source: { kind: 'user' } })
+    const textOf = (message: UserMessage): string => message.content
+      .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
+      .map(block => block.text)
+      .join('\n')
+
+    inbox.append('next-step', tail)
+    inbox.prepend('next-step', head)
+
+    expect(inbox.nextStep.map(textOf)).toEqual(['head', 'tail'])
+  })
 })
 
 describe('AgentRegistry', () => {

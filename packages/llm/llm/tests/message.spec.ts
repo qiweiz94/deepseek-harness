@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  boundContextSummary,
   CallId,
   createAssistantMessage,
   createToolResultMessage,
@@ -95,5 +96,25 @@ describe('message construction', () => {
     expect(message.id).not.toHaveLength(0)
     expect(Object.isFrozen(message)).toBe(true)
     expect(Object.isFrozen(message.content[0])).toBe(true)
+  })
+})
+
+describe('boundContextSummary', () => {
+  it('leaves a summary within the bound unchanged', () => {
+    expect(boundContextSummary('short account')).toBe('short account')
+  })
+
+  it('ellipsizes an over-long BMP summary', () => {
+    const out = boundContextSummary('x'.repeat(200))
+    expect(out).toBe(`${'x'.repeat(119)}…`)
+    expect(out.length).toBe(120)
+  })
+
+  it('keeps the cut on a code-point boundary for astral content', () => {
+    // 130 astral emoji are 260 code units: the 120-char bound lands inside the
+    // last kept emoji, which is dropped whole and ellipsized.
+    const out = boundContextSummary('\u{1F600}'.repeat(130))
+    expect(out).toBe(`${'\u{1F600}'.repeat(119)}…`)
+    expect(() => new TextEncoder().encode(out)).not.toThrow()
   })
 })

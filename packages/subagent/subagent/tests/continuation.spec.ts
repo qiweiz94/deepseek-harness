@@ -1543,6 +1543,42 @@ describe('continuable settlement delivery', () => {
     )
   })
 
+  it('digests an oversized closing message instead of inflating the parent trajectory', async () => {
+    const longClosing = 'the answer is '.repeat(150)
+    expect(longClosing.length).toBeGreaterThan(1000)
+    const { ctx, parent } = await setup([textResponse(longClosing), textResponse('parent ack')])
+    const started = await ctx.subagents.startContinuable(startSpec(parent))
+    await waitNoActivation(ctx, started.childId)
+
+    await vi.waitFor(() => { expect(settlementNotices(parent)).toHaveLength(1) })
+    const notice = settlementNotices(parent)[0]!
+    const summary = `Background subagent ${started.childId} finished and will do no further work unless you send it more.`
+    expect(notice.text).toBe(
+      summary
+      + `\nIts closing message:\n${longClosing.slice(0, 1000)}`
+      + `\n\n(Closing message truncated; the full output is in the subagent session file for ${started.childId}.)`,
+    )
+    expect(notice.text.length).toBeLessThan(summary.length + 1000 + 200)
+  })
+
+  it('spills no lone surrogate into the parent when the digest cut lands inside an astral pair', async () => {
+    // 1001 astral emoji (each 2 UTF-16 units): a UTF-16 slice at 1000 units
+    // would split the 500th pair and surface U+FFFD once the parent serializes
+    // the digest. The digest must drop whole code points instead.
+    const emoji = '\u{1F600}'.repeat(1_001)
+    const { ctx, parent } = await setup([textResponse(emoji), textResponse('parent ack')])
+    const started = await ctx.subagents.startContinuable(startSpec(parent))
+    await waitNoActivation(ctx, started.childId)
+
+    await vi.waitFor(() => { expect(settlementNotices(parent)).toHaveLength(1) })
+    const notice = settlementNotices(parent)[0]!
+    const needle = '\nIts closing message:\n' + '\u{1F600}'.repeat(1_000)
+    expect(notice.text).toContain(needle)
+    // A lone surrogate half would encode to U+FFFD; the digest must not carry one.
+    expect(notice.text.includes('\uFFFD')).toBe(false)
+    expect(() => new TextEncoder().encode(notice.text)).not.toThrow()
+  })
+
   it('delivers even when the child already reported for itself', async () => {
     const { ctx, parent } = await setup([textResponse('the answer'), textResponse('parent ack')])
     const started = await ctx.subagents.startContinuable(startSpec(parent))

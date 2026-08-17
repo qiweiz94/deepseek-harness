@@ -5,7 +5,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { foldGoal, type FoldedGoal, type GoalMessageSource, type GoalView } from '@deepseek-ai/dsh-goal'
 import type { InvariantFailure, InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
-import { renderGoalRoundPrompt } from './prompt.ts'
+import { objectiveAlreadyAdmitted, renderGoalRoundPrompt } from './prompt.ts'
 
 const PACKAGE_NAME = '@deepseek-ai/dsh-goal-round-driver'
 
@@ -51,8 +51,15 @@ function validateEvent(
   if (event.type !== 'user/message') return
   const source = event.data.source
   if (source.kind !== 'goal' || source.round <= 0) return
-  const expected = renderGoalRoundPrompt(goalView(foldChecked(prior, fail), source, fail), source.round)
-  if (!isDeepStrictEqual(event.data.content, expected)) {
+  const view = goalView(foldChecked(prior, fail), source, fail)
+  // The driver omits the objective on repetitive rounds; reconstruct the same
+  // pure decision from the durable prefix. Repeat rounds also accept the
+  // legacy full-form prompt, so sessions admitted before coalescing stay valid.
+  const admitted = objectiveAlreadyAdmitted(prior, view)
+  const expected = renderGoalRoundPrompt(view, source.round, !admitted)
+  const legacy = admitted ? renderGoalRoundPrompt(view, source.round, true) : undefined
+  if (!isDeepStrictEqual(event.data.content, expected)
+    && (legacy === undefined || !isDeepStrictEqual(event.data.content, legacy))) {
     fail(`goal round ${source.round} content does not match the package-owned continuation prompt`)
   }
 }

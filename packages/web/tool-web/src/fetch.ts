@@ -12,6 +12,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { GenericCallView, JsonValue, ToolResult, WebFetchResultView } from '@deepseek-ai/dsh-tools'
 import type { WebFetchBody, WebFetchResult } from '@deepseek-ai/dsh-web'
 import { assertNever } from '@deepseek-ai/dsh-llm'
+import { codePointLength, truncateCodePoints } from '@deepseek-ai/dsh-output-retention'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 
 /**
@@ -222,7 +223,7 @@ interface RenderedBody {
  *   raw; a degraded page beats an error for a body the provider decoded.
  */
 function renderBody(body: WebFetchBody, maxInputChars: number): RenderedBody {
-  const content = body.content.slice(0, maxInputChars)
+  const content = truncateCodePoints(body.content, maxInputChars)
   const sourceTruncated = content.length !== body.content.length
   switch (body.kind) {
     case 'html':
@@ -311,11 +312,11 @@ function computeFetchOutput(result: WebFetchResult, maxOutputChars: number): Ren
   const header = `Fetched ${result.url} (HTTP ${result.statusCode})\n\n`
   const rendered = renderBody(result.body, maxOutputChars)
   const prefix = `${header}${rendered.text}`
-  const truncated = result.truncated || rendered.sourceTruncated || prefix.length > maxOutputChars
+  const truncated = result.truncated || rendered.sourceTruncated || codePointLength(prefix) > maxOutputChars
   const full = `${prefix}${truncated ? TRUNCATION_FOOTER : ''}`
-  if (full.length <= maxOutputChars) return { text: full, truncated }
-  if (maxOutputChars < TRUNCATION_FOOTER.length) return { text: full.slice(0, maxOutputChars), truncated }
-  return { text: `${prefix.slice(0, maxOutputChars - TRUNCATION_FOOTER.length)}${TRUNCATION_FOOTER}`, truncated }
+  if (codePointLength(full) <= maxOutputChars) return { text: full, truncated }
+  if (maxOutputChars < TRUNCATION_FOOTER.length) return { text: truncateCodePoints(full, maxOutputChars), truncated }
+  return { text: `${truncateCodePoints(prefix, maxOutputChars - TRUNCATION_FOOTER.length)}${TRUNCATION_FOOTER}`, truncated }
 }
 
 /**

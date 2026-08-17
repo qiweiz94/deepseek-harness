@@ -89,6 +89,12 @@ export class Inbox {
 
   /**
    * Prepend one message to a pending list and durably record the insertion.
+   *
+   * Discouraged for cache stability: a head insertion claims ahead of already
+   * queued input and shifts the assembled request prefix, defeating
+   * DeepSeek-style prompt-cache reuse. First-party injectors therefore append
+   * ({@link append}); this head form remains available to concurrent plugins
+   * that must restore a claimed message ahead of a rejected batch.
    * @param target - pending list to extend.
    * @param message - message to prepend.
    * @throws if the message identity is already pending.

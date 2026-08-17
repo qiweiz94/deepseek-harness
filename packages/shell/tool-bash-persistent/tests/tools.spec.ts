@@ -86,6 +86,7 @@ type StubMode =
   | 'end-on-abort'
   | 'idle-then-normal'
   | 'large'
+  | 'astral-large'
   | 'nonzero'
   | 'torn-status'
   | 'finish-torn-status'
@@ -189,7 +190,9 @@ class StubPtySession implements TerminalBackendSession {
     }
     const commandOutput = this.mode === 'large'
       ? 'x'.repeat(100)
-      : this.mode === 'nonzero' ? '' : 'hello from stub'
+      : this.mode === 'astral-large'
+        ? '\u{1F600}'.repeat(30)
+        : this.mode === 'nonzero' ? '' : 'hello from stub'
     const exitCode = this.mode === 'nonzero' ? 7 : 0
     const output = `${start ?? ''}\n${commandOutput}\n${end ?? ''}${exitCode}\n${this.motd}`
     this.scrollback += output
@@ -386,6 +389,19 @@ describe('tool-bash-persistent', () => {
     await ctx.terminals.kill(owner, externallyClosed!, 'external cleanup')
     await fiber.dispose()
     expect(stub.sessions[2]?.closed).toEqual(['external cleanup'])
+  })
+
+  it('clips an astral-heavy scrollback on a code-point boundary (no lone surrogate)', async () => {
+    const { ctx, owner, stub, fiber } = await setup({ backendType: 'stub', maxOutputChars: 20 })
+    await call(ctx, owner, 'warm up')
+    stub.sessions[0]!.mode = 'astral-large'
+    const out = text(await call(ctx, owner, 'ls'))
+    expect(out).toContain('<response clipped>')
+    expect(out).toContain('\u{1F600}')
+    // The output cap dropped whole code points: no lone surrogate survives.
+    expect(Array.from(out).filter(ch => /^[\uD800-\uDFFF]$/.test(ch))).toEqual([])
+    expect(() => new TextEncoder().encode(out)).not.toThrow()
+    await fiber.dispose()
   })
 
   it('waits for status digits after a torn completion marker', async () => {

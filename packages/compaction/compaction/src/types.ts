@@ -86,6 +86,26 @@ declare module '@deepseek-ai/dsh-session/types' {
       /** Heuristic price of the shadowed content under the token-meter's fixed estimator. */
       shadowedTokenCount: number
     }
+    /**
+     * One summary compaction's whole shadowed block — log-only telemetry,
+     * appended after the replacement checkpoint so it never interrupts the
+     * shadow-price protocol between `compaction/summary` and its `user/message`.
+     * Replay consumers may pair this single range record with the per-seq
+     * shadow prices instead of walking the legacy `compaction/prune` series.
+     */
+    'compaction/range-pruned': {
+      /** Stable identity shared by this compaction's complete durable lifecycle. */
+      compactionId: CompactionId
+      sourceCommandId?: CommandId
+      /** First shadowed surface-node seq, in surface order. */
+      startSeq: number
+      /** Last shadowed surface-node seq, in surface order. */
+      endSeq: number
+      /** Estimated token count of the shadowed block under the token meter. */
+      prunedTokenEstimate: number
+      /** The seqs of all shadowed surface nodes, in surface order. */
+      shadowedSeqs: number[]
+    }
   }
 }
 

@@ -32,6 +32,7 @@ import type {
 } from '@deepseek-ai/dsh-agent'
 import { boundContextSummary, createUserMessage, errorChain } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, MessageId, MessageSource } from '@deepseek-ai/dsh-llm'
+import { codePointLength, truncateCodePoints } from '@deepseek-ai/dsh-output-retention'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { SessionPersistence } from '@deepseek-ai/dsh-session-persistence'
@@ -309,6 +310,34 @@ function settlementSummary(childId: SessionId, stopReason: SubagentResult['stopR
     default:
       return `${subject} ended abnormally (${String(stopReason)}) before it finished.`
   }
+}
+
+/** Hard budget for the closing-message digest in one settlement notice. */
+const CLOSING_MESSAGE_DIGEST_CHARS = 1000
+
+/**
+ * Deterministic digest of a child's final closing message for the parent
+ * notice. Long outputs are truncated to a bounded preview plus a pointer to
+ * the child's durable session file, so a 33K-character report cannot inflate
+ * the parent trajectory or shift its cached prefix.
+ * @param output - the child's final assistant content blocks.
+ * @param childId - durable child session id, named in the truncation note.
+ * @returns one text block with the digest.
+ */
+function digestClosingOutput(output: ContentBlock[], childId: SessionId): ContentBlock[] {
+  const text = output
+    .filter((block): block is Extract<ContentBlock, { type: 'text' }> => block.type === 'text')
+    .map(block => block.text)
+    .join('')
+  const truncated = codePointLength(text) > CLOSING_MESSAGE_DIGEST_CHARS
+  const suffix = truncated
+    ? '\n\n(Closing message truncated; the full output is in the subagent session file for '
+      + childId + '.)'
+    : ''
+  return [{
+    type: 'text',
+    text: truncateCodePoints(text, CLOSING_MESSAGE_DIGEST_CHARS) + suffix,
+  }]
 }
 
 /** Whether one settlement attempt opened the disposal transaction. */
@@ -1408,7 +1437,7 @@ export class SubagentContinuationManager {
           { type: 'text' as const, text: summary },
           ...terminal.output === undefined
             ? [{ type: 'text' as const, text: 'It left no closing message.' }]
-            : [{ type: 'text' as const, text: 'Its closing message:' }, ...terminal.output],
+            : [{ type: 'text' as const, text: 'Its closing message:' }, ...digestClosingOutput(terminal.output, activation.childId)],
         ],
         source: {
           kind: 'subagent-settled' as const,

@@ -6,6 +6,7 @@
  */
 
 import { FsError } from '@deepseek-ai/dsh-fs'
+import { truncateCodePoints } from '@deepseek-ai/dsh-output-retention'
 
 /** Default maximum characters returned for a single line (the `readMaxLineLength` config). */
 export const READ_MAX_LINE_LENGTH = 2000
@@ -67,7 +68,11 @@ function newAccumulator(): WindowAccumulator {
 }
 
 function truncateLine(line: string, maxLineLength: number): string {
-  return line.length > maxLineLength ? `${line.substring(0, maxLineLength)}... (line truncated to ${maxLineLength} chars)` : line
+  if (line.length <= maxLineLength) return line
+  const bounded = truncateCodePoints(line, maxLineLength)
+  return bounded.length < line.length
+    ? `${bounded}... (line truncated to ${maxLineLength} chars)`
+    : line
 }
 
 function lineByteSize(line: string, currentLineCount: number): number {
@@ -115,13 +120,22 @@ export async function buildWindow(
 ): Promise<WindowResult> {
   const acc = newAccumulator()
   // One char past the truncation point is enough to prove a line overflows.
-  const lineBufferCap = request.maxLineLength + 1
+  // The cap is in UTF-16 units at the astral maximum (2 units per code point),
+  // so the buffer can always hold maxLineLength + 1 full code points; a
+  // code-unit cap would stop an emoji-heavy line at half its budget.
+  const lineBufferCap = 2 * (request.maxLineLength + 1)
   let lineBuffer = ''
 
   function appendToLineBuffer(segment: string): void {
     if (lineBuffer.length >= lineBufferCap) return
     lineBuffer += segment
-    if (lineBuffer.length > lineBufferCap) lineBuffer = lineBuffer.slice(0, lineBufferCap)
+    if (lineBuffer.length > lineBufferCap) {
+      lineBuffer = lineBuffer.slice(0, lineBufferCap)
+      // The unit cut can split a surrogate pair; back off the half pair so the
+      // buffer never holds a lone high surrogate (truncateLine then bounds on
+      // a code-point boundary).
+      if (/[\uD800-\uDBFF]$/.test(lineBuffer)) lineBuffer = lineBuffer.slice(0, -1)
+    }
   }
 
   function flushLine(): void {

@@ -9,7 +9,17 @@
 
 import { contentHasImage, LlmError } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, GenerateOptions, Message } from '@deepseek-ai/dsh-llm'
+import { codePointLength, truncateCodePoints } from '@deepseek-ai/dsh-output-retention'
 import type { WireMessage, WireRequest, WireTool } from './types.ts'
+
+/**
+ * Historical reasoning passback bound: only the immediate previous assistant
+ * turn replays its reasoning verbatim (the API-required tool-call turn); older
+ * assistant turns keep at most this many characters, so long thinking traces
+ * cannot inflate every later request. The durable session log is untouched.
+ */
+const MAX_HISTORICAL_REASONING_CHARS = 2_000
+const HISTORICAL_REASONING_MARKER = '[Historical reasoning truncated]'
 
 /** Adapter-level request defaults (from plugin config). */
 export interface RequestDefaults {
@@ -68,12 +78,18 @@ function assertTextOnly(blocks: readonly ContentBlock[]): void {
 }
 
 /** Serialize one assistant message (text + reasoning + tool calls). */
-function serializeAssistant(message: Message): WireMessage {
+function serializeAssistant(message: Message, verbatimReasoning: boolean): WireMessage {
   const text = flattenText(message.content)
-  const reasoning = message.content
+  let reasoning = message.content
     .filter(block => block.type === 'reasoning')
     .map(block => block.text)
     .join('')
+  // Historical (non-immediate) reasoning is bounded: keep at most
+  // MAX_HISTORICAL_REASONING_CHARS plus the truncation marker. Reasoning at or
+  // under the bound passes through unchanged.
+  if (!verbatimReasoning && codePointLength(reasoning) > MAX_HISTORICAL_REASONING_CHARS) {
+    reasoning = truncateCodePoints(reasoning, MAX_HISTORICAL_REASONING_CHARS) + HISTORICAL_REASONING_MARKER
+  }
   const toolCalls = message.content
     .filter(block => block.type === 'tool-call')
     .map(block => ({
@@ -111,14 +127,28 @@ function serializeAssistant(message: Message): WireMessage {
  */
 export function serializeMessages(messages: Message[]): WireMessage[] {
   const wire: WireMessage[] = []
-  for (const message of messages) {
+  // The passback rule requires verbatim reasoning on the assistant message
+  // immediately preceding this request. In the harness that turn is the one
+  // whose tool calls (if any) the current user/tool message answers; the
+  // round ends there, so an older tool-call turn's reasoning is bounded like
+  // every other historical message.
+  let lastAssistantIdx = -1
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === 'assistant') {
+      lastAssistantIdx = index
+      break
+    }
+  }
+  for (let index = 0; index < messages.length; index += 1) {
+    // oxlint-disable-next-line typescript/no-non-null-assertion -- the loop bound guarantees the element.
+    const message = messages[index]!
     assertTextOnly(message.content)
     if (message.role === 'system') {
       wire.push({ role: 'system', content: flattenText(message.content) })
       continue
     }
     if (message.role === 'assistant') {
-      wire.push(serializeAssistant(message))
+      wire.push(serializeAssistant(message, index === lastAssistantIdx))
       continue
     }
     // user role: tool results ride in user messages in the harness

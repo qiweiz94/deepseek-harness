@@ -16,6 +16,7 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Session, UserMessage } from '@deepseek-ai/dsh-session'
 import type { ToolExecution, ToolExecutionResult, ToolExecutionToken } from '@deepseek-ai/dsh-tools'
 import { Config, resolveConfig, workspaceBaselineIdentity, type ResolvedConfig } from './config.ts'
+import { instructionContentSha1 } from './digest.ts'
 import { findProjectRoot, loadBaselineInstructionSet } from './files.ts'
 import {
   applyInstructionVersionUpdates,
@@ -65,6 +66,49 @@ function isWorkspaceContext(message: UserMessage): boolean {
 function sameContextPayload(left: UserMessage, right: UserMessage): boolean {
   return isDeepStrictEqual(left.content, right.content)
     && isDeepStrictEqual(left.source, right.source)
+}
+
+/** SHA-1 content identity of one message's rendered instruction text. */
+function instructionTextDigest(message: UserMessage): string {
+  const text = message.content
+    .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
+    .map(block => block.text)
+    .join('')
+  return instructionContentSha1(text)
+}
+
+/**
+ * Whether two instruction-context messages carry identical rendered text.
+ * Transition metadata (`changes`) must also match: a replacement render that
+ * tombstones or re-scopes files carries new semantics even when the retained
+ * file content is byte-identical, so it is never treated as a duplicate.
+ */
+function sameInstructionText(left: UserMessage, right: UserMessage): boolean {
+  if (left.source.kind !== 'agent-instructions' || right.source.kind !== 'agent-instructions') {
+    return false
+  }
+  if (!isDeepStrictEqual(left.source.changes, right.source.changes)) return false
+  // Baseline messages carry a file-content digest; when both sides have one,
+  // compare content identity directly so drifted framing or identity metadata
+  // cannot defeat duplicate suppression for an unchanged instruction set.
+  if (typeof left.source.contentDigest === 'string' && typeof right.source.contentDigest === 'string') {
+    return left.source.contentDigest === right.source.contentDigest
+  }
+  return instructionTextDigest(left) === instructionTextDigest(right)
+}
+
+/**
+ * Whether the durable conversation already carries this exact instruction
+ * payload, by full payload or by rendered-text digest. A duplicate render
+ * must never re-enter the trajectory: it would inflate every later request
+ * and shift the cached prompt prefix for no new information.
+ */
+function surfaceSupplies(agent: Agent, desired: UserMessage): boolean {
+  return agent.session.surface.nodes.some((seq) => {
+    const event = agent.session.events[seq]
+    return event?.type === 'user/message'
+      && (sameContextPayload(event.data, desired) || sameInstructionText(event.data, desired))
+  })
 }
 
 const FILE_TOUCH_TOOL_NAMES = new Set(['read', 'write', 'edit'])
@@ -132,9 +176,10 @@ export function apply(ctx: Context, config: Config): void {
       ? prepared.excludedScopes
       : undefined
     let nextPreparation: { identity: string; excludedScopes: ReadonlySet<string> } | undefined
+    let instructions: Awaited<ReturnType<typeof loadBaselineInstructionSet>> | undefined
     if (!baselinePresent || !keepVisibleBaseline || excludedBaselineScopes === undefined) {
       const replacePreviousBaseline = baselinePresent && !keepVisibleBaseline
-      const instructions = await loadBaselineInstructionSet({
+      instructions = await loadBaselineInstructionSet({
         cwd,
         dshHome: resolved.dshHome,
         projectRootMarkers: resolved.projectRootMarkers,
@@ -209,6 +254,16 @@ export function apply(ctx: Context, config: Config): void {
     }
     if (nextPreparation !== undefined) baselinePreparations.set(agent.session, nextPreparation)
     if (content.length === 0) return undefined
+    // Baseline messages carry a contentDigest: SHA-1 over the raw bytes of
+    // every included baseline file joined by NUL — the aggregate identity of
+    // the whole instruction set, distinct from each change's per-file digest
+    // (though they coincide for a single included file). Having it means an
+    // unchanged instruction set can never re-enter the trajectory under
+    // drifted framing.
+    const contentDigest = desiredBaseline && instructions !== undefined
+      && instructions.included.length > 0
+      ? instructionContentSha1(instructions.included.map(file => file.content).join('\u0000'))
+      : undefined
     return createUserMessage({
       content,
       source: {
@@ -216,6 +271,7 @@ export function apply(ctx: Context, config: Config): void {
         form: 'instructions',
         ...desiredBaseline ? { baseline: true } : {},
         ...desiredBaseline ? { baselineIdentity: identity } : {},
+        ...contentDigest === undefined ? {} : { contentDigest },
         changes,
       },
     })
@@ -224,17 +280,15 @@ export function apply(ctx: Context, config: Config): void {
   const syncInbox = (agent: Agent, claimed: readonly UserMessage[], desired: UserMessage | undefined): void => {
     const pending = agent.inbox.nextStep.filter(isWorkspaceContext)
     const alreadySupplied = desired !== undefined && (
-      claimed.some(message => sameContextPayload(message, desired))
-      || agent.session.surface.nodes.some((seq) => {
-        const event = agent.session.events[seq]
-        return event?.type === 'user/message' && sameContextPayload(event.data, desired)
-      })
+      claimed.some(message => sameContextPayload(message, desired) || sameInstructionText(message, desired))
+      || surfaceSupplies(agent, desired)
     )
     if (desired === undefined || alreadySupplied) {
       for (const message of pending) agent.inbox.remove(message.id)
       return
     }
-    const reusable = pending.find(message => sameContextPayload(message, desired))
+    const reusable = pending.find(message =>
+      sameContextPayload(message, desired) || sameInstructionText(message, desired))
     if (reusable !== undefined) {
       for (const message of pending) {
         if (message !== reusable) agent.inbox.remove(message.id)
@@ -242,7 +296,7 @@ export function apply(ctx: Context, config: Config): void {
       return
     }
     const replaced = pending[0]
-    if (replaced === undefined) agent.inbox.prepend('next-step', desired)
+    if (replaced === undefined) agent.inbox.append('next-step', desired)
     else agent.inbox.replace(replaced.id, desired)
     for (const message of pending.slice(1)) agent.inbox.remove(message.id)
   }
@@ -337,7 +391,10 @@ export function apply(ctx: Context, config: Config): void {
     // A proceeding step settles the pending context: it either enters below as
     // `desired`, or its payload is already covered by the batch, so nothing stays pending.
     for (const message of pending) agent.inbox.remove(message.id)
-    if (desired === undefined || decision.messages.some(message => sameContextPayload(message, desired))) {
+    if (desired === undefined
+      || surfaceSupplies(agent, desired)
+      || decision.messages.some(message =>
+        sameContextPayload(message, desired) || sameInstructionText(message, desired))) {
       return decision
     }
     // Fold the context right after the claimed batch, so the direct prompt

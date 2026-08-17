@@ -484,12 +484,16 @@ export interface BasicCompactionConfig extends CompactionPolicyConfig {
 
 /** Policy fields shared by the default policy and exact model overrides. */
 export interface CompactionPolicyConfig {
-  /** Compact at this fraction of the model's context window. Defaults to `0.8`. */
+  /** Compact at this fraction of the model's context window; fallback when `triggerTokens` is unset. */
   thresholdRatio?: number
-  /** Recent context retained as a fraction of the model's window. Defaults to `0.16`. */
+  /** Absolute pressure trigger in tokens; wins over `thresholdRatio`. Defaults to `120000`. */
+  triggerTokens?: number
+  /** Recent context retained as a fraction of the model's window; fallback when `targetResidualTokens` is unset. */
   retainRatio?: number
   /** Absolute recent-context budget; mutually exclusive with `retainRatio`. */
   retainTokens?: number
+  /** Absolute post-compaction residual budget in tokens; wins over `retainTokens`/`retainRatio`. Defaults to `42000`. */
+  targetResidualTokens?: number
   /** Summary provider; set together with `summarizationModel`, or inherit the conversation target. */
   summarizationProvider?: string
   /** Summary model; set together with `summarizationProvider`, or inherit the conversation target. */
@@ -511,7 +515,7 @@ export interface ModelCompactPolicyConfig extends CompactionPolicyConfig {
 }
 ```
 
-来源：[`packages/compaction/compaction-basic/src/types.ts:38`](../packages/compaction/compaction-basic/src/types.ts)
+来源：[`packages/compaction/compaction-basic/src/types.ts:42`](../packages/compaction/compaction-basic/src/types.ts)
 
 <a id="deepseek-aidsh-compaction-tool-result-pruner"></a>
 
@@ -1937,7 +1941,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/spill/spill-policy/src/index.ts:60`](../packages/spill/spill-policy/src/index.ts)
+来源：[`packages/spill/spill-policy/src/index.ts:59`](../packages/spill/spill-policy/src/index.ts)
 
 <a id="deepseek-aidsh-storage-domain"></a>
 
@@ -2372,7 +2376,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/shell/tool-bash-persistent/src/index.ts:405`](../packages/shell/tool-bash-persistent/src/index.ts)
+来源：[`packages/shell/tool-bash-persistent/src/index.ts:406`](../packages/shell/tool-bash-persistent/src/index.ts)
 
 <a id="deepseek-aidsh-tool-fs"></a>
 
@@ -2589,7 +2593,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/fs/tool-str-replace-editor/src/index.ts:497`](../packages/fs/tool-str-replace-editor/src/index.ts)
+来源：[`packages/fs/tool-str-replace-editor/src/index.ts:498`](../packages/fs/tool-str-replace-editor/src/index.ts)
 
 <a id="deepseek-aidsh-tool-subagent"></a>
 

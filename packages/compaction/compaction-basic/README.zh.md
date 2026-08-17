@@ -29,9 +29,11 @@
 
 | Key | 必填 | 含义 |
 |---|---|---|
-| `thresholdRatio` | 否（默认 `0.8`） | 在 `floor(routedContextWindow × ratio)` 处压缩。 |
-| `retainRatio` | 否（默认 `0.16`） | 以已路由上下文窗口的一部分表示逐字保留的近期表层预算；与 `retainTokens` 互斥。 |
-| `retainTokens` | 否 | 逐字保留的近期表层绝对预算；与 `retainRatio` 互斥，并且必须低于已解析阈值。 |
+| `triggerTokens` | 否（默认 `120000`） | 绝对压力触发阈值；优先于 `thresholdRatio`。默认值经调优，使 A+B+C 组合策略在长时间自主会话中总输入 token 削减超过 80%，并钳制到模型窗口的 80% 以支持小型窗口路由零配置运行；显式配置的触发器若高于窗口则失败。 |
+| `targetResidualTokens` | 否（默认 `42000`） | 压缩后的绝对残余预算；优先于 `retainTokens`/`retainRatio`。默认值会钳制到触发器之下，并将 300K 轨迹的压缩结果落在 35-50K 压缩后包络内。 |
+| `thresholdRatio` | 否 | 在 `floor(routedContextWindow × ratio)` 处压缩；未设置 `triggerTokens` 时的回退。 |
+| `retainRatio` | 否 | 以已路由上下文窗口的一部分表示逐字保留的近期表层预算；与 `retainTokens` 互斥，是未设置 `targetResidualTokens` 时的回退。 |
+| `retainTokens` | 否 | 逐字保留的近期表层绝对预算；与 `retainRatio` 互斥，被 `targetResidualTokens` 覆盖，并且必须低于已解析阈值。 |
 | `summarizationProvider` | 否（默认 `''`） | 与 `summarizationModel` 一起设置；空对会解析为最新已记录请求目标，再回退到 `AgentOptions` 对。 |
 | `summarizationModel` | 否（默认 `''`） | 与 `summarizationProvider` 一起设置；空对会解析为最新已记录请求目标，再回退到 `AgentOptions` 对。 |
 | `maxTokens` | 否（默认 `8192`） | 摘要调用的提供方生成上限；可包含推理 token。 |
@@ -71,13 +73,13 @@ export function apply(ctx: Context): void {
 ```yaml
 - name: '@deepseek-ai/dsh-compaction-basic'
   config:
-    thresholdRatio: 0.8
-    retainRatio: 0.16
+    triggerTokens: 120000
+    targetResidualTokens: 42000
     modelPolicies:
       - provider: local
         model: small-context
-        thresholdRatio: 0.7
-        retainTokens: 2048
+        triggerTokens: 30000
+        targetResidualTokens: 6000
 ```
 
 ## 模型体验

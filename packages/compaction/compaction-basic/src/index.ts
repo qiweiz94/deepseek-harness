@@ -71,8 +71,10 @@ function conversationTarget(
 }
 
 const thresholdRatioSchema = z.number()
+const triggerTokensSchema = z.number().step(1).min(1)
 const retainRatioSchema = z.number()
 const retainTokensSchema = z.number().step(1).min(0)
+const targetResidualTokensSchema = z.number().step(1).min(0)
 const summarizationProviderSchema = z.string()
 const summarizationModelSchema = z.string()
 const maxTokensSchema = z.number().step(1).min(1)
@@ -83,8 +85,10 @@ const modelPolicy: z<ModelCompactPolicyConfig> = z.object({
   provider: z.string().required(),
   model: z.string().required(),
   thresholdRatio: thresholdRatioSchema,
+  triggerTokens: triggerTokensSchema,
   retainRatio: retainRatioSchema,
   retainTokens: retainTokensSchema,
+  targetResidualTokens: targetResidualTokensSchema,
   summarizationProvider: summarizationProviderSchema,
   summarizationModel: summarizationModelSchema,
   maxTokens: maxTokensSchema,
@@ -105,8 +109,10 @@ export class BasicCompactionEngine extends CompactionEngine {
 
   static Config: z<BasicCompactionConfig> = z.object({
     thresholdRatio: thresholdRatioSchema,
+    triggerTokens: triggerTokensSchema,
     retainRatio: retainRatioSchema,
     retainTokens: retainTokensSchema,
+    targetResidualTokens: targetResidualTokensSchema,
     summarizationProvider: summarizationProviderSchema,
     summarizationModel: summarizationModelSchema,
     maxTokens: maxTokensSchema,
@@ -122,6 +128,8 @@ export class BasicCompactionEngine extends CompactionEngine {
   private readonly warnedPressureConfigTargets = new Set<string>()
   private readonly overflowRetries = new WeakMap<Agent, number>()
   private readonly overflowAgents = new WeakMap<Session, Agent>()
+  /** Sessions whose just-closed turn crossed the pressure threshold; compacted at next idle. */
+  private readonly turnEndPending = new WeakSet<Agent>()
 
   constructor(ctx: Context, config: BasicCompactionConfig = {}) {
     super(ctx)
@@ -165,12 +173,19 @@ export class BasicCompactionEngine extends CompactionEngine {
     })
 
     ctx.on('agent/status', ({ agent, status }) => {
-      if (status === 'idle') this.overflowRetries.delete(agent)
+      if (status !== 'idle') return
+      this.overflowRetries.delete(agent)
+      // A turn that closed above the pressure threshold compacts now, while
+      // the agent is quiescent, instead of waiting for the next pre-step.
+      if (this.turnEndPending.delete(agent)) void this.compactTurnEndPending(agent)
     })
 
     // A successful response starts a fresh overflow-recovery sequence even
     // when tool calls continue the same turn into another request.
     ctx.on('session/event', (session, event) => {
+      if (event.type === 'turn/end') {
+        this.flagTurnEndPressure(this.agentFor(session))
+      }
       if (event.type !== 'assistant/message') return
       const agent = this.overflowAgents.get(session)
       if (agent !== undefined) this.overflowRetries.delete(agent)
@@ -424,6 +439,98 @@ export class BasicCompactionEngine extends CompactionEngine {
     return {
       meter: this.ctx.tokenMeter,
       summarize: (input, owner, abort) => this.summarize(input, owner, abort),
+    }
+  }
+
+  /** Resolve the live agent owning a session, when an agent registry is mounted. */
+  private agentFor(session: Session): Agent | undefined {
+    // The agent registry is an optional composition partner: compaction stays
+    // loadable in providerless stacks and simply skips turn-end pressure checks.
+    const agents = this.ctx.get('agents') as { get?(id: string): Agent | undefined } | undefined
+    return agents?.get?.(session.id)
+  }
+
+  /** Last durable `request/context` window, so pressure checks stay synchronous. */
+  private static lastContextWindow(session: Session): number | undefined {
+    for (let index = session.events.length - 1; index >= 0; index -= 1) {
+      const event = session.events[index]
+      if (event?.type === 'request/context') return event.data.contextWindow
+    }
+    return undefined
+  }
+
+  /**
+   * Synchronous turn-boundary pressure check: when a closed turn already sits
+   * at or above the routed trigger, arm the pending flag so the agent's idle
+   * transition performs one bounded compaction instead of the next pre-step.
+   */
+  private flagTurnEndPressure(agent: Agent | undefined): void {
+    if (agent === undefined) return
+    const target = routedTarget(agent.session)
+    if (target === undefined) return
+    try {
+      const context = BasicCompactionEngine.lastContextWindow(agent.session)
+      if (context === undefined) return
+      const policy = resolveTargetPolicy(this.config, target)
+      const spec = resolveCompactSpec(policy, context)
+      if (this.ctx.tokenMeter.measure(agent.session).totalTokens >= spec.thresholdTokens) {
+        this.turnEndPending.add(agent)
+      }
+    } catch (error: unknown) {
+      // Pressure checks are best-effort; the pre-step check remains authoritative.
+      // TargetPressureConfigError is a stable deployment misconfiguration, so
+      // warn once per target just like the step-pressure path.
+      if (!(error instanceof TargetPressureConfigError)
+        || !this.warnedPressureConfigTargets.has(error.targetKey)) {
+        if (error instanceof TargetPressureConfigError) {
+          this.warnedPressureConfigTargets.add(error.targetKey)
+        }
+        this.ctx.logger.warn(
+          `turn-end compaction pressure check skipped: ${error instanceof Error ? error.message : String(error)}`,
+        )
+      }
+    }
+  }
+
+  /**
+   * Run one bounded idle-session compaction for a turn that closed above the
+   * pressure threshold, using the normal retention policy (bounded tail) rather
+   * than the force-everything manual path.
+   */
+  private async compactTurnEndPending(agent: Agent): Promise<void> {
+    try {
+      await agent.runMaintenance(async (agentSignal) => {
+        const target = routedTarget(agent.session)
+        if (target === undefined) return
+        const context = BasicCompactionEngine.lastContextWindow(agent.session)
+        if (context === undefined) return
+        const policy = resolveTargetPolicy(this.config, target)
+        const spec = resolveCompactSpec(policy, context)
+        const measurement = this.ctx.tokenMeter.measure(agent.session)
+        if (measurement.totalTokens < spec.thresholdTokens) return
+        const range = selectCompactableRange(agent.session, measurement, spec.retainTokens)
+        if (range === null) return
+        await compactSurfaceRegion(
+          this.regionDependencies(),
+          agent.session,
+          range.start,
+          range.end,
+          agent,
+          {
+            owner: null,
+            stability: 'selected-span',
+            flush: async () => { await this.ctx.sessions.flush(agent.session) },
+          },
+          agentSignal,
+        )
+        this.ctx.logger.info(
+          `compaction (turn end): shadowed ${range.start}-${range.end} after a turn closed above threshold`,
+        )
+      })
+    } catch (error: unknown) {
+      this.ctx.logger.warn(
+        `turn-end compaction failed: ${error instanceof Error ? error.message : String(error)}`,
+      )
     }
   }
 }

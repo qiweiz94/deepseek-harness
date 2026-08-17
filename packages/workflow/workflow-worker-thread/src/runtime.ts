@@ -15,6 +15,7 @@
 import * as vm from 'node:vm'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
+import { codePointLength, truncateCodePoints } from '@deepseek-ai/dsh-output-retention'
 import { assertObjectJsonSchema, JsonSchemaError } from '@deepseek-ai/dsh-tools'
 import type { ObjectJsonSchema } from '@deepseek-ai/dsh-tools'
 import { isFatalWorkflowError, WorkflowError } from '@deepseek-ai/dsh-workflow'
@@ -52,7 +53,7 @@ function outputText(blocks: ContentBlock[]): string {
 function defaultLabel(prompt: string): string {
   const newline = prompt.indexOf('\n')
   const line = newline === -1 ? prompt : prompt.slice(0, newline)
-  return line.length <= 48 ? line : `${line.slice(0, 47)}…`
+  return codePointLength(line) <= 48 ? line : `${truncateCodePoints(line, 47)}…`
 }
 
 /**

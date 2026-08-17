@@ -79,11 +79,13 @@ describe('web_fetch spill showcase', () => {
     expect(text.length).toBeLessThan(BODY.length)
     expect(Buffer.byteLength(text, 'utf8')).toBeLessThanOrEqual(MAX_INLINE_BYTES)
     expect(text).toContain(`Fetched ${base}`) // the head of the formatted result survives
-    expect(text).toContain('Full formatted result stored at:')
-    expect(text).toContain('Use read with offset/limit, or grep this path')
+    expect(text).toContain('[Output Exceeded 1000 chars - Full content written to')
+    expect(text).toContain('--- Preview (First')
+    expect(text).toContain('chars truncated] ---')
+    expect(text).toContain('--- Tail (Last')
 
     // The spill file holds the FULL formatted result the tool returned.
-    const match = /stored at: (\S+?)\. Use read/.exec(text)
+    const match = /\[Output Exceeded \d+ chars - Full content written to (\S+?)\]/.exec(text)
     expect(match).not.toBeNull()
     const spillPath = match![1]!
     const saved = readFileSync(spillPath, 'utf8')
@@ -93,5 +95,19 @@ describe('web_fetch spill showcase', () => {
     expect(saved).toContain('(HTTP 200)')
     expect(saved).toContain(BODY)
     expect(saved.length).toBeGreaterThan(text.length)
+  })
+
+  it('keeps an astral-heavy spill preview on whole code points (no lone surrogate)', async () => {
+    handler = (_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/plain' })
+      res.end('\u{1F600}'.repeat(2500))
+    }
+    const out = await fetchCall()
+    expect(out.isError).toBe(false)
+    const modelText = out.content.map(b => b.text).join('')
+    expect(modelText).toMatch(/\[Output Exceeded \d+ chars - Full content written to/)
+    // Head/tail preview cuts land on whole code points: no lone surrogate.
+    expect(Array.from(modelText).filter(ch => /^[\uD800-\uDFFF]$/.test(ch))).toEqual([])
+    expect(() => new TextEncoder().encode(modelText)).not.toThrow()
   })
 })

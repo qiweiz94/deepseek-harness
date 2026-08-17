@@ -87,6 +87,34 @@ describe('goal-round-driver prompt invariants', () => {
     }).not.toThrow()
   })
 
+  it('accepts a coalesced repeat round that omits the already-admitted objective', async () => {
+    const { ctx, session } = await mount(true)
+    appendChange(session)
+    appendRound(session, 2)
+
+    await ctx.plugin(InvariantRegistry, { enabled: true })
+    await ctx.plugin(GoalSessionInvariant)
+
+    // Round 2 on the same revision coalesces: the driver omits the objective.
+    expect(() => {
+      appendRound(session, 3, renderGoalRoundPrompt(view(1), 2, false))
+    }).not.toThrow()
+  })
+
+  it('still accepts a legacy full-form repeat round on the same revision', async () => {
+    const { ctx, session } = await mount(true)
+    appendChange(session)
+    appendRound(session, 2)
+
+    await ctx.plugin(InvariantRegistry, { enabled: true })
+    await ctx.plugin(GoalSessionInvariant)
+
+    // Sessions admitted before coalescing keep their full-form repeats valid.
+    expect(() => {
+      appendRound(session, 3, renderGoalRoundPrompt(view(1), 2, true))
+    }).not.toThrow()
+  })
+
   it('rejects a continuation whose content differs from the package renderer', async () => {
     const { session } = await mount()
     appendChange(session)

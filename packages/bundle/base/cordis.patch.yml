@@ -349,7 +349,9 @@
     - id: spill-policy
       name: '@deepseek-ai/dsh-spill-policy'
       config:
-        maxInlineBytes: 50000
+        # 15K-char inline ceiling: larger plain-text tool results spill to disk
+        # and inline only the 2K-head / 1.5K-tail preview.
+        maxInlineBytes: 15000
 
     # Durability checkpoints before each model request and top-level dispatch.
     - id: session-checkpoint-policy

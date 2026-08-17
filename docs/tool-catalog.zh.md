@@ -124,6 +124,11 @@ ask_user_question 会暂停工具调用，直到当前 UI 提供方返回人类�
 
 针对可用工具执行 TypeScript 程序。接受两个必填参数：`code`，即异步函数的**函数体**（仅使用可擦除语法；支持顶层 `await` 和 `return`）；以及 `description`，简要说明该程序做什么。请根据系统提示词中的声明，以 `await tools.name(args)` 形式调用工具。只有打印或返回的内容会传回，请谨慎筛选。
 
+[Code Mode File Handling Rules]:
+- 不要在 TypeScript 脚本体内嵌入大段原始文件内容（>5KB）。
+- 对于大文件写入或迁移，请从现有源文件读取，或使用定向 diff（`str_replace`）进行流式/补丁式修改，而不是内联字符串字面量。
+- 保持脚本执行体只聚焦于逻辑、转换与工具编排。
+
 ```json
 {
   "type": "object",

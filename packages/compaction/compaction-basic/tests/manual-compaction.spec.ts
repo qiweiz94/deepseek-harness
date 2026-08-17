@@ -335,7 +335,12 @@ describe('compactNow through the real loop', () => {
     expect(agent.session.events.filter(event => event.type === 'user/message'
       && event.data.source.kind === 'plugin' && event.data.source.plugin === 'listener')).toHaveLength(0)
     const types = compactEvents(agent.session).map(event => event.type)
-    expect(types).toEqual(['compaction/start', 'compaction/summary', 'compaction/end'])
+    expect(types).toEqual([
+      'compaction/start',
+      'compaction/summary',
+      'compaction/range-pruned',
+      'compaction/end',
+    ])
   })
 
   it('reports busy without summarizing when a prompt already owns the next turn', async () => {
@@ -581,7 +586,7 @@ describe('compactNow transaction and failure classification', () => {
     vi.restoreAllMocks()
     expect(flushes()).toBe(0)
     expect(session.events.findLast(event => event.type.startsWith('compaction/'))?.type)
-      .toBe('compaction/summary')
+      .toBe('compaction/range-pruned')
     expect(compactEvents(session).filter(event => event.type === 'compaction/start')).toHaveLength(1)
 
     const calls = compact.calls.length

@@ -65,6 +65,139 @@ describe('serializeMessages', () => {
     }])
   })
 
+  it('bounds historical reasoning to 2K chars while the immediate previous turn stays verbatim', () => {
+    const longTrace = 'step '.repeat(2_000) // 10,000 chars of reasoning
+    const wire = serializeMessages([
+      createMessage({
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: longTrace },
+          { type: 'tool-call', id: CallId('old'), name: 'search', arguments: '{}' },
+        ],
+        source: { kind: 'plugin', plugin: 'test' },
+      }),
+      createMessage({
+        role: 'user',
+        content: [{ type: 'text', text: 'continue' }],
+        source: { kind: 'user' },
+      }),
+      createMessage({
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: 'immediate trace' },
+          { type: 'tool-call', id: CallId('fresh'), name: 'read', arguments: '{}' },
+        ],
+        source: { kind: 'plugin', plugin: 'test' },
+      }),
+    ])
+
+    expect(wire).toHaveLength(3)
+    // The older assistant turn: reasoning bounded to 2,000 chars + the marker.
+    expect(wire[0]).toMatchObject({
+      role: 'assistant',
+      reasoning_content: longTrace.slice(0, 2_000) + '[Historical reasoning truncated]',
+    })
+    // The immediate previous assistant turn: reasoning verbatim.
+    expect(wire[2]).toMatchObject({
+      role: 'assistant',
+      reasoning_content: 'immediate trace',
+    })
+  })
+
+  it('bounds historical reasoning on a code-point boundary (no lone surrogate)', () => {
+    // 3000 astral emoji are 3000 code points: the 2K-char budget lands inside
+    // the last kept emoji, which is dropped whole instead of a lone high surrogate.
+    const emojiTrace = '\u{1F600}'.repeat(3_000)
+    const wire = serializeMessages([
+      createMessage({
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: emojiTrace },
+          { type: 'tool-call', id: CallId('old'), name: 'search', arguments: '{}' },
+        ],
+        source: { kind: 'plugin', plugin: 'test' },
+      }),
+      createMessage({
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: 'immediate' },
+          { type: 'tool-call', id: CallId('fresh'), name: 'read', arguments: '{}' },
+        ],
+        source: { kind: 'plugin', plugin: 'test' },
+      }),
+    ])
+
+    const reasoning = wire[0]!.role === 'assistant' ? wire[0]!.reasoning_content : undefined
+    // The 2K-char budget keeps exactly 2,000 whole emoji (2 code units each);
+    // the 2,001st emoji is dropped whole, never split into a lone surrogate.
+    expect(reasoning).toBe('\u{1F600}'.repeat(2_000) + '[Historical reasoning truncated]')
+    // Never a lone surrogate on the wire: JSON round-trip and UTF-8 encoding succeed.
+    expect(() => JSON.stringify(wire)).not.toThrow()
+    expect(() => new TextEncoder().encode(JSON.stringify(wire))).not.toThrow()
+  })
+
+  it('keeps short historical reasoning unchanged (no marker for within-bound traces)', () => {
+    const wire = serializeMessages([
+      createMessage({
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: 'short trace' },
+          { type: 'tool-call', id: CallId('old'), name: 'search', arguments: '{}' },
+        ],
+        source: { kind: 'plugin', plugin: 'test' },
+      }),
+      createMessage({
+        role: 'user',
+        content: [{ type: 'text', text: 'continue' }],
+        source: { kind: 'user' },
+      }),
+      createMessage({
+        role: 'assistant',
+        content: [{ type: 'reasoning', text: 'final' }, { type: 'text', text: 'done' }],
+        source: { kind: 'plugin', plugin: 'test' },
+      }),
+    ])
+
+    expect(wire[0]).toMatchObject({ role: 'assistant', reasoning_content: 'short trace' })
+    expect(wire[2]).toMatchObject({ role: 'assistant', content: 'done' })
+  })
+
+  it('bounds an answered tool-call turn once a plain-text answer ends the round', () => {
+    // A1 issues a tool call with long reasoning, the user continues, and A2
+    // closes with plain text (no tool calls). The passback rule keys on the
+    // immediately preceding assistant message: A2 is that turn (verbatim),
+    // so A1's tool-call reasoning is now historical and gets bounded.
+    const longTrace = 'step '.repeat(2_000)
+    const wire = serializeMessages([
+      createMessage({
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: longTrace },
+          { type: 'tool-call', id: CallId('answered'), name: 'search', arguments: '{}' },
+        ],
+        source: { kind: 'plugin', plugin: 'test' },
+      }),
+      createMessage({
+        role: 'user',
+        content: [{ type: 'text', text: 'continue' }],
+        source: { kind: 'user' },
+      }),
+      createMessage({
+        role: 'assistant',
+        content: [{ type: 'text', text: 'round over' }],
+        source: { kind: 'plugin', plugin: 'test' },
+      }),
+    ])
+
+    expect(wire).toHaveLength(3)
+    expect(wire[0]).toMatchObject({
+      role: 'assistant',
+      reasoning_content: longTrace.slice(0, 2_000) + '[Historical reasoning truncated]',
+      tool_calls: [{ id: 'answered', type: 'function', function: { name: 'search', arguments: '{}' } }],
+    })
+    expect(wire[2]).toEqual({ role: 'assistant', content: 'round over' })
+  })
+
   it('serializes parallel tool calls in order', () => {
     const wire = serializeMessages([
       createMessage({

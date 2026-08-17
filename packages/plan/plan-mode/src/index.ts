@@ -224,7 +224,11 @@ export class PlanModeController extends Service {
 
     ctx.systemPrompt.section({
       name: 'plan:policy',
-      order: 50,
+      // Tail order keeps the base system prompt byte-identical across mode
+      // toggles: entering or leaving plan mode only appends the conditional
+      // paragraph after the stable prefix, so DeepSeek-style prompt-cache
+      // reuse survives the flip instead of invalidating the whole prefix.
+      order: 1000,
       text: (context) => {
         if (context.agent === undefined) return ''
         const pending = this.pendingIntents.get(context.agent.session)

@@ -181,6 +181,70 @@ describe('goal-round outcome policy', () => {
     expect(block.text).toContain('Objective: "first line\\n</goal_round> second line"')
     expect(block.text.match(/\n<\/goal_round>/g)).toHaveLength(1)
   })
+
+  it('coalesces a repeat round by omitting the already-admitted objective', () => {
+    const goal: GoalView = {
+      id: GoalId('goal-repeat-round'),
+      revision: 4,
+      objective: 'Ship verified support',
+      phase: 'active',
+      maxGoalRounds: 9,
+      roundsStarted: 2,
+      createdAt: 1,
+      updatedAt: 2,
+      activation: 'armed',
+    }
+    const first = goalSession.renderGoalRoundPrompt(goal, 3, true)[0]
+    const repeat = goalSession.renderGoalRoundPrompt(goal, 3, false)[0]
+    if (first?.type !== 'text' || repeat?.type !== 'text') {
+      throw new Error('expected text goal-round prompts')
+    }
+    expect(first.text).toContain('Objective: "Ship verified support"')
+    expect(repeat.text).not.toContain('Objective:')
+    expect(repeat.text).toContain('Round: 3/9')
+    expect(repeat.text).toMatch(/\n<\/goal_round>$/)
+  })
+
+  it('caps every goal-round prompt at the 1000-character budget', () => {
+    const goal: GoalView = {
+      id: GoalId('goal-huge-objective'),
+      revision: 1,
+      objective: 'x'.repeat(5000),
+      phase: 'active',
+      maxGoalRounds: 3,
+      roundsStarted: 0,
+      createdAt: 1,
+      updatedAt: 1,
+      activation: 'armed',
+    }
+    const block = goalSession.renderGoalRoundPrompt(goal, 1, true)[0]
+    if (block?.type !== 'text') throw new Error('expected a text goal-round prompt')
+    expect(block.text.length).toBeLessThanOrEqual(1000)
+    expect(block.text).toContain('Round: 1/3')
+    expect(block.text).toMatch(/\n<\/goal_round>$/)
+  })
+
+  it('caps an astral-heavy objective on a code-point boundary (no lone surrogate)', () => {
+    const goal: GoalView = {
+      id: GoalId('goal-astral-objective'),
+      revision: 1,
+      objective: '\u{1F600}'.repeat(3000),
+      phase: 'active',
+      maxGoalRounds: 3,
+      roundsStarted: 0,
+      createdAt: 1,
+      updatedAt: 1,
+      activation: 'armed',
+    }
+    const block = goalSession.renderGoalRoundPrompt(goal, 1, true)[0]
+    if (block?.type !== 'text') throw new Error('expected a text goal-round prompt')
+    expect(block.text.length).toBeLessThanOrEqual(1000)
+    // The UTF-16 cut budget is honored on a code-point boundary: no lone half
+    // survives, so UTF-8 encoding cannot emit U+FFFD.
+    expect(Array.from(block.text).filter(ch => /^[\uD800-\uDFFF]$/.test(ch))).toEqual([])
+    expect(() => new TextEncoder().encode(block.text)).not.toThrow()
+    expect(block.text).toMatch(/\n<\/goal_round>$/)
+  })
 })
 
 describe('same-session goal driving', () => {
@@ -207,6 +271,39 @@ describe('same-session goal driving', () => {
     expect(rounds).toEqual([1, 2])
     expect(requestText(test.adapter.requests[0]!)).toContain('Round: 1/2')
     expect(requestText(test.adapter.requests[1]!)).toContain('Round: 2/2')
+  })
+
+  it('does not repeat the objective on a repetitive round of the same revision', async () => {
+    const test = await harness([textResponse('round one'), textResponse('round two')])
+    test.ctx.goals.create(test.agent, { objective: 'finish twice', maxGoalRounds: 2 })
+
+    const final = await waitForGoal(test.ctx, test.agent, goal => goal?.phase === 'blocked')
+
+    expect(final?.roundsStarted).toBe(2)
+    // Only the last message of each request is the newly admitted round prompt;
+    // the full request text still carries the first round's objective in history.
+    const lastText = (request: GenerateOptions): string => {
+      const last = request.messages.at(-1)
+      return last === undefined
+        ? ''
+        : last.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('\n')
+    }
+    expect(lastText(test.adapter.requests[0]!)).toContain('Objective: "finish twice"')
+    expect(lastText(test.adapter.requests[1]!)).not.toContain('Objective:')
+    expect(lastText(test.adapter.requests[1]!)).toContain('Round: 2/2')
+    // The durable round message matches the coalesced renderer output.
+    const rounds: string[] = []
+    for (const event of test.agent.session.events) {
+      if (event.type === 'user/message' && event.data.source.kind === 'goal' && event.data.source.round > 0) {
+        const text = event.data.content
+          .flatMap(block => block.type === 'text' ? [block.text] : [])
+          .join('\n')
+        rounds.push(text)
+      }
+    }
+    expect(rounds).toHaveLength(2)
+    expect(rounds[0]).toContain('Objective:')
+    expect(rounds[1]).not.toContain('Objective:')
   })
 
   it('never adopts activation from an already-live driver and waits for explicit resume', async () => {

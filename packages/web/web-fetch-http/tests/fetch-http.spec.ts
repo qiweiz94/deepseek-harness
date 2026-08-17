@@ -137,6 +137,17 @@ describe('HttpFetchProvider caps', () => {
     expect(result.truncated).toBe(true)
   })
 
+  it('truncates the character cap on a code-point boundary (no lone surrogate)', async () => {
+    // '😀😀😀' is 6 UTF-16 code units but 3 code points; a 2-code-point cap
+    // keeps two whole emoji, never a split pair.
+    handler = (_req, res) => { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('\u{1F600}\u{1F600}\u{1F600}') }
+    const result = await provider({ maxBodyChars: 2 }).fetch({ url: base })
+    expect(result.body.content).toBe('\u{1F600}\u{1F600}')
+    expect(result.truncated).toBe(true)
+    // The truncated body must stay UTF-8 encodable end to end.
+    expect(() => new TextEncoder().encode(result.body.content)).not.toThrow()
+  })
+
   it('rejects an unsupported content type', async () => {
     handler = (_req, res) => { res.writeHead(200, { 'content-type': 'image/png' }); res.end('binary') }
     await expect(provider().fetch({ url: base }))

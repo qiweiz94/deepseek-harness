@@ -112,11 +112,11 @@ Continuable Activations await a best-effort final session flush without treating
 
 #### What the model sees
 
-One user-role parent message opening with the outcome — `Background subagent <child-id> finished and will do no further work unless you send it more.`, or the matching line for a child that was stopped, ran out of room, declined, or failed — followed by `Its closing message:` and the child's final assistant content, or `It left no closing message.` when it produced none. This is the service's only direct parent-side contribution; delegation schemas, parent continuation and discovery, and the child-scoped `report` belong to `dsh-tool-subagent`, `dsh-tool-subagent-control`, and `dsh-tool-subagent-report`.
+One user-role parent message opening with the outcome — `Background subagent <child-id> finished and will do no further work unless you send it more.`, or the matching line for a child that was stopped, ran out of room, declined, or failed — followed by `Its closing message:` and the child's final assistant content, or `It left no closing message.` when it produced none. Closing messages over 1,000 characters are delivered as a bounded digest with a pointer to the child's durable session file, so a large report cannot inflate the parent trajectory. This is the service's only direct parent-side contribution; delegation schemas, parent continuation and discovery, and the child-scoped `report` belong to `dsh-tool-subagent`, `dsh-tool-subagent-control`, and `dsh-tool-subagent-report`.
 
 #### Token effect
 
-One notice per settled Activation in the parent's request, sized by the child's final message. A child that both reports and settles costs the parent both.
+One notice per settled Activation in the parent's request, sized by the child's final message (digested to at most 1,000 characters). A child that both reports and settles costs the parent both.
 
 #### KV Cache effect
 

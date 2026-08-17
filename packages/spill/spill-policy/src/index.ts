@@ -46,8 +46,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
-import { TextRetainer, describeOmitted } from '@deepseek-ai/dsh-output-retention'
-import type { Omitted } from '@deepseek-ai/dsh-output-retention'
+import { TextRetainer } from '@deepseek-ai/dsh-output-retention'
 import type { SaveTextSpill, SpillRef } from '@deepseek-ai/dsh-spill'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { CallId } from '@deepseek-ai/dsh-llm'
@@ -91,20 +90,60 @@ function ownerSessionId(exec: ToolExecution): SessionId | undefined {
   return (exec as SpillPolicyExec).agent?.session.header.id
 }
 
-/** Build the bounded head/tail preview for `text`, splitting `budget` bytes across the two ends. */
-function preview(text: string, budget: number): { text: string; omitted: Omitted } {
-  const headBytes = Math.ceil(budget / 2)
-  const tailBytes = Math.floor(budget / 2)
-  const retainer = new TextRetainer({ kind: 'headTail', headBytes, tailBytes })
-  retainer.push(text)
-  const kept = retainer.finish()
-  return { text: kept.text, omitted: kept.omittedBytes }
+/** Inline preview budget at the deployment ceiling: head/tail kept verbatim in the notice. */
+const PREVIEW_HEAD_CHARS = 2_000
+const PREVIEW_TAIL_CHARS = 1_500
+
+/**
+ * Build the bounded head/tail preview for `text` within `budget` bytes. The
+ * head/tail split follows the {@link PREVIEW_HEAD_CHARS}:
+ * {@link PREVIEW_TAIL_CHARS} ratio and never exceeds those fixed ceilings, so
+ * a deployment-sized cap renders the full directive template while a tiny cap
+ * still fits its own budget.
+ */
+function preview(text: string, budget: number): { head: string; tail: string } {
+  const headRatio = PREVIEW_HEAD_CHARS / (PREVIEW_HEAD_CHARS + PREVIEW_TAIL_CHARS)
+  const headBytes = Math.min(PREVIEW_HEAD_CHARS, Math.max(0, Math.floor(budget * headRatio)))
+  const tailBytes = Math.min(PREVIEW_TAIL_CHARS, Math.max(0, budget - headBytes))
+  // Two retainers keep the head and tail as separate byte-safe pieces, so the
+  // template never re-splits a codepoint and the kept char counts are exact.
+  const headRetainer = new TextRetainer({ kind: 'head', maxBytes: headBytes })
+  headRetainer.push(text)
+  const head = headRetainer.finish().text
+  const tailRetainer = new TextRetainer({ kind: 'tail', maxBytes: tailBytes })
+  tailRetainer.push(text)
+  const tail = tailRetainer.finish().text
+  return { head, tail }
 }
 
-/** The spill-notice line for a given omission + saved reference (no preview, no leading blank line). */
-function spillNotice(omitted: Omitted, ref: SpillRef): string {
-  const omission = describeOmitted(omitted, 'bytes')
-  return `(${omission} Full formatted result stored at: ${ref.locator}. ${ref.retrievalHint})`
+/** The first line of a spilled replacement: the cap, the locator, and the omitted count. */
+function spillNotice(cap: number, ref: SpillRef): string {
+  return `[Output Exceeded ${cap} chars - Full content written to ${ref.locator}]`
+}
+
+/** The `[X chars truncated]` marker line between the head and tail previews. */
+function truncationMarker(truncatedChars: number): string {
+  return `--- [${truncatedChars} chars truncated] ---`
+}
+
+/**
+ * Assemble the full directive-style replacement: notice line, head preview,
+ * truncation marker, and tail preview. A zero-size preview collapses to the
+ * notice line alone.
+ */
+function spillTemplate(
+  cap: number,
+  ref: SpillRef,
+  headChars: number,
+  tailChars: number,
+  truncatedChars: number,
+  head: string,
+  tail: string,
+): string {
+  const notice = spillNotice(cap, ref)
+  if (headChars === 0 && tailChars === 0) return notice
+  return `${notice}\n--- Preview (First ${headChars} chars) ---\n${head}\n`
+    + `${truncationMarker(truncatedChars)}\n--- Tail (Last ${tailChars} chars) ---\n${tail}`
 }
 
 export function apply(ctx: Context, config: Config): void {
@@ -160,26 +199,25 @@ export function apply(ctx: Context, config: Config): void {
       return undefined
     }
 
-    // Reserve the notice's byte cost INSIDE maxInlineBytes so the replacement
-    // (preview + blank line + notice) never exceeds the documented cap — a naive
-    // preview that spent the whole budget then appended the notice could be
-    // larger than the cap, and for a marginally-over result even larger than the
-    // original. The reservation uses a notice priced at the worst-case omission
-    // count (the full byte total): its digit count bounds the real count's, so
-    // the reserved size is a safe upper bound and the final notice is never
-    // longer than what we reserved. `\n\n` is the 2-byte join.
-    const reserve = Buffer.byteLength(spillNotice({ kind: 'exact', count: totalBytes }, ref), 'utf8') + 2
-    const previewBudget = Math.max(0, cap - reserve)
-    const { text: previewText, omitted } = preview(text, previewBudget)
-    const notice = spillNotice(omitted, ref)
-    const replacedText = previewText.length > 0 ? `${previewText}\n\n${notice}` : notice
+    // Reserve the template OVERHEAD (notice + separator lines, priced at the
+    // worst-case digit counts) INSIDE maxInlineBytes so the final replacement
+    // (overhead + head/tail preview) never exceeds the documented cap. The
+    // worst-case digits bound the real ones, so the reserved size is a safe
+    // upper bound and the final template is never longer than reserved.
+    const overhead = Buffer.byteLength(spillTemplate(
+      cap, ref, PREVIEW_HEAD_CHARS, PREVIEW_TAIL_CHARS, totalBytes, '', ''), 'utf8')
+    const previewBudget = Math.max(0, cap - overhead)
+    const { head, tail } = preview(text, previewBudget)
+    const truncatedChars = Math.max(0, text.length - head.length - tail.length)
+    const replacedText = spillTemplate(cap, ref, head.length, tail.length, truncatedChars, head, tail)
     // Invariant: the policy NEVER emits a replacement larger than the cap. When
-    // the notice alone exceeds maxInlineBytes (a tiny cap or a long spill root),
-    // there is no within-cap replacement, so keep the inline content — spilling
-    // would break the advertised cap. (A within-cap replacement is always
-    // smaller than the original, which is > cap by the entry condition, so this
-    // one check subsumes "not smaller than the original" too. The spill file
-    // already written is a harmless orphan; cleanup is deferred.)
+    // even the notice line alone exceeds maxInlineBytes (a tiny cap or a long
+    // spill root), there is no within-cap replacement, so keep the inline
+    // content — spilling would break the advertised cap. (A within-cap
+    // replacement is always smaller than the original, which is > cap by the
+    // entry condition, so this one check subsumes "not smaller than the
+    // original" too. The spill file already written is a harmless orphan;
+    // cleanup is deferred.)
     if (Buffer.byteLength(replacedText, 'utf8') > cap) {
       ctx.logger.warn(`spill-policy: spill notice for ${toolName} exceeds maxInlineBytes; keeping the inline content`)
       return undefined

@@ -122,6 +122,11 @@ ask_user_question pauses the tool call until the active UI provider returns a hu
 
 Execute a TypeScript program against the available tools. Takes two required arguments: `code`, the BODY of an async function (erasable syntax only; top-level `await` and `return` work), and `description`, a short summary of what the program does. Call tools as `await tools.name(args)` per the declarations in the system prompt. Only what you print or return comes back — curate it.
 
+[Code Mode File Handling Rules]:
+- Do NOT embed large raw file contents (>5KB) inside the TypeScript script body.
+- For large file writes or migrations, read from existing source files or stream/patch using targeted diffs (`str_replace`) rather than inline string literals.
+- Keep script execution bodies focused strictly on logic, transformations, and tool orchestration.
+
 ```json
 {
   "type": "object",

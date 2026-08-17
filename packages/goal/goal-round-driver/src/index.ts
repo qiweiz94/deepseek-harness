@@ -11,9 +11,9 @@ import type { GoalMessageSource, GoalRef, GoalView } from '@deepseek-ai/dsh-goal
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, MessageId, MessageSource } from '@deepseek-ai/dsh-llm'
 import type { Session, SessionEvent, UserMessage } from '@deepseek-ai/dsh-session'
-import { renderGoalRoundPrompt } from './prompt.ts'
+import { objectiveAlreadyAdmitted, renderGoalRoundPrompt } from './prompt.ts'
 
-export { renderGoalRoundPrompt } from './prompt.ts'
+export { MAX_ROUND_PROMPT_CHARS, objectiveAlreadyAdmitted, renderGoalRoundPrompt } from './prompt.ts'
 
 export const name = 'goal-round-driver'
 export const inject = ['agents', 'goals', 'sessions']
@@ -127,10 +127,12 @@ export function apply(ctx: Context): void {
   function restoreOtherClaimed(agent: Agent, messages: UserMessage[], messageId: MessageId): void {
     const retained = messages.filter(message => message.id !== messageId
       && !(message.source.kind === 'goal' && message.source.round === 0))
-    for (const message of retained.toReversed()) {
+    // Append, never prepend: pending lists are strictly append-only so the
+    // conversation order stays FIFO and the prompt-cache prefix stays intact.
+    for (const message of retained) {
       if (agent.inbox.nextStep.some(candidate => candidate.id === message.id)
         || agent.inbox.nextTurn.some(candidate => candidate.id === message.id)) continue
-      agent.inbox.prepend('next-step', message)
+      agent.inbox.append('next-step', message)
     }
   }
 
@@ -172,7 +174,10 @@ export function apply(ctx: Context): void {
     }
 
     const round = goal.roundsStarted + 1
-    const content = renderGoalRoundPrompt(goal, round)
+    // Coalesce repetitive rounds: repeat the objective text only when this
+    // exact revision has not already delivered it as an admitted round message.
+    const includeObjective = !objectiveAlreadyAdmitted(agent.session.events, goal)
+    const content = renderGoalRoundPrompt(goal, round, includeObjective)
     const message = createUserMessage({
       content,
       source: { kind: 'goal', goalId: goal.id, revision: goal.revision, round },

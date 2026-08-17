@@ -43,13 +43,23 @@ interface RunCodeFlavor {
  * assembly always resolves a runtime first, so the model never sees this
  * fallback outside its own language.
  */
+/** The code-mode file-handling invariant appended to the run_code description. */
+function codeModeFileHandlingRules(scriptLanguage: 'TypeScript' | 'Python'): string {
+  return '\n\n[Code Mode File Handling Rules]:\n'
+    + `- Do NOT embed large raw file contents (>5KB) inside the ${scriptLanguage} script body.\n`
+    + '- For large file writes or migrations, read from existing source files or stream/patch '
+    + 'using targeted diffs (`str_replace`) rather than inline string literals.\n'
+    + '- Keep script execution bodies focused strictly on logic, transformations, and tool orchestration.'
+}
+
 const TYPESCRIPT_FLAVOR: RunCodeFlavor = {
   description:
     'Execute a TypeScript program against the available tools. Takes two required '
     + 'arguments: `code`, the BODY of an async function (erasable syntax only; top-level '
     + '`await` and `return` work), and `description`, a short summary of what the program '
     + 'does. Call tools as `await tools.name(args)` per the declarations in the system '
-    + 'prompt. Only what you print or return comes back — curate it.',
+    + 'prompt. Only what you print or return comes back — curate it.'
+    + codeModeFileHandlingRules('TypeScript'),
   codeDescription: 'The program: the body of an async TypeScript function.',
 }
 
@@ -64,7 +74,8 @@ const PYTHON_FLAVOR: RunCodeFlavor = {
     + 'arguments: `code`, the BODY of an async function (top-level `await` and `return` '
     + 'work), and `description`, a short summary of what the program does. Call tools as '
     + '`await tools.name(args)` per the declarations in the system prompt. Answer '
-    + 'with `print(...)` and/or `return <value>` — only that comes back, so curate it.',
+    + 'with `print(...)` and/or `return <value>` — only that comes back, so curate it.'
+    + codeModeFileHandlingRules('Python'),
   codeDescription: 'The program: the body of an async Python function.',
 }
 

@@ -135,6 +135,17 @@ describe('mode-aware wire contribution', () => {
     expect(sdk?.text).not.toContain('run_code:')
   })
 
+  it("mode 'code' pins the Code Mode file-handling rules on the run_code description", async () => {
+    const { ctx, systemPrompt } = await setup({ mode: 'code' })
+    registerEcho(ctx)
+    const assembly = await systemPrompt.assemble()
+    const runCode = assembly.tools.find(tool => tool.name === RUN_CODE_NAME)
+    expect(runCode?.description).toContain('[Code Mode File Handling Rules]:')
+    expect(runCode?.description).toContain('Do NOT embed large raw file contents (>5KB)')
+    expect(runCode?.description).toContain('str_replace')
+    expect(runCode?.description).toContain('Keep script execution bodies focused strictly on logic')
+  })
+
   it("mode 'code' states the run_code-only rule BEFORE the per-tool guidance that names each tool", async () => {
     const { ctx, systemPrompt } = await setup({ mode: 'code' })
     registerEcho(ctx)

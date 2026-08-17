@@ -9,6 +9,7 @@ import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { TerminalReadResult, TerminalSendResult, TerminalSessionId } from '@deepseek-ai/dsh-terminal'
 import { deadline, timeoutOf } from '@deepseek-ai/dsh-timeout'
+import { codePointLength, truncateCodePoints } from '@deepseek-ai/dsh-output-retention'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 
 // TODO: Replace the file-search advice; arbitrary command output need not come from a searchable file.
@@ -53,10 +54,10 @@ interface PersistentShells {
 }
 
 function maybeTruncate(content: string, maxOutputChars: number, incomplete = false): string {
-  if (content.length <= maxOutputChars && !incomplete) return content
-  return content.length <= maxOutputChars
+  if (codePointLength(content) <= maxOutputChars && !incomplete) return content
+  return codePointLength(content) <= maxOutputChars
     ? content + TRUNCATED_MESSAGE
-    : content.slice(0, maxOutputChars) + TRUNCATED_MESSAGE
+    : truncateCodePoints(content, maxOutputChars) + TRUNCATED_MESSAGE
 }
 
 function markers(): CommandMarkers {

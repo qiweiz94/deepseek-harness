@@ -42,6 +42,12 @@ export interface AgentInstructionSource {
   baseline?: true
   /** Discovery, precedence, and budget identity used to validate a resumed baseline. */
   baselineIdentity?: string
+  /**
+   * SHA-1 over the included instruction file contents. Present on baseline
+   * messages so an unchanged file set can never re-enter the trajectory under
+   * drifted framing or identity metadata.
+   */
+  contentDigest?: string
   changes: AgentInstructionChange[]
 }
 

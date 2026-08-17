@@ -27,6 +27,11 @@
  *   web bodies). `head` / `tail` / `headTail`, preserving UTF-8 boundaries at
  *   {@link TextRetainer.finish}.
  *
+ * The pure {@link codePointLength} / {@link truncateCodePoints} helpers bound
+ * STRINGS by Unicode code points for callers whose caps are documented in
+ * characters (line lengths, fetch body caps) — the byte-oriented retainers
+ * stay the authority for process/body byte budgets.
+ *
  * @module @deepseek-ai/dsh-output-retention
  */
 
@@ -131,6 +136,34 @@ function assertBudget(value: number, name: string): void {
   if (!Number.isInteger(value) || value < 0) {
     throw new Error(`${name} must be a non-negative integer`)
   }
+}
+
+/**
+ * Count a string's Unicode code points, never its UTF-16 code units.
+ * `String.prototype.length` counts surrogate halves as two units, so a length
+ * used as a text budget must count code points to stay consistent with
+ * {@link truncateCodePoints} and with human-perceived characters.
+ * @param value - the string to count.
+ * @returns the number of Unicode code points in `value`.
+ */
+export function codePointLength(value: string): number {
+  return Array.from(value).length
+}
+
+/**
+ * Bound a string to at most `maxCodePoints` Unicode code points. A cut that
+ * lands inside an astral code point (an emoji, a CJK extension character)
+ * drops that whole code point, so the result never ends in an unpaired
+ * surrogate: UTF-16 slicing would separate a pair, and the lone high surrogate
+ * `TextEncoder` rejects and UTF-8 transports replace with U+FFFD.
+ * @param value - the string to bound.
+ * @param maxCodePoints - maximum code points to keep (a non-negative integer).
+ * @returns `value` unchanged when it already fits, else the bounded prefix.
+ */
+export function truncateCodePoints(value: string, maxCodePoints: number): string {
+  assertBudget(maxCodePoints, 'maxCodePoints')
+  if (codePointLength(value) <= maxCodePoints) return value
+  return Array.from(value).slice(0, maxCodePoints).join('')
 }
 
 /**

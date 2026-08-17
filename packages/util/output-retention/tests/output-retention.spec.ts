@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
+  codePointLength,
   describeOmitted,
   formatRetentionNotice,
   ItemRetainer,
   type Omitted,
   type RetentionNotice,
   TextRetainer,
+  truncateCodePoints,
 } from '@deepseek-ai/dsh-output-retention'
 
 /** Decode a RetainedText via a round-trip helper for readable UTF-8 assertions. */
@@ -372,5 +374,47 @@ describe('formatRetentionNotice', () => {
     const out = formatRetentionNotice(headTail, n =>
       typeof n.limit === 'object' ? `Kept ${n.limit.head}B head + ${n.limit.tail}B tail.` : '')
     expect(out).toBe('Omitted 500 bytes. Kept 2000B head + 2000B tail.')
+  })
+})
+
+describe('code-point counting and bounding', () => {
+  it('counts code points, not UTF-16 code units', () => {
+    // 'a' + astral emoji (2 units) + 'b': 4 units but 3 code points.
+    expect('a\u{1F600}b'.length).toBe(4)
+    expect(codePointLength('a\u{1F600}b')).toBe(3)
+    expect(codePointLength('')).toBe(0)
+    expect(codePointLength('plain ascii')).toBe(11)
+  })
+
+  it('returns the string unchanged when it already fits', () => {
+    const value = 'a\u{1F600}b'
+    expect(truncateCodePoints(value, 5)).toBe(value)
+    expect(truncateCodePoints(value, 3)).toBe(value)
+    expect(truncateCodePoints('', 0)).toBe('')
+  })
+
+  it('never splits a surrogate pair at the cut', () => {
+    // A cut at 2 code units lands inside the emoji pair; the whole emoji is
+    // dropped rather than emitting a lone high surrogate.
+    expect(truncateCodePoints('a\u{1F600}b', 1)).toBe('a')
+    expect(truncateCodePoints('\u{1F600}\u{1F600}', 1)).toBe('\u{1F600}')
+    // BMP text keeps exact unit-for-unit semantics.
+    expect(truncateCodePoints('abcdef', 3)).toBe('abc')
+    // Code-point budget: the pair and 'x' are two code points, one fits the 1-point cap.
+    expect(truncateCodePoints('\u{1F600}x\u{1F600}', 2)).toBe('\u{1F600}x')
+  })
+
+  it('rejects a non-integer or negative cap like the retainers', () => {
+    expect(() => truncateCodePoints('abc', -1)).toThrow('maxCodePoints must be a non-negative integer')
+    expect(() => truncateCodePoints('abc', 1.5)).toThrow('maxCodePoints must be a non-negative integer')
+  })
+
+  it('never emits a lone surrogate that TextEncoder would reject', () => {
+    const bounded = truncateCodePoints('ab\u{1F600}cd', 3)
+    expect(bounded).toBe('ab\u{1F600}')
+    expect(() => new TextEncoder().encode(bounded)).not.toThrow()
+    // The naive UTF-16 cut would leave a lone high surrogate.
+    const naive = 'ab\u{1F600}cd'.slice(0, 3)
+    expect(naive.endsWith('\uD83D')).toBe(true)
   })
 })

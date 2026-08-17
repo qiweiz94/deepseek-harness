@@ -412,6 +412,28 @@ describe('the soft layer', () => {
     expect(planAssembly.sections.find(section => section.name === 'plan:policy')?.text).toBe(TEST_PLAN_SECTION)
   })
 
+  it('renders plan:policy at the prompt tail so mode toggles preserve the cached prefix', async () => {
+    const ctx = await setup()
+    registerNamedTools(ctx, ['read', 'write'])
+    const agent = await agentWithSession(ctx)
+    const defaultAssembly = await assembleFor(ctx, agent)
+
+    agent.session.append('plan/mode', { active: true })
+    const planAssembly = await assembleFor(ctx, agent)
+
+    const defaultSections = defaultAssembly.sections
+    const planSections = planAssembly.sections
+    expect(planSections.map(section => section.name)).toEqual(defaultSections.map(section => section.name))
+    expect(planSections.at(-1)?.name).toBe('plan:policy')
+    expect(planSections.at(-1)?.text).toBe(TEST_PLAN_SECTION)
+    // Every non-plan section stays byte-identical: only the tail paragraph changes.
+    for (let index = 0; index < defaultSections.length; index++) {
+      if (planSections[index]?.name !== 'plan:policy') {
+        expect(planSections[index]?.text).toBe(defaultSections[index]?.text)
+      }
+    }
+  })
+
   it('leaves an agent-less assembly untouched', async () => {
     const ctx = await setup()
     registerNamedTools(ctx, ['read'])

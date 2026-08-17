@@ -28,6 +28,20 @@ export interface DynamicCordisClosureEnv {
   noteError(message: string): void
 }
 
+/**
+ * Bound concatenated text to at most `max` Unicode code points, dropping whole
+ * trailing code points so an astral character is never split into a lone
+ * surrogate. Local code-point cut: this package is in the browser client graph
+ * and stays free of host-side dependencies.
+ * @param text - the text to bound.
+ * @param max - the code-point budget.
+ * @returns the code-point-safe prefix (unchanged when already within budget).
+ */
+function boundCodePoints(text: string, max: number): string {
+  const kept = Array.from(text)
+  return kept.length <= max ? text : kept.slice(0, max).join('')
+}
+
 const TIMER_REDIRECT
   = 'browser timer globals are unavailable in dynamic packages. Declare inject: [\'timer\'] on the returned plugin, '
     + 'query Client Service.listService for the exact API, and close over that plugin ctx. In React, create timers '
@@ -131,7 +145,7 @@ function taggedConsole(pluginId: CordisDynamicPluginId, noteError: (message: str
   const forward = (level: 'log' | 'info' | 'warn' | 'error' | 'debug') => (...args: unknown[]): void => {
     console[level](tag, ...args)
     if (level !== 'error') return
-    noteError(args.map(errorText).join(' ').slice(0, 500))
+    noteError(boundCodePoints(args.map(errorText).join(' '), 500))
   }
   return {
     ...console,

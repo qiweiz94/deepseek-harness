@@ -29,6 +29,10 @@ interface RegionDependencies {
   summarize(input: SummarizationInput, agent: Agent, signal?: AbortSignal): Promise<SummaryResult>
 }
 
+/** Verbatim tail caps: the most recent steps and turns always survive a summary compaction. */
+const MAX_RETAINED_TAIL_STEPS = 15
+const MAX_RETAINED_TAIL_TURNS = 3
+
 /** One validated inclusive span of current surface positions. */
 interface SurfaceSelection {
   readonly start: number
@@ -87,12 +91,38 @@ interface TransactionFailure {
   readonly stage: 'summary' | 'commit'
 }
 
+/** The open turn and step at each surface-node log position. */
+interface NodeStepTurn {
+  readonly turn: number | undefined
+  readonly step: number | undefined
+}
+
+/** Assign each surface node the open turn/step at its log position. */
+function nodeStepTurns(session: Session, nodeSeqs: readonly number[]): NodeStepTurn[] {
+  let turn: number | undefined
+  let step: number | undefined
+  const bySeq = new Map<number, NodeStepTurn>()
+  for (const event of session.events) {
+    if (event.type === 'turn/start') turn = event.data.turn
+    else if (event.type === 'turn/end') turn = undefined
+    else if (event.type === 'step/start') step = event.data.step
+    else if (event.type === 'step/end') step = undefined
+    if (event.type === 'user/message' || event.type === 'assistant/message' || event.type === 'tool/result') {
+      bySeq.set(event.seq, { turn, step })
+    }
+  }
+  return nodeSeqs.map(seq => bySeq.get(seq) ?? { turn: undefined, step: undefined })
+}
+
 /**
- * Resolve the next head-anchored range while retaining a priced recent tail
- * and never splitting an assistant tool-call/result pair.
+ * Resolve the next head-anchored range while retaining a bounded recent tail
+ * verbatim. The tail covers the last {@link MAX_RETAINED_TAIL_STEPS} steps / at
+ * most {@link MAX_RETAINED_TAIL_TURNS} turns, keeping at least `retainTokens`
+ * tokens; the compacted span shadows everything before it, never a
+ * tool-call/result pair.
  * @param session - session supplying authoritative current surface positions.
  * @param measurement - unified pressure and surface measurement from the conversation meter.
- * @param retainTokens - minimum recent tail budget retained verbatim.
+ * @param retainTokens - minimum recent tail token floor retained verbatim.
  * @returns the inclusive positional seq range to compact, or `null`.
  */
 export function selectCompactableRange(
@@ -109,11 +139,22 @@ export function selectCompactableRange(
     throw new Error('compaction: token-meter surface does not match the current session surface')
   }
 
+  const stepTurns = nodeStepTurns(session, pricedNodes.map(node => node.seq))
   let accumulated = 0
   let keepFromIdx = pricedNodes.length
+  const turns = new Set<number>()
+  const steps = new Set<string>()
   for (let index = pricedNodes.length - 1; index >= 0; index -= 1) {
     // oxlint-disable-next-line typescript/no-non-null-assertion
     accumulated += pricedNodes[index]!.tokens
+    // oxlint-disable-next-line typescript/no-non-null-assertion -- nodeStepTurns maps one entry per priced node.
+    const position = stepTurns[index]!
+    if (position.turn !== undefined) turns.add(position.turn)
+    if (position.turn !== undefined && position.step !== undefined) {
+      steps.add(`${position.turn}:${position.step}`)
+    }
+    // Strict step/turn caps: the node that trips a cap is NOT retained.
+    if (steps.size > MAX_RETAINED_TAIL_STEPS || turns.size > MAX_RETAINED_TAIL_TURNS) break
     keepFromIdx = index
     if (accumulated >= retainTokens) break
   }
@@ -462,6 +503,22 @@ function commitCompactionBody(
   session.append('user/message', checkpointMessage, {
     surfaceOp: { op: 'replace', start, end },
     sourceEventSeqs: [startEvent.seq, summaryEvent.seq, ...shadowedSeqs],
+  })
+  // Telemetry appended AFTER the replacement checkpoint so the token-meter's
+  // shadow-price protocol (summary -> replacement, synchronously adjacent)
+  // stays intact. One range record replaces the legacy per-seq prune series
+  // for range replay while replay consumers keep accepting both forms.
+  session.append('compaction/range-pruned', {
+    compactionId: startEvent.data.compactionId,
+    ...startEvent.data.sourceCommandId === undefined
+      ? {}
+      : { sourceCommandId: startEvent.data.sourceCommandId },
+    // oxlint-disable-next-line typescript/no-non-null-assertion -- a validated non-empty surface range guarantees both ends.
+    startSeq: shadowedSeqs[0]!,
+    // oxlint-disable-next-line typescript/no-non-null-assertion -- a validated non-empty surface range guarantees both ends.
+    endSeq: shadowedSeqs[shadowedSeqs.length - 1]!,
+    prunedTokenEstimate: shadowedTokenCount,
+    shadowedSeqs: [...shadowedSeqs],
   })
   return {
     compactionId: startEvent.data.compactionId,

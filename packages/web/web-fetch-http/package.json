@@ -33,6 +33,7 @@
   "license": "MIT",
   "peerDependencies": {
     "@deepseek-ai/dsh-invariants": "workspace:^",
+    "@deepseek-ai/dsh-output-retention": "workspace:^",
     "@deepseek-ai/dsh-timeout": "workspace:^",
     "@deepseek-ai/dsh-web": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
@@ -42,6 +43,7 @@
   },
   "devDependencies": {
     "@deepseek-ai/dsh-invariants": "workspace:^",
+    "@deepseek-ai/dsh-output-retention": "workspace:^",
     "@deepseek-ai/dsh-timeout": "workspace:^",
     "@deepseek-ai/dsh-web": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"

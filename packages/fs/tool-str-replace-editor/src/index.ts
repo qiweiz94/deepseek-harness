@@ -13,6 +13,7 @@ import type { SandboxExecutionPolicy } from '@deepseek-ai/dsh-sandbox'
 import type { SandboxPolicyService } from '@deepseek-ai/dsh-sandbox-policy'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolCallView, ToolRunContext } from '@deepseek-ai/dsh-tools'
+import { codePointLength, truncateCodePoints } from '@deepseek-ai/dsh-output-retention'
 
 const TRUNCATED_MESSAGE = '<response clipped><NOTE>To save on context only part of this file has been shown to you. You should retry this tool after you have searched inside the file with `grep -n` in order to find the line numbers of what you are looking for.</NOTE>'
 
@@ -30,9 +31,9 @@ Notes for using the \`str_replace\` command:
 `.trim()
 
 function maybeTruncate(content: string, maxOutputChars: number): string {
-  return content.length <= maxOutputChars
+  return codePointLength(content) <= maxOutputChars
     ? content
-    : content.slice(0, maxOutputChars) + TRUNCATED_MESSAGE
+    : truncateCodePoints(content, maxOutputChars) + TRUNCATED_MESSAGE
 }
 
 function codepointCompare(left: string, right: string): number {

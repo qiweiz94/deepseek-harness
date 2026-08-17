@@ -7,7 +7,7 @@
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
-import type { FileSystem, FsInfo, FsTarget, FsVersion } from '@deepseek-ai/dsh-fs'
+import type { FileSystem, FsTarget, FsVersion } from '@deepseek-ai/dsh-fs'
 import { assertNever } from '@deepseek-ai/dsh-llm'
 import { dshHomeDisplay } from '@deepseek-ai/dsh-home-paths'
 import { resolveConfig, resolveDiscoveryConfig, type ResolvedConfig } from './config.ts'
@@ -469,27 +469,35 @@ export async function probeScopeInstruction(
     ? resolved.dshHome
     : directory === '.' ? projectRoot : join(projectRoot, directory)
   const absolutePath = join(dir, candidateName)
-  // resolve() follows a final-component symlink; stat then classifies the target.
-  // A non-file target (missing, or a link to a directory) is a confirmed absence;
-  // only a provider exception is reported as unavailable.
-  let target: FsTarget
-  let info: FsInfo | undefined
-  try {
-    target = await fileSystem.resolve(absolutePath, signalOptions(signal))
-    info = await fileSystem.stat(target, signal)
-  } catch {
-    signal?.throwIfAborted()
-    return { kind: 'unavailable' }
+  // Reuse the shared resolve→stat→classify probe so scope probing and baseline
+  // discovery keep identical provider semantics (symlink follow, non-file
+  // absence, and exception unavailability can never drift apart).
+  const probe = await fsStatFile(absolutePath, fileSystem, signal)
+  switch (probe.kind) {
+    case 'present': {
+      // fsStatFile always supplies target and version for a present regular
+      // file; the optional fields exist only for the node-backed probe.
+      const { target, version, size } = probe.info
+      const file: ProbedInstructionFile = {
+        absolutePath,
+        displayPath: directory === USER_GLOBAL_DIRECTORY
+          ? userGlobalDisplayPath(resolved.dshHome)
+          : relativeDisplay(projectRoot, absolutePath),
+        // oxlint-disable-next-line typescript/no-non-null-assertion -- present probes always carry target/version.
+        target: target!,
+        // oxlint-disable-next-line typescript/no-non-null-assertion -- version is contractually present above.
+        version: version!,
+        ...size === undefined ? {} : { size },
+      }
+      return { kind: 'present', file }
+    }
+    case 'absent':
+    case 'unavailable':
+      return probe
+    /* v8 ignore next 2 -- StatFileProbe is closed; this arm only makes adding a kind a compile error. */
+    default:
+      assertNever(probe, 'StatFileProbe')
   }
-  if (info?.type !== 'file') return { kind: 'absent' }
-  const file: ProbedInstructionFile = {
-    absolutePath,
-    displayPath: directory === USER_GLOBAL_DIRECTORY ? userGlobalDisplayPath(resolved.dshHome) : relativeDisplay(projectRoot, absolutePath),
-    target,
-    version: info.version,
-    ...info.size === undefined ? {} : { size: info.size },
-  }
-  return { kind: 'present', file }
 }
 
 /**

@@ -287,6 +287,23 @@ describe('tool-str-replace-editor', () => {
       .toContain('<response clipped>')
   })
 
+  it('clips an astral-large view on a code-point boundary (no lone surrogate)', async () => {
+    // The listing header (which embeds the absolute tmp path) eats part of
+    // the budget, so the cap is sized far below the 5000-emoji file but still
+    // large enough to retain the first emoji line on any machine.
+    const clipped = await setup({ maxOutputChars: 800 })
+    await writeFile(join(clipped.root, 'astral.txt'), 'a' + '\u{1F600}'.repeat(5000))
+    const out = text(await call(clipped.ctx, clipped.owner, {
+      command: 'view',
+      path: join(clipped.root, 'astral.txt'),
+    }))
+    expect(out).toContain('<response clipped>')
+    expect(out).toContain('\u{1F600}')
+    // The view cap dropped whole code points: no lone surrogate survives.
+    expect(Array.from(out).filter(ch => /^[\uD800-\uDFFF]$/.test(ch))).toEqual([])
+    expect(() => new TextEncoder().encode(out)).not.toThrow()
+  })
+
   it('matches canonical empty-line, range, and end-insert behavior', async () => {
     const { ctx, root, owner } = await setup()
     const empty = join(root, 'empty.txt')

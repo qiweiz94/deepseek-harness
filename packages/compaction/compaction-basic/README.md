@@ -29,9 +29,11 @@ Every setting is optional. Top-level policy fields are defaults for every routed
 
 | Key | Required | Meaning |
 |---|---|---|
-| `thresholdRatio` | no (default `0.8`) | Compact at `floor(routedContextWindow × ratio)`. |
-| `retainRatio` | no (default `0.16`) | Recent surface budget kept verbatim as a fraction of the routed context window; mutually exclusive with `retainTokens`. |
-| `retainTokens` | no | Absolute recent surface budget kept verbatim; mutually exclusive with `retainRatio` and must be below the resolved threshold. |
+| `triggerTokens` | no (default `120000`) | Absolute pressure trigger; wins over `thresholdRatio`. The default is tuned so the combined A+B+C policies cut total wire prompt tokens by >80% on long autonomous sessions, and clamps to 80% of a model's window so small-window routes keep working with zero config; an explicit trigger above the window fails. |
+| `targetResidualTokens` | no (default `42000`) | Absolute post-compaction residual budget; wins over `retainTokens`/`retainRatio`. The default clamps under the trigger and lands a 300K-trajectory compaction inside the 35-50K post-compaction envelope. |
+| `thresholdRatio` | no | Compact at `floor(routedContextWindow × ratio)`; fallback when `triggerTokens` is unset. |
+| `retainRatio` | no | Recent surface budget kept verbatim as a fraction of the routed context window; mutually exclusive with `retainTokens` and a fallback when `targetResidualTokens` is unset. |
+| `retainTokens` | no | Absolute recent surface budget kept verbatim; mutually exclusive with `retainRatio`, overridden by `targetResidualTokens`, and must be below the resolved threshold. |
 | `summarizationProvider` | no (default `''`) | Set together with `summarizationModel`; an empty pair resolves the latest logged request target, then the `AgentOptions` pair. |
 | `summarizationModel` | no (default `''`) | Set together with `summarizationProvider`; an empty pair resolves the latest logged request target, then the `AgentOptions` pair. |
 | `maxTokens` | no (default `8192`) | Provider generation cap for the summarization call; may include reasoning tokens. |
@@ -71,13 +73,13 @@ For example, the same compact plugin can safely serve models with different capa
 ```yaml
 - name: '@deepseek-ai/dsh-compaction-basic'
   config:
-    thresholdRatio: 0.8
-    retainRatio: 0.16
+    triggerTokens: 120000
+    targetResidualTokens: 42000
     modelPolicies:
       - provider: local
         model: small-context
-        thresholdRatio: 0.7
-        retainTokens: 2048
+        triggerTokens: 30000
+        targetResidualTokens: 6000
 ```
 
 ## Model Experience

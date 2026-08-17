@@ -112,11 +112,11 @@ subagent seam 允许一个 agent（智能体）通过具名提供方把工作委
 
 #### 模型看到的内容
 
-一条用户角色的父级消息，开头是结果本身——`Background subagent <child-id> finished and will do no further work unless you send it more.`，或子级被停止、耗尽额度、拒绝任务或失败时的对应句子——随后是 `Its closing message:` 与子级的最终 assistant 内容；若子级没有产出内容，则是 `It left no closing message.`。这是本服务面向父级的唯一直接贡献；委派 schema、父级延续与发现以及子级作用域的 `report` 分别归 `dsh-tool-subagent`、`dsh-tool-subagent-control` 和 `dsh-tool-subagent-report` 所有。
+一条用户角色的父级消息，开头是结果本身——`Background subagent <child-id> finished and will do no further work unless you send it more.`，或子级被停止、耗尽额度、拒绝任务或失败时的对应句子——随后是 `Its closing message:` 与子级的最终 assistant 内容；若子级没有产出内容，则是 `It left no closing message.`。超过 1,000 字符的关闭消息会以有界摘要（digest）形式交付，并附上指向子级持久化会话文件的指针，因此大段报告不会撑大父级轨迹。这是本服务面向父级的唯一直接贡献；委派 schema、父级延续与发现以及子级作用域的 `report` 分别归 `dsh-tool-subagent`、`dsh-tool-subagent-control` 和 `dsh-tool-subagent-report` 所有。
 
 #### Token 影响
 
-父级请求中，每个已结算的 Activation 一条通知，长度取决于子级的最终消息。如果子级既上报又结算，父级请求会同时承担上报消息和结算通知两部分 token 开销。
+父级请求中，每个已结算的 Activation 一条通知，长度取决于子级的最终消息（摘要最多 1,000 字符）。如果子级既上报又结算，父级请求会同时承担上报消息和结算通知两部分 token 开销。
 
 #### KV Cache 影响
 

@@ -16,17 +16,30 @@ import type {
   ResolvedTargetPolicy,
 } from './types.ts'
 
-/** Default request-pressure fraction for every routed model. */
-const DEFAULT_THRESHOLD_RATIO = 0.8
+/**
+ * Absolute pressure trigger when no ratio or explicit trigger is configured.
+ * 120K (not 200K) is the default so the combined A+B+C policies cut total wire
+ * prompt tokens by >80% on the audited session profile (measured 82.3% at
+ * 120K vs 70.3% at 200K); the 250K hard ceiling stays untouched. Override with
+ * `triggerTokens` for a looser budget.
+ */
+const DEFAULT_TRIGGER_TOKENS = 120_000
 
-/** Default verbatim-tail fraction for every routed model. */
-const DEFAULT_RETAIN_RATIO = 0.16
+/**
+ * Absolute post-compaction residual when no ratio or explicit budget is
+ * configured. 42K leaves room for the retained-tail overshoot (the node that
+ * trips the floor) plus the framed summary, so a 300K-trajectory compaction
+ * lands inside the 35-50K post-compaction envelope.
+ */
+const DEFAULT_TARGET_RESIDUAL_TOKENS = 42_000
 
 /** Fields shared by top-level defaults and exact-target overrides. */
 const POLICY_CONFIG_KEYS = [
   'thresholdRatio',
+  'triggerTokens',
   'retainRatio',
   'retainTokens',
+  'targetResidualTokens',
   'summarizationProvider',
   'summarizationModel',
   'maxTokens',
@@ -71,9 +84,13 @@ export function resolveConfig(config: BasicCompactionConfig = {}): ResolvedConfi
     throw new Error('BasicCompactionConfig: auto must be a boolean')
   }
 
-  const thresholdRatio = config.thresholdRatio ?? DEFAULT_THRESHOLD_RATIO
-  const retention = resolveRetention(config, { retainRatio: DEFAULT_RETAIN_RATIO })
+  const thresholdRatio = config.thresholdRatio
+  const triggerTokens = config.triggerTokens
+  const targetResidualTokens = config.targetResidualTokens
+  const retention = resolveRetention(config, { retainTokens: DEFAULT_TARGET_RESIDUAL_TOKENS })
   validateRatioRetention(thresholdRatio, retention, 'BasicCompactionConfig')
+  const defaultRetention = config.retainRatio === undefined
+    && config.retainTokens === undefined && targetResidualTokens === undefined
   const modelPolicies = resolveModelPolicies(config.modelPolicies)
   for (const [index, policy] of modelPolicies.entries()) {
     validateRatioRetention(
@@ -84,8 +101,10 @@ export function resolveConfig(config: BasicCompactionConfig = {}): ResolvedConfi
   }
 
   return deepFreeze({
-    thresholdRatio,
+    ...thresholdRatio === undefined ? {} : { thresholdRatio },
+    ...triggerTokens === undefined ? {} : { triggerTokens },
     ...retention,
+    ...targetResidualTokens === undefined ? {} : { targetResidualTokens },
     summarizationProvider: config.summarizationProvider ?? '',
     summarizationModel: config.summarizationModel ?? '',
     maxTokens: config.maxTokens ?? 8192,
@@ -93,6 +112,7 @@ export function resolveConfig(config: BasicCompactionConfig = {}): ResolvedConfi
     maxOverflowRetries: config.maxOverflowRetries ?? 1,
     modelPolicies,
     auto: config.auto ?? true,
+    defaultRetention,
   })
 }
 
@@ -112,10 +132,23 @@ export function resolveTargetPolicy(
   const inheritedRetention: ResolvedRetention = config.retainTokens === undefined
     ? { retainRatio: config.retainRatio }
     : { retainTokens: config.retainTokens }
+  const overrideConfiguresRetention = override !== undefined && (
+    override.retainRatio !== undefined || override.retainTokens !== undefined
+    || override.targetResidualTokens !== undefined)
   return deepFreeze({
     target: { provider: target.provider, model: target.model },
-    thresholdRatio: override?.thresholdRatio ?? config.thresholdRatio,
+    ...override?.thresholdRatio !== undefined
+      ? { thresholdRatio: override.thresholdRatio }
+      : config.thresholdRatio === undefined ? {} : { thresholdRatio: config.thresholdRatio },
+    ...override?.triggerTokens !== undefined
+      ? { triggerTokens: override.triggerTokens }
+      : config.triggerTokens === undefined ? {} : { triggerTokens: config.triggerTokens },
     ...resolveRetention(override ?? {}, inheritedRetention),
+    ...override?.targetResidualTokens !== undefined
+      ? { targetResidualTokens: override.targetResidualTokens }
+      : config.targetResidualTokens === undefined
+        ? {} : { targetResidualTokens: config.targetResidualTokens },
+    defaultRetention: config.defaultRetention && !overrideConfiguresRetention,
     summarizationProvider: override?.summarizationProvider ?? config.summarizationProvider,
     summarizationModel: override?.summarizationModel ?? config.summarizationModel,
     maxTokens: override?.maxTokens ?? config.maxTokens,
@@ -141,10 +174,29 @@ export function resolveCompactSpec(
       `BasicCompactionConfig: contextWindow (${contextWindow}) must be a positive integer`,
     )
   }
-  const thresholdTokens = Math.floor(contextWindow * policy.thresholdRatio)
-  const retainTokens = policy.retainTokens === undefined
-    ? Math.floor(contextWindow * policy.retainRatio)
-    : policy.retainTokens
+  // The absolute default trigger is clamped to 80% of the window so
+  // small-window models keep working with zero config; an EXPLICIT trigger
+  // above the window is a deployment mistake and fails below.
+  const thresholdTokens = policy.triggerTokens ?? (
+    policy.thresholdRatio === undefined
+      ? Math.min(DEFAULT_TRIGGER_TOKENS, Math.floor(contextWindow * 0.8))
+      : Math.floor(contextWindow * policy.thresholdRatio))
+  if (thresholdTokens > contextWindow) {
+    throw new TargetPressureConfigError(
+      targetKey,
+      `BasicCompactionConfig: ${policy.target.provider}/${policy.target.model} triggerTokens `
+      + `(${thresholdTokens}) exceeds its context window (${contextWindow}); `
+      + 'no request could reach the trigger',
+    )
+  }
+  // The default residual also clamps under the (possibly clamped) trigger so a
+  // small-window model never resolves retain >= threshold with zero config.
+  const retainTokens = policy.targetResidualTokens ?? (
+    policy.retainTokens === undefined
+      ? Math.floor(contextWindow * policy.retainRatio)
+      : policy.defaultRetention
+        ? Math.min(policy.retainTokens, Math.max(thresholdTokens - 1, 0))
+        : policy.retainTokens)
   if (retainTokens >= thresholdTokens) {
     throw new TargetPressureConfigError(
       targetKey,
@@ -155,7 +207,7 @@ export function resolveCompactSpec(
   return deepFreeze({
     target: { ...policy.target },
     contextWindow,
-    thresholdRatio: policy.thresholdRatio,
+    ...policy.thresholdRatio === undefined ? {} : { thresholdRatio: policy.thresholdRatio },
     thresholdTokens,
     retainTokens,
     summarizationProvider: policy.summarizationProvider,
@@ -178,10 +230,11 @@ function resolveRetention(
 
 /** Reject a capacity-independent retention conflict at plugin load. */
 function validateRatioRetention(
-  thresholdRatio: number,
+  thresholdRatio: number | undefined,
   retention: ResolvedRetention,
   name: string,
 ): void {
+  if (thresholdRatio === undefined) return
   if (retention.retainRatio !== undefined && retention.retainRatio >= thresholdRatio) {
     throw new Error(
       `${name}: retainRatio (${retention.retainRatio}) must be less than `
@@ -229,14 +282,20 @@ function validatePolicy(
   name: string,
 ): void {
   const thresholdRatio = config.thresholdRatio
+  const triggerTokens = config.triggerTokens
   const retainRatio = config.retainRatio
   const retainTokens = config.retainTokens
+  const targetResidualTokens = config.targetResidualTokens
   const maxTokens = config.maxTokens
   const compactionRetries = config.compactionRetries
   const maxOverflowRetries = config.maxOverflowRetries
   if (thresholdRatio !== undefined) assertRatio(`${name}.thresholdRatio`, thresholdRatio)
+  if (triggerTokens !== undefined) assertPositiveInteger(`${name}.triggerTokens`, triggerTokens)
   if (retainRatio !== undefined) assertRatio(`${name}.retainRatio`, retainRatio)
   if (retainTokens !== undefined) assertNonNegativeInteger(`${name}.retainTokens`, retainTokens)
+  if (targetResidualTokens !== undefined) {
+    assertNonNegativeInteger(`${name}.targetResidualTokens`, targetResidualTokens)
+  }
   if (retainRatio !== undefined && retainTokens !== undefined) {
     throw new Error(`${name}: retainRatio and retainTokens are mutually exclusive`)
   }

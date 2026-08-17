@@ -45,7 +45,7 @@ Web 客户端使用该插件提供的 `/plan` 命令；其他入口可以直接�
 
 #### 模型所见内容
 
-Plan mode 激活时，模型会在提示词顺序 50 处看到部署方提供的原样 `section` 文本；未激活 mode 不贡献文本。
+Plan mode 激活时，模型会在提示词末尾（顺序 1000，收尾段）看到部署方提供的原样 `section` 文本；未激活 mode 不贡献文本。
 
 ##### 配置示例
 
@@ -59,7 +59,7 @@ You are in plan mode. Explore and design before presenting the complete plan thr
 
 #### KV Cache 影响
 
-该段在 plan mode 内稳定，但进入或退出会从顺序 50 开始改变系统提示词。
+该段在 plan mode 内稳定；由于它渲染在提示词末尾，进入或退出只会改变追加的那一段：基础系统提示词保持逐字节不变，因此缓存的提示词前缀在 mode 切换时得以保留。
 
 ### 人类命令
 

@@ -289,8 +289,7 @@ describe('compact configuration and defaults', () => {
     const resolved = resolveConfig({})
 
     expect(resolved).toEqual({
-      thresholdRatio: 0.8,
-      retainRatio: 0.16,
+      retainTokens: 42_000,
       summarizationProvider: '',
       summarizationModel: '',
       maxTokens: 8192,
@@ -298,8 +297,21 @@ describe('compact configuration and defaults', () => {
       maxOverflowRetries: 1,
       modelPolicies: [],
       auto: true,
+      defaultRetention: true,
     })
     expect(Object.isFrozen(resolved)).toBe(true)
+
+    // The absolute defaults cap pressure at 120K and residual at 42K on a 1M window.
+    const policy = resolveTargetPolicy(resolved, { provider: MODEL, model: MODEL })
+    expect(resolveCompactSpec(policy, 1_000_000)).toMatchObject({
+      thresholdTokens: 120_000,
+      retainTokens: 42_000,
+    })
+    // A small-window model clamps both DEFAULT budgets under the window instead of failing.
+    expect(resolveCompactSpec(policy, 50_000)).toMatchObject({
+      thresholdTokens: 40_000,
+      retainTokens: 39_999,
+    })
   })
 
   it('resolves threshold and retention overrides independently', () => {
@@ -308,17 +320,25 @@ describe('compact configuration and defaults', () => {
     })
     expect(thresholdOnly).toMatchObject({
       thresholdRatio: 0.5,
-      retainRatio: 0.16,
+      retainTokens: 42_000,
     })
+    expect(thresholdOnly).not.toHaveProperty('triggerTokens')
 
     const retentionOnly = resolveConfig({
       retainTokens: 70,
     })
-    expect(retentionOnly).toMatchObject({
-      thresholdRatio: 0.8,
-      retainTokens: 70,
-    })
+    expect(retentionOnly).toMatchObject({ retainTokens: 70 })
     expect(retentionOnly).not.toHaveProperty('retainRatio')
+    expect(retentionOnly).not.toHaveProperty('thresholdRatio')
+
+    // Explicit absolute knobs override both ratio and relative budgets.
+    const absoluteOnly = resolveConfig({ triggerTokens: 300_000, targetResidualTokens: 30_000 })
+    expect(absoluteOnly).toMatchObject({ triggerTokens: 300_000, targetResidualTokens: 30_000 })
+    const absolutePolicy = resolveTargetPolicy(absoluteOnly, { provider: MODEL, model: MODEL })
+    expect(resolveCompactSpec(absolutePolicy, 1_000_000)).toMatchObject({
+      thresholdTokens: 300_000,
+      retainTokens: 30_000,
+    })
   })
 
   it('merges exact provider/model policy overrides and scales ratios per model', () => {
@@ -424,10 +444,12 @@ describe('compact configuration and defaults', () => {
       [{ summarizationModel: '' }, /must be set together/],
       [{ thresholdRatio: 0 }, /number in \(0, 1\]/],
       [{ thresholdRatio: 1.1 }, /number in \(0, 1\]/],
-      [{ retainRatio: 0.9 }, /retainRatio \(0.9\) must be less than the resolved thresholdRatio \(0.8\)/],
-      [{ thresholdRatio: 0.1 }, /retainRatio \(0.16\) must be less than the resolved thresholdRatio \(0.1\)/],
+      [{ triggerTokens: 0 }, /triggerTokens \(0\) must be a positive integer/],
+      [{ triggerTokens: -1 }, /triggerTokens \(-1\) must be a positive integer/],
+      [{ targetResidualTokens: -1 }, /targetResidualTokens \(-1\) must be a non-negative integer/],
       [{ retainTokens: -1 }, /non-negative integer/],
       [{ retainRatio: 0.2, retainTokens: 100 }, /mutually exclusive/],
+      [{ thresholdRatio: 0.5, retainRatio: 0.7 }, /retainRatio \(0.7\) must be less than the resolved thresholdRatio \(0.5\)/],
       [{ modelPolicies: {} }, /modelPolicies must be an array/],
       [{ modelPolicies: [1] }, /modelPolicies\[0\] must be an object/],
       [{ modelPolicies: [null] }, /modelPolicies\[0\] must be an object/],
@@ -449,12 +471,16 @@ describe('compact configuration and defaults', () => {
       }, /modelPolicies\[0\].*must be set together/],
       [{ modelPolicies: [{ provider: MODEL, model: MODEL, retainRatio: 0.2, retainTokens: 100 }] }, /mutually exclusive/],
       [
-        { modelPolicies: [{ provider: MODEL, model: MODEL, thresholdRatio: 0.1 }] },
-        /modelPolicies\[0\]: retainRatio \(0.16\).*thresholdRatio \(0.1\)/,
+        { modelPolicies: [{ provider: MODEL, model: MODEL, triggerTokens: 0 }] },
+        /modelPolicies\[0\].triggerTokens \(0\) must be a positive integer/,
       ],
       [
-        { modelPolicies: [{ provider: MODEL, model: MODEL, retainRatio: 0.9 }] },
-        /modelPolicies\[0\]: retainRatio \(0.9\).*thresholdRatio \(0.8\)/,
+        { modelPolicies: [{ provider: MODEL, model: MODEL, targetResidualTokens: -1 }] },
+        /modelPolicies\[0\].targetResidualTokens \(-1\) must be a non-negative integer/,
+      ],
+      [
+        { modelPolicies: [{ provider: MODEL, model: MODEL, thresholdRatio: 0.5, retainRatio: 0.7 }] },
+        /modelPolicies\[0\]: retainRatio \(0.7\).*thresholdRatio \(0.5\)/,
       ],
       [{ modelPolicies: [{ provider: MODEL, model: MODEL }, { provider: MODEL, model: MODEL }] }, /duplicate model policy/],
       [{ models: { [MODEL]: { retainTokens: 10 } } }, /BasicCompactionConfig: unknown key "models"/],
@@ -472,6 +498,11 @@ describe('compact configuration and defaults', () => {
     expect(() => resolveCompactSpec(invalidPressure, 1_000)).toThrow(/less than threshold/)
     expect(() => resolveCompactSpec(invalidPressure, 1.5)).toThrow(/positive integer/)
     expect(() => resolveCompactSpec(invalidPressure, 0)).toThrow(/positive integer/)
+
+    const overWindow = resolveTargetPolicy(resolveConfig({
+      triggerTokens: 2_000_000,
+    }), { provider: MODEL, model: MODEL })
+    expect(() => resolveCompactSpec(overWindow, 1_000_000)).toThrow(/exceeds its context window/)
   })
 
 })
@@ -763,6 +794,90 @@ describe('pressure measurement and retention', () => {
 
     const priced = ctx.tokenMeter.measure(session)
     expect(selectCompactableRange(session, priced, 1)).toBeNull()
+  })
+})
+
+describe('absolute pressure budget and bounded tail', () => {
+  it('pressures at the 120K absolute default on a 1M window and resets inside the 50K envelope', async () => {
+    const ctx = createContext(1_000_000)
+    const compact = service({ auto: false }, ctx)
+    // ~300K estimated tokens: 20 turns x two 30K-char messages (4 chars/token).
+    // Each turn is ~15K tokens, so the bounded tail (last 3 turns) retains
+    // ~45K and the post-compaction session lands inside the 35-50K envelope.
+    const session = conversation(20, 'x'.repeat(30_000))
+    session.append('request/header', {
+      header: { config: { provider: MODEL, model: MODEL } },
+      reason: 'resume',
+    })
+    const before = ctx.tokenMeter.measure(session).totalTokens
+    expect(before).toBeGreaterThan(300_000)
+
+    const result = await compactIfNeeded(compact, session)
+
+    expect(result).not.toBeNull()
+    // The 42K residual default plus the bounded 3-turn verbatim tail keep the
+    // post-compaction session inside the 35-50K envelope on 300K trajectories.
+    const after = ctx.tokenMeter.measure(session).totalTokens
+    expect(after).toBeGreaterThanOrEqual(35_000)
+    expect(after).toBeLessThanOrEqual(50_000)
+  })
+
+  it('retains a bounded verbatim tail of at most 3 turns and 15 steps', async () => {
+    const ctx = createContext(1_000_000)
+    // 6 turns, one step each, sized to cross a 100K trigger: the last three
+    // turns stay verbatim while turns 1-3 shadow into the summary checkpoint.
+    const session = conversation(6, 'x'.repeat(35_000))
+    session.append('request/header', {
+      header: { config: { provider: MODEL, model: MODEL } },
+      reason: 'resume',
+    })
+    const compact = service({ auto: false, triggerTokens: 100_000, targetResidualTokens: 45_000 }, ctx)
+    const result = await compactIfNeeded(compact, session)
+    expect(result).not.toBeNull()
+
+    // The retained part of the surface compacts to at most 3 turns and 15 steps.
+    const shadowed = new Set(result!.shadowedSeqs)
+    const retained = session.surface.nodes.filter(seq => !shadowed.has(seq))
+    const events = session.events
+    const turns = new Set<number>()
+    let steps = 0
+    for (const seq of retained) {
+      const event = events.find(candidate => candidate?.seq === seq)
+      if (event === undefined) continue
+      if (event.type === 'assistant/message' || event.type === 'tool/result') {
+        turns.add(event.data.turn)
+        steps += 1
+      }
+    }
+    expect(turns.size).toBeLessThanOrEqual(3)
+    expect(steps).toBeLessThanOrEqual(15)
+    // The checkpoint summary node replaces the compacted head.
+    expect(session.surface.nodes[0]).toBeDefined()
+  })
+
+  it('records one compaction/range-pruned event per summary compaction', async () => {
+    const compact = service({ auto: false, thresholdRatio: 0.5, retainTokens: 180 })
+    const session = conversation(4)
+    const result = await compactIfNeeded(compact, session)
+
+    expect(result).not.toBeNull()
+    const event = session.events.find(entry => entry.type === 'compaction/range-pruned')
+    expect(event).toBeDefined()
+    if (event?.type === 'compaction/range-pruned') {
+      expect(event.data.compactionId).toBe(result!.compactionId)
+      expect(event.data.prunedTokenEstimate).toBe(result!.shadowedTokenCount)
+      expect(event.data.shadowedSeqs).toEqual(result!.shadowedSeqs)
+      // startSeq/endSeq span the shadowed block in surface order.
+      expect(event.data.startSeq).toBe(result!.shadowedSeqs[0])
+      expect(event.data.endSeq).toBe(result!.shadowedSeqs[result!.shadowedSeqs.length - 1])
+      // The range record is appended AFTER the replacement checkpoint, keeping the
+      // shadow-price adjacency (summary -> replace) intact for replay.
+      const checkpointIdx = session.events.findIndex(entry =>
+        entry.type === 'user/message'
+        && entry.surfaceOp !== undefined && entry.surfaceOp !== 'append')
+      const rangeIdx = session.events.findIndex(entry => entry.type === 'compaction/range-pruned')
+      expect(rangeIdx).toBeGreaterThan(checkpointIdx)
+    }
   })
 })
 

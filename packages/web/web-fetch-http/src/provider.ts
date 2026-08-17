@@ -10,6 +10,7 @@
 
 import { WebError } from '@deepseek-ai/dsh-web'
 import type { WebFetchBody, WebFetchProvider, WebFetchRequest, WebFetchResult } from '@deepseek-ai/dsh-web'
+import { codePointLength, truncateCodePoints } from '@deepseek-ai/dsh-output-retention'
 import { deadline, timeoutOf } from '@deepseek-ai/dsh-timeout'
 import { classifyContentType, decoderForCharset, isSameOrigin, parseCharset, validateFetchUrl } from './policy.ts'
 
@@ -134,8 +135,11 @@ export class HttpFetchProvider implements WebFetchProvider {
     }
     const { bytes, truncatedByBytes } = await this.readCapped(response, signal)
     const decoded = decoder.decode(bytes)
-    const truncatedByChars = decoded.length > this.limits.maxBodyChars
-    const content = truncatedByChars ? decoded.slice(0, this.limits.maxBodyChars) : decoded
+    // The character cap counts code points, and the cut drops a whole astral
+    // code point rather than splitting its surrogate pair (a lone high
+    // surrogate would corrupt later UTF-8 transports).
+    const truncatedByChars = codePointLength(decoded) > this.limits.maxBodyChars
+    const content = truncatedByChars ? truncateCodePoints(decoded, this.limits.maxBodyChars) : decoded
     const body: WebFetchBody = kind === 'html' ? { kind: 'html', content } : { kind: 'text', content }
 
     return {

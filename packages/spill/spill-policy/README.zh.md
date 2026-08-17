@@ -18,12 +18,15 @@
 2. 跳过嵌套执行（存在 `exec.parent`——其持久化副本由下方的 dispatch-log 分支设界）、已接受的值替换（注册表必须重新验证并重新渲染它们）、`read`（避免 `read → spill → read again` 循环）以及任何非 `accept` 决策（`block` 的纠正反馈会原样通过）。
 3. 仅在已接受的内容为**纯文本**（全部都是 `text` 块）时才将其展平；包含任何非文本块的结果都保持不变。
 4. 如果 UTF-8 大小为 `≤ maxInlineBytes`，则保持不变。
-5. 否则，保存完整文本，并将结果替换为预览和以下通知。系统会调整大小，使整个替换内容（预览、空行和通知）不超过 `maxInlineBytes`：先从预算中保留通知所需字节，再缩小预览以适配剩余空间，因此面向模型的结果绝不会超过上限：
+5. 否则，保存完整文本，并将结果替换为指令式通知和有界的首尾预览。系统会调整大小，使整个替换内容（通知、分隔行和预览）不超过 `maxInlineBytes`：先从预算中保留通知所需字节，再缩小预览以适配剩余空间，因此面向模型的结果绝不会超过上限：
 
    ```text
-   <retained head/tail preview>
-
-   (Omitted N bytes. Full formatted result stored at: /…/session-…/…-web_fetch.txt. Use read with offset/limit, or grep this path to search within it.)
+   [Output Exceeded 1000 chars - Full content written to /…/session-…/…-web_fetch.txt]
+   --- Preview (First 416 chars) ---
+   <retained head preview>
+   --- [3315 chars truncated] ---
+   --- Tail (Last 313 chars) ---
+   <retained tail preview>
    ```
 
    当通知本身已占满预算时（上限极小或定位信息很长），预览为空，只返回通知。如果仅通知的替换内容仍会超过 `maxInlineBytes`，策略将保留内联结果；它绝不会发出超过上限的替换内容（而且上限内的替换内容总比原结果更小，因此这也意味着 spill 绝不会增加字节数）。
@@ -42,7 +45,7 @@
 
 #### 模型看到的内容
 
-大小不超过 `maxInlineBytes` 的结果、嵌套结果、`read` 结果、被阻止的决策和包含非文本块的结果都保持不变。过大的纯文本呈现结果会变为有界的首尾预览，后面附加 `(Omitted <bytes> bytes. Full formatted result stored at: <locator>. <retrievalHint>)`；存储失败或没有会话所有者时，原始结果仍然可见。
+大小不超过 `maxInlineBytes` 的结果、嵌套结果、`read` 结果、被阻止的决策和包含非文本块的结果都保持不变。过大的纯文本呈现结果会变为由 `[Output Exceeded <cap> chars - Full content written to <locator>]` 引入的有界首尾预览；存储失败或没有会话所有者时，原始结果仍然可见。
 
 #### Token 影响
 

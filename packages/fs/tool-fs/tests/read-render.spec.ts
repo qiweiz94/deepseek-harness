@@ -50,6 +50,24 @@ describe('buildWindow', () => {
     expect(result.lines[0]?.text).toContain(`... (line truncated to ${READ_MAX_LINE_LENGTH} chars)`)
   })
 
+  it('truncates a line on a code-point boundary (no lone surrogate)', async () => {
+    // 'a' + 3001 astral emoji (each 2 units): the 10-char cap lands inside an
+    // emoji; the whole emoji is dropped, the suffix still fits, and the
+    // line buffer's unit cut must never split a pair.
+    const result = await buildWindow(whole(`a${'\u{1F600}'.repeat(3001)}b`), { offset: 1, limit: 10, maxLineLength: 10, maxBytes: READ_MAX_BYTES }, 'f')
+    const text = result.lines[0]?.text ?? ''
+    // Exactly 10 code points are kept ('a' + 9 emoji), then the suffix.
+    expect(text.startsWith('a\u{1F600}\u{1F600}\u{1F600}\u{1F600}\u{1F600}')).toBe(true)
+    const body = text.replace(/\.\.\. \(line truncated to \d+ chars\)$/, '')
+    expect(text.endsWith('... (line truncated to 10 chars)')).toBe(true)
+    expect(Array.from(body).length).toBeLessThanOrEqual(10)
+    // No unpaired surrogate in the returned line: UTF-8 encoding must not throw.
+    expect(() => new TextEncoder().encode(body)).not.toThrow()
+    // Array.from yields one element per code point; a lone surrogate is its own
+    // single-unit element, while a complete pair stays one element of length 2.
+    expect(Array.from(body).filter(ch => /^[\uD800-\uDFFF]$/.test(ch))).toEqual([])
+  })
+
   it('caps output bytes and reports truncatedByBytes', async () => {
     const big = Array.from({ length: 2000 }, () => 'y'.repeat(100)).join('\n')
     const result = await buildWindow(whole(big), READ_ALL, 'f')

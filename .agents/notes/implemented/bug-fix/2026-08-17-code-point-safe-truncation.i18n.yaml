@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-17-code-point-safe-truncation.md
+2026-08-17-code-point-safe-truncation.md: 7755fdcf4382b52ae50645205e999077f9f5dc69
+2026-08-17-code-point-safe-truncation.zh.md: 7e500cf7bf2e8f14a08e0b8c2fa4bc0905321e06
