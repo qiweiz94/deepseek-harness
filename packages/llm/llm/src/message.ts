@@ -1,6 +1,20 @@
 /** Message value types, identity, and immutable construction helpers. */
 
-import { codePointLength, truncateCodePoints } from '@deepseek-ai/dsh-output-retention'
+/**
+ * Client-safe code-point helpers. @deepseek-ai/dsh-llm is an inline layer for
+ * the client-bundle purity gate, so it must not carry runtime value edges to a
+ * host-side library (output-retention stays host-only). These mirror that
+ * library's semantics so `boundContextSummary` stays dependency-free.
+ */
+function codePointLength(value: string): number {
+  return Array.from(value).length
+}
+
+/** Bound `value` to the first `maxCodePoints` code points; never splits an astral pair. */
+function truncateCodePoints(value: string, maxCodePoints: number): string {
+  return Array.from(value).slice(0, maxCodePoints).join('')
+}
+
 import { MessageId, type CallId } from './brand.ts'
 import { deepFreeze } from './call-config.ts'
 import type { ContentBlock, StreamChunk, ToolResultBlock } from './types.ts'
