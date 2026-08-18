@@ -371,6 +371,10 @@
       config:
         allowParallelInProgress: true
 
+    # Outline a repo-relative TypeScript file before reading it whole.
+    - id: plugin-ast-context
+      name: '@deepseek-ai/dsh-plugin-ast-context'
+
     # Persisted same-session goals reach the model and the slash menu here; the
     # domain, driver, and `/goal` command are above.
     - id: tool-goal
