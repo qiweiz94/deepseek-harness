@@ -185,7 +185,7 @@ exit_plan_mode stays in the model-facing schema while planning is inactive so tr
 
 ### `get_file_outline`
 
-Parse a local TypeScript file and list its top-level declarations — functions, classes, interfaces, type aliases, and enums — with 1-based line spans, plus the declarations and methods declared in each symbol body. Use it to orient yourself before reading a large file. The path must exist and parse without syntax errors.
+Parse a local TypeScript (.ts or .tsx) file and list its top-level declarations — functions, classes, interfaces, type aliases, and enums — with 1-based line spans, plus the declarations and methods declared in each symbol body. Use it to orient yourself before reading a large file. The path must exist and parse without syntax errors.
 
 ```json
 {
@@ -193,7 +193,7 @@ Parse a local TypeScript file and list its top-level declarations — functions,
   "properties": {
     "path": {
       "type": "string",
-      "description": "Repo-relative path to a TypeScript (.ts) file."
+      "description": "Repo-relative path to a TypeScript (.ts or .tsx) file."
     }
   },
   "required": [
