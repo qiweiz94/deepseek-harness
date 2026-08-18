@@ -27,6 +27,8 @@ The only faithful source of truth is the schema the registry actually holds afte
 
 Booting has a cost the AST pass did not: there is no source declaration set to enumerate, so a new tool package could simply be forgotten. A **completeness guard** restores the guarantee — `assertManifestComplete` globs every `tool-*` package under `packages/` and every `packages/plugins/*` directory and hard-errors if any is absent from the generator's boot manifest. A new tool package fails the generator, and therefore `doc-sync`, until it is registered. This is the same structural property the cordis generator gets for free from enumerating source, re-created for a boot-based generator.
 
+`packages/plugins/*` is therefore reserved for model-facing tool plugins: a non-tool plugin placed there still needs a manifest entry, and the generator renders its package section without tools (empty `parameters` list) rather than skipping it.
+
 ### A hand-maintained boot manifest is the irreducible policy
 
 The filesystem discovers the tool-package inventory and the completeness guard rejects omissions. `TOOL_PACKAGES` still owns an explicit boot recipe for each package because required Service Providers and config are policy, not facts that can be inferred safely from layout or injection names.

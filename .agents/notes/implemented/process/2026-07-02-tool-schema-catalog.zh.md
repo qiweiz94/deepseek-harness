@@ -27,6 +27,8 @@ Cordis 目录是纯 TypeScript AST 遍历，因为每个事件/服务名都是�
 
 启动有一项 AST 遍历不存在的代价：没有源码声明集合可供枚举，新工具包可能被遗忘。一个**完整性守卫**恢复了这项保证——`assertManifestComplete` 对 `packages/` 下所有 `tool-*` 包以及所有 `packages/plugins/*` 目录进行 glob，若有任何一个不在生成器的启动 manifest 中则直接报错。新工具包在注册之前会导致生成器失败，进而导致 `doc-sync` 失败。这与 Cordis 生成器通过枚举源码免费获得的结构性属性相同，只是为基于启动的生成器重新实现了一遍。
 
+因此 `packages/plugins/*` 预留给面向模型的工具插件：放在其中的非工具插件仍须登记 manifest 条目，生成器会为其渲染无工具的包章节（空的 `parameters` 列表）而不是跳过。
+
 ### 手动维护的启动 manifest 是无法省去的策略
 
 文件系统负责发现工具包清单，完整性守卫负责拒绝遗漏。`TOOL_PACKAGES` 仍然为每个包持有一份显式的启动配方，因为所需的 Service Provider 和配置属于策略，不是能从目录布局或注入名称安全推断的事实。
