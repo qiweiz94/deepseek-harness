@@ -45,6 +45,8 @@ Repository contributors can select either development carrier:
 
 See `python/sdk/tests/manual_sdk_agent_smoke.py` for a complete source-mode invocation.
 
+The keyless [`file-outline` example](python/sdk/examples/file-outline/README.md) drives the real `get_file_outline` tool through the SDK with a mock model endpoint: the model answers with a `tool_calls` delta, the runtime executes the tool for real, and the test asserts the genuine tree-sitter outline in the `tool/result` event. Run it with `uv run --project python/sdk -- python python/sdk/examples/file-outline/outline.py`.
+
 ## Build distributions
 
 The root `package.json` version is authoritative for both Python distributions. The staging script injects that version into both wheels and pins the SDK to the same `deepseek-harness-runtime-bin` version.

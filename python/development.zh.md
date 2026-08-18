@@ -45,6 +45,8 @@ with DeepSeekHarness() as harness:
 
 完整的源码模式调用见 `python/sdk/tests/manual_sdk_agent_smoke.py`。
 
+无需密钥的 [`file-outline` 示例](python/sdk/examples/file-outline/README.md) 通过 mock 模型端点驱动 SDK 调用真实的 `get_file_outline` 工具：模型以 `tool_calls` delta 应答，运行时真实执行该工具，测试断言 `tool/result` 事件中包含真实的 tree-sitter 大纲。运行方式：`uv run --project python/sdk -- python python/sdk/examples/file-outline/outline.py`。
+
 ## 构建分发包
 
 根目录 `package.json` 的版本是两个 Python 分发包的权威版本。暂存脚本会将该版本注入两个 wheel 包，并将 SDK 固定到同版本的 `deepseek-harness-runtime-bin`。
