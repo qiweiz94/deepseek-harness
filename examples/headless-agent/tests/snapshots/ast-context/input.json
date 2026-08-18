@@ -1,0 +1,8 @@
+{
+  "steps": [
+    {
+      "op": "prompt",
+      "text": "Create a small TypeScript file named sample.ts in the current directory with one function and one class (two methods) using the bash tool, then call get_file_outline on sample.ts and report the declared symbols."
+    }
+  ]
+}
