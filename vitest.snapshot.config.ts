@@ -3,7 +3,7 @@ import tsconfigPaths from 'vite-tsconfig-paths'
 import { defineConfig } from 'vitest/config'
 import { standardDecoratorPlugin, vitestExecArgv } from './vitest.shared.ts'
 
-const DEFAULT_SNAPSHOT_MAX_CONCURRENCY = 5
+const DEFAULT_SNAPSHOT_MAX_CONCURRENCY = 3
 
 function positiveIntFromEnv(name: string, fallback: number): number {
   const raw = process.env[name]

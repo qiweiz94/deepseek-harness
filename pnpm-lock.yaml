@@ -5570,6 +5570,9 @@ importers:
 
   packages/plugins/plugin-ast-context:
     dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
       tree-sitter:
         specifier: ^0.25.1
         version: 0.25.1
