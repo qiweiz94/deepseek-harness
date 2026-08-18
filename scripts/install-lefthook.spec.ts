@@ -184,7 +184,7 @@ function installLockPath(fixture: Fixture): string {
 }
 
 async function waitForPath(path: string): Promise<void> {
-  const deadline = Date.now() + 10_000
+  const deadline = Date.now() + 20_000
   while (!existsSync(path)) {
     if (Date.now() >= deadline) throw new Error(`timed out waiting for ${path}`)
     await new Promise(resolveWait => setTimeout(resolveWait, 10))

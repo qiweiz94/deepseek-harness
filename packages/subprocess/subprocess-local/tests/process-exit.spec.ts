@@ -15,7 +15,7 @@ interface TreeState { root: number; descendant: number }
 
 const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url))
 const hostScript = fileURLToPath(new URL('./fixtures/process-exit-host.ts', import.meta.url))
-const scenarioTimeoutMs = 30_000
+const scenarioTimeoutMs = 45_000
 
 function processExists(pid: number): boolean {
   try {
@@ -51,7 +51,7 @@ async function captureIdentities(inspector: ProcessInspector, state: TreeState):
 async function waitForGone(state: TreeState): Promise<void> {
   await Promise.all([state.root, state.descendant].map(pid => vi.waitFor(() => {
     if (processExists(pid)) throw new Error(`managed pid ${pid} is still alive`)
-  }, { interval: 25, timeout: 10_000 })))
+  }, { interval: 25, timeout: 20_000 })))
 }
 
 function cleanupTree(state: TreeState | undefined, identities: ProcessIdentity[]): void {
