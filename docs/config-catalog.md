@@ -1383,16 +1383,18 @@ Source: [`packages/plan/plan-mode/src/index.ts:70`](../packages/plan/plan-mode/s
 Requires: `tools`
 
 ```ts config-catalog
-/** Configuration for the outline tool. */
+/** Configuration for the outline tools. */
 export interface Config {
   /** Refuse files larger than this many bytes (default 2 MiB). */
   maxBytes?: number
   /** Refuse outlines with more symbols than this (default 2,000). */
   maxSymbols?: number
+  /** Refuse directory outlines with more files than this (default 200). */
+  maxFiles?: number
 }
 ```
 
-Source: [`packages/plugins/plugin-ast-context/src/index.ts:21`](../packages/plugins/plugin-ast-context/src/index.ts)
+Source: [`packages/plugins/plugin-ast-context/src/index.ts:51`](../packages/plugins/plugin-ast-context/src/index.ts)
 
 <a id="deepseek-aidsh-pwsh-local"></a>
 
@@ -3083,6 +3085,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-client-ui-workflow-run` ([`packages/client/ui-workflow-run/src/index.ts`](../packages/client/ui-workflow-run/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-workspace` ([`packages/client/ui-workspace/src/index.ts`](../packages/client/ui-workspace/src/index.ts))
 - `@deepseek-ai/dsh-command-compact` — requires `commands` · `compaction` ([`packages/compaction/command-compact/src/index.ts`](../packages/compaction/command-compact/src/index.ts))
+- `@deepseek-ai/dsh-command-dials` — requires `commands` ([`packages/compaction/command-dials/src/index.ts`](../packages/compaction/command-dials/src/index.ts))
 - `@deepseek-ai/dsh-command-feedback` — requires `commands` ([`packages/feedback/command-feedback/src/index.ts`](../packages/feedback/command-feedback/src/index.ts))
 - `@deepseek-ai/dsh-command-goal` — requires `commands` · `goals` ([`packages/goal/command-goal/src/index.ts`](../packages/goal/command-goal/src/index.ts))
 - `@deepseek-ai/dsh-commands` ([`packages/interaction/commands/src/index.ts`](../packages/interaction/commands/src/index.ts))

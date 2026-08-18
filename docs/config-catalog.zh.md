@@ -1385,16 +1385,18 @@ export interface PlanModeConfig {
 需要：`tools`
 
 ```ts config-catalog
-/** Configuration for the outline tool. */
+/** Configuration for the outline tools. */
 export interface Config {
   /** Refuse files larger than this many bytes (default 2 MiB). */
   maxBytes?: number
   /** Refuse outlines with more symbols than this (default 2,000). */
   maxSymbols?: number
+  /** Refuse directory outlines with more files than this (default 200). */
+  maxFiles?: number
 }
 ```
 
-来源：[`packages/plugins/plugin-ast-context/src/index.ts:21`](../packages/plugins/plugin-ast-context/src/index.ts)
+来源：[`packages/plugins/plugin-ast-context/src/index.ts:52`](../packages/plugins/plugin-ast-context/src/index.ts)
 
 <a id="deepseek-aidsh-pwsh-local"></a>
 
@@ -3085,6 +3087,7 @@ export interface Config {
 - `@deepseek-ai/dsh-client-ui-workflow-run`（[`packages/client/ui-workflow-run/src/index.ts`](../packages/client/ui-workflow-run/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-workspace`（[`packages/client/ui-workspace/src/index.ts`](../packages/client/ui-workspace/src/index.ts)）
 - `@deepseek-ai/dsh-command-compact` — 需要 `commands` · `compact`（[`packages/compaction/command-compact/src/index.ts`](../packages/compaction/command-compact/src/index.ts)）
+- `@deepseek-ai/dsh-command-dials` — 需要 `commands`（[`packages/compaction/command-dials/src/index.ts`](../packages/compaction/command-dials/src/index.ts)）
 - `@deepseek-ai/dsh-command-feedback` — 需要 `commands`（[`packages/feedback/command-feedback/src/index.ts`](../packages/feedback/command-feedback/src/index.ts)）
 - `@deepseek-ai/dsh-command-goal` — 需要 `commands` · `goals`（[`packages/goal/command-goal/src/index.ts`](../packages/goal/command-goal/src/index.ts)）
 - `@deepseek-ai/dsh-commands`（[`packages/interaction/commands/src/index.ts`](../packages/interaction/commands/src/index.ts)）

@@ -1,8 +1,9 @@
 /**
- * Keyless snapshot for the ast-context tool through the headless-agent
- * composition: records one live get_file_outline turn through the OpenCode
- * pi-ai route (ast-context.cordis.yml), then replays the harvested session
- * with llm-replay (ast-context.cordis.snapshot.yml).
+ * Keyless snapshots for the ast-context tools through the headless-agent
+ * composition: records one live get_file_outline turn and one live
+ * get_directory_outline turn through the OpenCode pi-ai route
+ * (ast-context.cordis.yml), then replays the harvested sessions with
+ * llm-replay (ast-context.cordis.snapshot.yml).
  */
 
 import { readFile, readdir, writeFile } from 'node:fs/promises'
@@ -26,9 +27,6 @@ import {
 import { describe, expect, it } from 'vitest'
 
 const snapshotsDir = join(dirname(fileURLToPath(import.meta.url)), 'snapshots')
-const scenarioDir = join(snapshotsDir, 'ast-context')
-const sessionFixture = join(scenarioDir, 'session.jsonl')
-const streamExpected = join(scenarioDir, 'stream-json.expected.jsonl')
 const configPath = fileURLToPath(new URL('../ast-context.cordis.snapshot.yml', import.meta.url))
 const binScript = fileURLToPath(new URL('./fixtures/headless-driver.ts', import.meta.url))
 const tsconfigPath = fileURLToPath(new URL('../../../tsconfig.json', import.meta.url))
@@ -85,7 +83,7 @@ function normalizeHeadlessStream(rawStdout: string, cwd: string): string {
   return normalizeStdout(`${normalizedRecords.map(record => JSON.stringify(record)).join('\n')}\n`, context)
 }
 
-async function scenarioPrompt(): Promise<string> {
+async function scenarioPrompt(scenarioDir: string): Promise<string> {
   const input = JSON.parse(await readFile(join(scenarioDir, 'input.json'), 'utf8')) as {
     steps?: { op?: unknown; text?: unknown }[]
   }
@@ -117,54 +115,65 @@ async function persistedLogs(cwd: string, root: string = join(cwd, '.sessions'))
 
 describe('headless ast-context snapshot', () => {
   it('replays one get_file_outline turn through the one-shot app', async () => {
-    const prompt = await scenarioPrompt()
-    let expectedSession = await readFile(sessionFixture, 'utf8')
-    let runCwd = ''
-    const result = await runLoaderSmoke({
-      label: 'headless ast-context stream-json snapshot',
-      tempDirPrefix: 'headless-snapshot-ast-context-',
-      binScript,
-      libBinScript: binScript,
-      configPath,
-      binArgs: [configPath, prompt],
-      tsconfigPath,
-      env: {
-        DSH_SNAPSHOT: 'replay',
-        DSH_SNAPSHOT_FILE: sessionFixture,
-        NODE_OPTIONS: [process.env.NODE_OPTIONS, '--disable-warning=ExperimentalWarning'].filter(Boolean).join(' '),
-      },
-      prepare: (cwd) => { runCwd = cwd },
-      inspect: async (cwd) => {
-        const logs = await persistedLogs(cwd)
-        expect(logs).toHaveLength(1)
-        const actual = logs[0]
-        if (actual === undefined) throw new Error('ast-context snapshot did not persist its session')
-        const records = parseJsonl(actual.content)
-        const outlineCalls = records.filter(record => record.type === 'tool/call'
-          && JSON.stringify(record).includes('get_file_outline'))
-        expect(outlineCalls.length).toBeGreaterThan(0)
-        const actualContext = contextFromLogs([actual.content])
-        if (refreshing) {
-          const harvested: HarvestedLog = {
-            id: String(actual.header.id),
-            createdAt: Number(actual.header.createdAt),
-            content: actual.content,
-          }
-          const replacements = refreshFixtureReplacements([harvested], [expectedSession])
-          expectedSession = tokenizeSessionFixtureCwd(
-            stabilizeRefreshLog(actual.content, expectedSession, replacements, actualContext),
-          )
-          await writeFile(sessionFixture, expectedSession)
-        }
-        const expectedContext = contextFromLogs([expectedSession])
-        expect(scrubRequestHeaders(normalizeSessionLog(actual.content, actualContext)))
-          .toBe(scrubRequestHeaders(normalizeSessionLog(expectedSession, expectedContext)))
-      },
-    })
+    await replayScenario('ast-context', 'get_file_outline')
+  }, LOADER_SMOKE_TEST_TIMEOUT_MS)
 
-    expect(result.stderr).toBe('')
-    const normalized = normalizeHeadlessStream(result.stdout, runCwd)
-    if (refreshing) await writeFile(streamExpected, normalized)
-    expect(normalized).toBe(await readFile(streamExpected, 'utf8'))
+  it('replays one get_directory_outline turn through the one-shot app', async () => {
+    await replayScenario('ast-context-dir', 'get_directory_outline')
   }, LOADER_SMOKE_TEST_TIMEOUT_MS)
 })
+
+async function replayScenario(scenarioName: string, toolName: string): Promise<void> {
+  const scenarioDir = join(snapshotsDir, scenarioName)
+  const sessionFixture = join(scenarioDir, 'session.jsonl')
+  const streamExpected = join(scenarioDir, 'stream-json.expected.jsonl')
+  const prompt = await scenarioPrompt(scenarioDir)
+  let expectedSession = await readFile(sessionFixture, 'utf8')
+  let runCwd = ''
+  const result = await runLoaderSmoke({
+    label: `headless ${scenarioName} stream-json snapshot`,
+    tempDirPrefix: `headless-snapshot-${scenarioName}-`,
+    binScript,
+    libBinScript: binScript,
+    configPath,
+    binArgs: [configPath, prompt],
+    tsconfigPath,
+    env: {
+      DSH_SNAPSHOT: 'replay',
+      DSH_SNAPSHOT_FILE: sessionFixture,
+      NODE_OPTIONS: [process.env.NODE_OPTIONS, '--disable-warning=ExperimentalWarning'].filter(Boolean).join(' '),
+    },
+    prepare: (cwd) => { runCwd = cwd },
+    inspect: async (cwd) => {
+      const logs = await persistedLogs(cwd)
+      expect(logs).toHaveLength(1)
+      const actual = logs[0]
+      if (actual === undefined) throw new Error(`${scenarioName} snapshot did not persist its session`)
+      const records = parseJsonl(actual.content)
+      const outlineCalls = records.filter(record => record.type === 'tool/call'
+        && JSON.stringify(record).includes(toolName))
+      expect(outlineCalls.length).toBeGreaterThan(0)
+      const actualContext = contextFromLogs([actual.content])
+      if (refreshing) {
+        const harvested: HarvestedLog = {
+          id: String(actual.header.id),
+          createdAt: Number(actual.header.createdAt),
+          content: actual.content,
+        }
+        const replacements = refreshFixtureReplacements([harvested], [expectedSession])
+        expectedSession = tokenizeSessionFixtureCwd(
+          stabilizeRefreshLog(actual.content, expectedSession, replacements, actualContext),
+        )
+        await writeFile(sessionFixture, expectedSession)
+      }
+      const expectedContext = contextFromLogs([expectedSession])
+      expect(scrubRequestHeaders(normalizeSessionLog(actual.content, actualContext)))
+        .toBe(scrubRequestHeaders(normalizeSessionLog(expectedSession, expectedContext)))
+    },
+  })
+
+  expect(result.stderr).toBe('')
+  const normalized = normalizeHeadlessStream(result.stdout, runCwd)
+  if (refreshing) await writeFile(streamExpected, normalized)
+  expect(normalized).toBe(await readFile(streamExpected, 'utf8'))
+}
