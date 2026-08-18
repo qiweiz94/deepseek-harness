@@ -1,0 +1,8 @@
+{
+  "steps": [
+    {
+      "op": "prompt",
+      "text": "Call get_directory_outline on packages/plugins/plugin-ast-context/src and report which files are outlined and how many symbols each contains."
+    }
+  ]
+}
