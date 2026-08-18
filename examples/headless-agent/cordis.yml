@@ -151,6 +151,10 @@
   config:
     allowParallelInProgress: true
 
+# Outline a repo-relative TypeScript file before reading it whole.
+- id: plugin-ast-context
+  name: '@deepseek-ai/dsh-plugin-ast-context'
+
 # Policy loads before the model-facing filesystem tools so writes and edits
 # require an observed file. Relative paths resolve from the process cwd.
 - id: fs-local

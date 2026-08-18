@@ -53,6 +53,10 @@ allowBuilds:
   # The Python runtime deploy includes the reviewed workspace postinstall that
   # restores the executable bit on node-pty's macOS spawn helper.
   '@deepseek-ai/dsh-subprocess-local@file:packages/subprocess/subprocess-local': true
+  # Native bindings for the AST-context outline tool (plugin-ast-context).
+  tree-sitter: true
+  tree-sitter-javascript: true
+  tree-sitter-typescript: true
 
 minimumReleaseAgeExclude:
   # Fresh pi-ai releases carry the model catalog updates that are the whole
