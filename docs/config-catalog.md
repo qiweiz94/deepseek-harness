@@ -1376,6 +1376,24 @@ export interface PlanModeConfig {
 
 Source: [`packages/plan/plan-mode/src/index.ts:70`](../packages/plan/plan-mode/src/index.ts)
 
+<a id="deepseek-aidsh-plugin-ast-context"></a>
+
+## `@deepseek-ai/dsh-plugin-ast-context`
+
+Requires: `tools`
+
+```ts config-catalog
+/** Configuration for the outline tool. */
+export interface Config {
+  /** Refuse files larger than this many bytes (default 2 MiB). */
+  maxBytes?: number
+  /** Refuse outlines with more symbols than this (default 2,000). */
+  maxSymbols?: number
+}
+```
+
+Source: [`packages/plugins/plugin-ast-context/src/index.ts:21`](../packages/plugins/plugin-ast-context/src/index.ts)
+
 <a id="deepseek-aidsh-pwsh-local"></a>
 
 ## `@deepseek-ai/dsh-pwsh-local`
