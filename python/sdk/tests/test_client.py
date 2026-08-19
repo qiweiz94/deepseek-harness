@@ -740,7 +740,7 @@ time.sleep(60)
             client.initialize(provider="deepseek-official", cwd="/workspace", model="dsagent")
         except TimeoutError as exc:
             assert time.monotonic() - start < 2
-            assert "bridge is still starting" in str(exc)
+            assert "initialize timed out waiting for DeepSeek Harness runtime" in str(exc)
         else:
             raise AssertionError("initialize should time out")
 

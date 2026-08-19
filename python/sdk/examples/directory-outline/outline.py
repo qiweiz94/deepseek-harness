@@ -24,6 +24,7 @@ from typing import Any
 
 from deepseek_harness import DeepSeekHarness
 from deepseek_harness.async_api import AsyncDeepSeekHarness
+from deepseek_harness.models import DirectoryOutlineResult
 
 TOOL_NAME = "get_directory_outline"
 OUTLINE_PATH = "packages/plugins/plugin-ast-context/src"
@@ -121,15 +122,10 @@ def run_outline(repo_root: Path, keep_sessions: bool) -> dict[str, Any]:
             print(json.dumps(event, ensure_ascii=False)[:2000])
         assert len(outline_events) == 1
 
-        # The structured outline is attached via presentationMeta when exec.parent
-        # is undefined (top-level calls). In the current runtime, LLM-driven tool
-        # calls have a parent, so meta isn't produced. Fall back to prose assertion.
-        # When the runtime supports meta for LLM calls, use:
-        #   outline = DirectoryOutlineResult.from_event(outline_events[0])
-        #   symbol_names = {s.name for f in outline.files for s in f.symbols}
-        #   assert EXPECTED_SYMBOL in symbol_names
-        payload = json.dumps(outline_events, ensure_ascii=False)
-        assert EXPECTED_SYMBOL in payload, f"outline payload missing {EXPECTED_SYMBOL}: {payload[:2000]}"
+        outline = DirectoryOutlineResult.from_event(outline_events[0])
+        symbol_names = {symbol.name for file in outline.files for symbol in file.symbols}
+        print(f"outlined files: {len(outline.files)}; skipped: {outline.skippedFiles}")
+        assert EXPECTED_SYMBOL in symbol_names, f"outline missing {EXPECTED_SYMBOL}"
     finally:
         server.shutdown()
         server.server_close()
@@ -182,9 +178,9 @@ async def run_outline_async(repo_root: Path, keep_sessions: bool) -> dict[str, A
 
         outline_events = [event for event in result.events if event.get("type") == "tool/result"]
         assert len(outline_events) == 1
-        # See run_outline for why we fall back to prose assertion.
-        payload = json.dumps(outline_events, ensure_ascii=False)
-        assert EXPECTED_SYMBOL in payload, f"outline payload missing {EXPECTED_SYMBOL}: {payload[:2000]}"
+        outline = DirectoryOutlineResult.from_event(outline_events[0])
+        symbol_names = {symbol.name for file in outline.files for symbol in file.symbols}
+        assert EXPECTED_SYMBOL in symbol_names, f"outline missing {EXPECTED_SYMBOL}"
     finally:
         server.shutdown()
         server.server_close()

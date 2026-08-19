@@ -33,12 +33,7 @@ def test_directory_outline_example_drives_real_tool() -> None:
 
     payload = result["events"]
     assert len(payload) == 1
-    # The structured outline is attached via presentationMeta when exec.parent
-    # is undefined (top-level calls). In the current runtime, LLM-driven tool
-    # calls have a parent, so meta isn't produced. Fall back to prose assertion.
-    # When the runtime supports meta for LLM calls, use:
-    #   outline = DirectoryOutlineResult.from_event(payload[0])
-    #   symbol_names = {s.name for f in outline.files for s in f.symbols}
-    #   assert example.EXPECTED_SYMBOL in symbol_names
-    assert example.EXPECTED_SYMBOL in str(payload)
+    outline = DirectoryOutlineResult.from_event(payload[0])
+    symbol_names = {symbol.name for file in outline.files for symbol in file.symbols}
+    assert example.EXPECTED_SYMBOL in symbol_names
     assert result["finish_reason"] == "completed"

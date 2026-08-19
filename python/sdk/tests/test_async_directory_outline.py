@@ -10,6 +10,8 @@ import asyncio
 import importlib.util
 from pathlib import Path
 
+from deepseek_harness.models import DirectoryOutlineResult
+
 _REPO_ROOT = Path(__file__).parents[3]
 _EXAMPLE_PATH = _REPO_ROOT / "python" / "sdk" / "examples" / "directory-outline" / "outline.py"
 
@@ -30,4 +32,10 @@ def test_async_directory_outline_example_drives_real_tool() -> None:
     assert len(requests) == 2
     tools = [tool["function"]["name"] for tool in requests[0]["body"].get("tools", [])]
     assert example.TOOL_NAME in tools
+
+    events = result["events"]
+    assert len(events) == 1
+    outline = DirectoryOutlineResult.from_event(events[0])
+    symbol_names = {symbol.name for file in outline.files for symbol in file.symbols}
+    assert example.EXPECTED_SYMBOL in symbol_names
     assert result["finish_reason"] == "completed"
