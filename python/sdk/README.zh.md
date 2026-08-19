@@ -46,3 +46,30 @@ with DeepSeekHarness(
 也可以通过 `DSH_CORDIS_CONFIG` 为运行时子进程指定配置。注入逻辑位于 `HarnessClient.start()`，因此底层客户端按默认方式启动时也具有该行为：如果启动方式最终解析为内置运行时，且既没有设置 `cordis`，也没有设置非空的 `DSH_CORDIS_CONFIG`（运行时将空值视为未设置，注入检查也是如此），系统就会使用内置默认配置；显式指定 `runtime_bin`、`bridge_bin` 或 `launch_args_override` 时，则会完全禁用该注入。运行时载体（生产用 exe 与仅限开发的 `node` 闭包）及其获取方式见 [sdk-runtime README](https://github.com/deepseek-ai/deepseek-harness/blob/master/python/sdk-runtime/README.md)。
 
 `cwd` 与 `runtime_cwd` 会在启动子进程、注入环境变量和协议握手前解析为绝对路径。公开 API 只暴露由 SDK 直接应用的选项：部署 persona 和持久化配置应在 `cordis.yml` 中定义；`session_root` 则保留为设置 `DSH_SESSION_ROOT` 的高层便捷参数。
+
+## 异步 API
+
+对于基于 asyncio 的应用，SDK 提供 `AsyncDeepSeekHarness` 和 `AsyncSession`，其接口与同步版本完全一致：
+
+```py
+from deepseek_harness import AsyncDeepSeekHarness
+
+async with AsyncDeepSeekHarness() as harness:
+    result = await harness.run("Say hi.")
+```
+
+异步 API 通过 `asyncio.to_thread` 包装同步子进程操作，因此在运行时通信期间事件循环保持响应。
+
+## 类型化模型
+
+SDK 导出用于结构化工具结果的 Pydantic 模型：
+
+- `SymbolEntry` — 单个符号（函数、类、接口、类型别名、枚举），包含 `kind`、`name`、`line`、`endLine` 以及嵌套的 `children`。
+- `FileOutlineResult` — 单个文件的大纲：`path` 和 `symbols`。
+- `DirectoryOutlineResult` — 目录遍历的大纲：`path`、`files` 以及 `skippedFiles` 计数。
+
+这些模型与 `get_file_outline` 和 `get_directory_outline` 工具返回的 JSON 结构一致。插件会把结构化大纲附加到每个 `tool/result` 事件的 `meta.outline` 上（通过其 `presentationMeta` 钩子），因此用 `DirectoryOutlineResult.from_event(event)`（单文件工具则用 `FileOutlineResult.from_event(event)`）解析结果事件即可得到类型化结构，无需解析渲染后的纯文本。
+
+## 示例
+
+[`file-outline` 示例](https://github.com/deepseek-ai/deepseek-harness/blob/master/python/sdk/examples/file-outline/README.md)通过无密钥的 mock 模型驱动真实的 `get_file_outline` 工具，演示如何检查工具调用和结果。[`directory-outline` 示例](https://github.com/deepseek-ai/deepseek-harness/blob/master/python/sdk/examples/directory-outline/README.md)对 `get_directory_outline` 做了同样的演示。
