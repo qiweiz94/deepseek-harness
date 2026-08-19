@@ -49,3 +49,30 @@ The [Python SDK tutorial](https://github.com/deepseek-ai/deepseek-harness/blob/m
 The same behavior can be selected for the runtime subprocess with `DSH_CORDIS_CONFIG`. The injection lives in `HarnessClient.start()`, so the low-level client's default launch gets it too: when the launch resolves to the bundled runtime and neither `cordis` nor a non-empty `DSH_CORDIS_CONFIG` is set (the runtime treats an empty value as absent, and so does the injection check), the bundled default configuration is used; an explicit `runtime_bin`, `bridge_bin`, or `launch_args_override` disables the injection entirely. See the [sdk-runtime README](https://github.com/deepseek-ai/deepseek-harness/blob/master/python/sdk-runtime/README.md) for the runtime carriers (production exe vs dev-only node closure) and how to obtain them.
 
 `cwd` and `runtime_cwd` are resolved to absolute paths before subprocess launch, environment injection, and the wire handshake. The public API exposes only applied options: deployment persona and persistence belong in `cordis.yml`, while `session_root` remains the high-level convenience that sets `DSH_SESSION_ROOT`.
+
+## Async API
+
+For asyncio-based applications, the SDK provides `AsyncDeepSeekHarness` and `AsyncSession` with the same interface as their synchronous counterparts:
+
+```py
+from deepseek_harness import AsyncDeepSeekHarness
+
+async with AsyncDeepSeekHarness() as harness:
+    result = await harness.run("Say hi.")
+```
+
+The async API wraps synchronous subprocess operations in `asyncio.to_thread`, so the event loop remains responsive during runtime communication.
+
+## Typed models
+
+The SDK exports Pydantic models for structured tool results:
+
+- `SymbolEntry` — a single symbol (function, class, interface, type alias, enum) with `kind`, `name`, `line`, `endLine`, and nested `children`.
+- `FileOutlineResult` — outline for a single file: `path` and `symbols`.
+- `DirectoryOutlineResult` — outline for a directory walk: `path`, `files`, and `skippedFiles` count.
+
+These models match the JSON shape returned by the `get_file_outline` and `get_directory_outline` tools. Parse tool results with `FileOutlineResult.model_validate(event_data)`.
+
+## Examples
+
+The [`file-outline` example](https://github.com/deepseek-ai/deepseek-harness/blob/master/python/sdk/examples/file-outline/README.md) drives the real `get_file_outline` tool through a keyless mock model, demonstrating how to inspect tool calls and results. The [`directory-outline` example](https://github.com/deepseek-ai/deepseek-harness/blob/master/python/sdk/examples/directory-outline/README.md) does the same for `get_directory_outline`.
