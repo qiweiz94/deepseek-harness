@@ -1396,6 +1396,36 @@ export interface Config {
 
 Source: [`packages/plugins/plugin-ast-context/src/index.ts:51`](../packages/plugins/plugin-ast-context/src/index.ts)
 
+<a id="deepseek-aidsh-plugin-worktree-sandbox"></a>
+
+## `@deepseek-ai/dsh-plugin-worktree-sandbox`
+
+Requires: `tools` · `subprocess`
+
+```ts config-catalog
+/** Runtime configuration for the sandbox tool. */
+export interface Config {
+  /** Repository root; defaults to the process cwd. */
+  cwd?: string
+  /** Where trial worktrees are created; defaults to `<cwd>/.dsh/worktrees`. */
+  worktreeRoot?: string
+  /** Base ref the trial worktrees detach from; defaults to HEAD. */
+  baseRef?: string
+  /** Output-retention envelope in bytes; defaults to 15_000 (15 KB). */
+  maxOutputBytes?: number
+  /** Per-command timeout in milliseconds; defaults to 30_000. */
+  timeoutMs?: number
+  /** Model-facing tool name; defaults to `sandbox_exec`. */
+  toolName?: string
+  /** Remove the trial worktree after the call; defaults to true. */
+  cleanup?: boolean
+  /** Path to the git binary; defaults to `git`. */
+  gitBinary?: string
+}
+```
+
+Source: [`packages/plugins/plugin-worktree-sandbox/src/index.ts:33`](../packages/plugins/plugin-worktree-sandbox/src/index.ts)
+
 <a id="deepseek-aidsh-pwsh-local"></a>
 
 ## `@deepseek-ai/dsh-pwsh-local`
