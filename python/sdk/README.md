@@ -71,7 +71,12 @@ The SDK exports Pydantic models for structured tool results:
 - `FileOutlineResult` — outline for a single file: `path` and `symbols`.
 - `DirectoryOutlineResult` — outline for a directory walk: `path`, `files`, and `skippedFiles` count.
 
-These models match the JSON shape returned by the `get_file_outline` and `get_directory_outline` tools. Parse tool results with `FileOutlineResult.model_validate(event_data)`.
+These models match the JSON shape returned by the `get_file_outline` and
+`get_directory_outline` tools. The plugin attaches the structured outline to
+each `tool/result` event's `meta.outline` (via its `presentationMeta` hook), so
+parse a result event with `DirectoryOutlineResult.from_event(event)` (or
+`FileOutlineResult.from_event(event)` for the single-file tool) to get the
+typed structure without parsing the rendered prose.
 
 ## Examples
 

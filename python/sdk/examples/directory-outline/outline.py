@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from deepseek_harness import DeepSeekHarness
-from deepseek_harness_runtime import bundled_default_config_path
+from deepseek_harness.async_api import AsyncDeepSeekHarness
 
 TOOL_NAME = "get_directory_outline"
 OUTLINE_PATH = "packages/plugins/plugin-ast-context/src"
@@ -121,6 +121,13 @@ def run_outline(repo_root: Path, keep_sessions: bool) -> dict[str, Any]:
             print(json.dumps(event, ensure_ascii=False)[:2000])
         assert len(outline_events) == 1
 
+        # The structured outline is attached via presentationMeta when exec.parent
+        # is undefined (top-level calls). In the current runtime, LLM-driven tool
+        # calls have a parent, so meta isn't produced. Fall back to prose assertion.
+        # When the runtime supports meta for LLM calls, use:
+        #   outline = DirectoryOutlineResult.from_event(outline_events[0])
+        #   symbol_names = {s.name for f in outline.files for s in f.symbols}
+        #   assert EXPECTED_SYMBOL in symbol_names
         payload = json.dumps(outline_events, ensure_ascii=False)
         assert EXPECTED_SYMBOL in payload, f"outline payload missing {EXPECTED_SYMBOL}: {payload[:2000]}"
     finally:
@@ -132,6 +139,60 @@ def run_outline(repo_root: Path, keep_sessions: bool) -> dict[str, Any]:
     else:
         shutil.rmtree(session_root)
         print("removed temporary session root")
+    return {
+        "requests": OutlineMockHandler.requests,
+        "events": outline_events,
+        "final_response": result.final_response,
+        "finish_reason": result.finish_reason,
+    }
+
+
+async def run_outline_async(repo_root: Path, keep_sessions: bool) -> dict[str, Any]:
+    session_root = Path(tempfile.mkdtemp(prefix="dsh-dir-outline-sessions-"))
+    runtime_entry = repo_root / "packages/examples/jsonrpc-demo/src/bin.ts"
+    server = ThreadingHTTPServer(("127.0.0.1", 0), OutlineMockHandler)
+    thread = threading.Thread(target=server.serve_forever, name="mock-dir-outline-model", daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_address[1]}"
+
+    try:
+        async with AsyncDeepSeekHarness(
+            provider="deepseek-official",
+            model="dir-outline-demo-model",
+            cwd=str(repo_root),
+            runtime_cwd=str(repo_root),
+            session_root=str(session_root),
+            cordis=str(Path(__file__).with_name("cordis.yml")),
+            launch_args_override=("node", "--import", "tsx", str(runtime_entry)),
+            env={
+                "DEEPSEEK_BASE_URL": base_url,
+                "DEEPSEEK_API_KEY": "dir-outline-demo-key",
+            },
+            request_timeout_seconds=30,
+            shutdown_timeout_seconds=2,
+        ) as harness:
+            result = await harness.run(
+                f"Outline the directory {OUTLINE_PATH} and report the symbol names.",
+                session_id="dir-outline-demo-async",
+            )
+        assert len(OutlineMockHandler.requests) == 2
+        first = OutlineMockHandler.requests[0]
+        tool_names = [tool["function"]["name"] for tool in first["body"].get("tools", [])]
+        assert TOOL_NAME in tool_names
+
+        outline_events = [event for event in result.events if event.get("type") == "tool/result"]
+        assert len(outline_events) == 1
+        # See run_outline for why we fall back to prose assertion.
+        payload = json.dumps(outline_events, ensure_ascii=False)
+        assert EXPECTED_SYMBOL in payload, f"outline payload missing {EXPECTED_SYMBOL}: {payload[:2000]}"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    if keep_sessions:
+        print(f"kept_session_root={session_root}")
+    else:
+        shutil.rmtree(session_root)
     return {
         "requests": OutlineMockHandler.requests,
         "events": outline_events,

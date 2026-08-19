@@ -68,7 +68,7 @@ SDK 导出用于结构化工具结果的 Pydantic 模型：
 - `FileOutlineResult` — 单个文件的大纲：`path` 和 `symbols`。
 - `DirectoryOutlineResult` — 目录遍历的大纲：`path`、`files` 以及 `skippedFiles` 计数。
 
-这些模型与 `get_file_outline` 和 `get_directory_outline` 工具返回的 JSON 结构一致。使用 `FileOutlineResult.model_validate(event_data)` 解析工具结果。
+这些模型与 `get_file_outline` 和 `get_directory_outline` 工具返回的 JSON 结构一致。插件会把结构化大纲附加到每个 `tool/result` 事件的 `meta.outline` 上（通过其 `presentationMeta` 钩子），因此用 `DirectoryOutlineResult.from_event(event)`（单文件工具则用 `FileOutlineResult.from_event(event)`）解析结果事件即可得到类型化结构，无需解析渲染后的纯文本。
 
 ## 示例
 

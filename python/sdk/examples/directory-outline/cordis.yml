@@ -1,7 +1,7 @@
-# Bundled default config plus the get_file_outline plugin. Mirrors
+# Bundled default config plus the ast-context plugin. Mirrors
 # python/sdk-runtime/src/deepseek_harness_runtime/runtime/cordis.yml with one
 # addition: the ast-context plugin, which registers the model-facing
-# get_file_outline tool into the agent's tool registry.
+# get_directory_outline (and get_file_outline) tool into the agent's tool registry.
 
 # Stdio JSON-RPC server entry; without it the agent has no SDK client.
 - id: sdk-jsonrpc-server
@@ -49,7 +49,8 @@
   config:
     cwd: !!js process.env.DSH_CWD ?? process.cwd()
 
-# Registers get_file_outline: top-level TypeScript/TSX symbols as model-facing
-# prose, parsed with the tree-sitter grammar matching the file extension.
+# Registers get_file_outline and get_directory_outline: top-level
+# TypeScript/TSX symbols as model-facing prose, parsed with the tree-sitter
+# grammar matching the file extension.
 - id: plugin-ast-context
   name: '@deepseek-ai/dsh-plugin-ast-context'

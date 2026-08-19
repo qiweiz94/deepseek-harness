@@ -8,6 +8,8 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+from deepseek_harness.models import DirectoryOutlineResult
+
 _REPO_ROOT = Path(__file__).parents[3]
 _EXAMPLE_PATH = _REPO_ROOT / "python" / "sdk" / "examples" / "directory-outline" / "outline.py"
 
@@ -31,5 +33,12 @@ def test_directory_outline_example_drives_real_tool() -> None:
 
     payload = result["events"]
     assert len(payload) == 1
+    # The structured outline is attached via presentationMeta when exec.parent
+    # is undefined (top-level calls). In the current runtime, LLM-driven tool
+    # calls have a parent, so meta isn't produced. Fall back to prose assertion.
+    # When the runtime supports meta for LLM calls, use:
+    #   outline = DirectoryOutlineResult.from_event(payload[0])
+    #   symbol_names = {s.name for f in outline.files for s in f.symbols}
+    #   assert example.EXPECTED_SYMBOL in symbol_names
     assert example.EXPECTED_SYMBOL in str(payload)
     assert result["finish_reason"] == "completed"
