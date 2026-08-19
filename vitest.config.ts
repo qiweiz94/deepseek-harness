@@ -133,7 +133,7 @@ export default defineConfig({
           // MaybeLocal in cjs_lexer::Parse) from worker threads on macOS,
           // Linux, and Windows. Forked workers avoid that shared thread path.
           pool: 'forks',
-          poolOptions: { forks: { maxForks: 6, minForks: 2 } },
+          maxWorkers: 6,
           setupFiles: ['./scripts/test-invariants.ts'],
           include: testIncludes,
           exclude: [
@@ -149,7 +149,7 @@ export default defineConfig({
           name: 'process-bound',
           execArgv: vitestExecArgv,
           pool: 'forks',
-          poolOptions: { forks: { maxForks: 6, minForks: 2 } },
+          maxWorkers: 6,
           setupFiles: ['./scripts/test-invariants.ts'],
           include: processBoundTests,
           exclude: [
