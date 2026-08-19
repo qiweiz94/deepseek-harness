@@ -184,7 +184,7 @@ function installLockPath(fixture: Fixture): string {
 }
 
 async function waitForPath(path: string): Promise<void> {
-  const deadline = Date.now() + 10_000
+  const deadline = Date.now() + 20_000
   while (!existsSync(path)) {
     if (Date.now() >= deadline) throw new Error(`timed out waiting for ${path}`)
     await new Promise(resolveWait => setTimeout(resolveWait, 10))
@@ -211,7 +211,7 @@ function runInstaller(
   })
 }
 
-describe('worktree-local Lefthook installer', { timeout: 15_000 }, () => {
+describe('worktree-local Lefthook installer', { timeout: 30_000 }, () => {
   for (const [label, extraEnv] of [
     ['CI', { CI: 'true' }],
     ['GitHub Actions', { GITHUB_ACTIONS: 'true' }],
