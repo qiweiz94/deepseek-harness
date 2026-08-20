@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { decodeStorageRecord, type SessionEvent } from '@deepseek-ai/dsh-session'
-import { canonicalSessionFixture } from './session-fixture-layout.ts'
+import { canonicalSessionFixture } from '@deepseek-ai/dsh-acp-snapshot'
 
 const HEADER = '  {"type":"session","version":0,"id":"fixture","createdAt":1,"delegationDepth":0}  '
 
@@ -37,6 +37,14 @@ describe('canonicalSessionFixture', () => {
 
   it('ignores JSONL whose first record is not a session header', () => {
     expect(canonicalSessionFixture('{"type":"session_event"}\n{"value":1}\n')).toBeUndefined()
+  })
+
+  it('ignores an empty document', () => {
+    expect(canonicalSessionFixture('')).toBeUndefined()
+  })
+
+  it('ignores a document whose first line is not JSON', () => {
+    expect(canonicalSessionFixture('not json at all\n{"value":1}\n')).toBeUndefined()
   })
 
   it('is idempotent for an already packed fixture', () => {

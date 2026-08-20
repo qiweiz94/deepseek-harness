@@ -12,6 +12,6 @@ it('keeps every session-format JSONL fixture in canonical packed layout', () => 
     .map(fixture => fixture.path)
   expect(
     nonCanonical,
-    'Run `pnpm run migrate:packed-session-fixtures` and commit the mechanical fixture rewrite.',
+    'Rewrite the fixture in the canonical packed-row layout: record/refresh write it directly, and canonicalSessionFixture (@deepseek-ai/dsh-acp-snapshot) converts an existing log.',
   ).toEqual([])
 })

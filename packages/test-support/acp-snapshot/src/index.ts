@@ -43,6 +43,7 @@ export {
   type NormalizeContext,
   type NormalizeOptions,
 } from './normalize.ts'
+export { canonicalSessionFixture } from './session-fixture-canonical.ts'
 export {
   defineAcpSnapshotSuite,
   refreshFixtureReplacements,
