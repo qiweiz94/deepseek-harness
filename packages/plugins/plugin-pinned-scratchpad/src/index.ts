@@ -154,7 +154,6 @@ export function apply(ctx: Context, config: Config = {}): void {
     },
     // The registry's execute contract is asynchronous; every write here is a
     // synchronous in-memory mutation, so nothing is awaited.
-    // eslint-disable-next-line @typescript-eslint/require-await
     async execute(args) {
       if (args.value !== null) {
         const bytes = Buffer.byteLength(args.value, 'utf8')
