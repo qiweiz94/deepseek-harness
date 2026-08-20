@@ -2781,7 +2781,7 @@ export interface Config {
   provider: string
   /**
    * Model-facing tool name (default `subagent`). Each loaded instance must use
-   * a distinct name.
+   * a distinct name; a duplicate fails that instance at plugin load.
    */
   toolName?: string
   /**
@@ -2831,7 +2831,7 @@ export interface Config {
 
 依赖：[`AgentOptions`](subsystems/core.md)
 
-来源：[`packages/subagent/tool-subagent/src/index.ts:28`](../packages/subagent/tool-subagent/src/index.ts)
+来源：[`packages/subagent/tool-subagent/src/index.ts:38`](../packages/subagent/tool-subagent/src/index.ts)
 
 <a id="deepseek-aidsh-tool-subagent-report"></a>
 

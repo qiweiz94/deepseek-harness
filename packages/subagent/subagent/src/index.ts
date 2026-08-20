@@ -66,6 +66,7 @@ import type { ContinuableSetupContribution } from './activation-setup-registry.t
 import { listChildren as listSubagentChildren, listDescendants as listSubagentDescendants } from './list-children.ts'
 import type { SubagentDescendantListEntry, SubagentListEntry } from './list-children.ts'
 import { snapshotSubagentDescriptor } from './descriptor.ts'
+import { redeliverSubagentReports } from './report-mailbox.ts'
 import { subagentIdentityProjectionDefinition, subagentTimingProjectionDefinition } from './projection.ts'
 
 export * from './out-of-process.ts'
@@ -195,6 +196,10 @@ export class SubagentRuntime extends Service {
         /* v8 ignore else -- one injected binding owns the slot until its fiber disposes. */
         if (this.continuations === manager) this.continuations = undefined
       }, 'subagents.continuationBinding()')
+      childCtx.on('agent/session-start', ({ agent, source }) => {
+        if (source !== 'resume') return
+        redeliverSubagentReports(agent, (text) => { childCtx.logger.warn(text) })
+      })
     })
     ctx.inject(['sessionProjections'], (projectionCtx) => {
       projectionCtx.sessionProjections.register(subagentTimingProjectionDefinition)
@@ -267,7 +272,8 @@ export class SubagentRuntime extends Service {
    * @param options - parent scheduling and pre-acceptance cancellation.
    * @returns the stable identity of the parent-accepted message.
    * @throws when continuation services are unavailable, sender authorization
-   *   fails, or the direct parent is not live.
+   *   fails, the content does not survive the durable-log JSON boundary, or
+   *   the direct parent is not live.
    */
   async reportFrom(
     child: Agent,

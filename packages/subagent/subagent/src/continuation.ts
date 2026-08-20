@@ -54,6 +54,7 @@ import type { ContinuableCreateRequest, ContinuableCreateSpec, SubagentResult, S
 import type { ActivationObserver, ActivationTerminal } from './lifecycle.ts'
 import { SubagentError } from './error.ts'
 import type SubagentActivationSetupRegistry from './activation-setup-registry.ts'
+import { appendReportMailbox } from './report-mailbox.ts'
 
 /** Attribution for a model coordinator's follow-up to one of its children. */
 export interface CoordinatorMessageSource {
@@ -606,7 +607,8 @@ export class SubagentContinuationManager {
    * @param options - scheduling policy and pre-acceptance cancellation.
    * @returns the stable identity of the message accepted by the parent.
    * @throws {SubagentError} when the sender is unauthorized, the parent is not
-   *   live, or continuation admission is closing.
+   *   live, continuation admission is closing, or the content does not
+   *   survive the lossless JSON durable-log boundary (`NOT_SERIALIZABLE`).
    */
   // oxlint-disable-next-line typescript/require-await -- keep rejection semantics without yielding during admission
   async reportFrom(
@@ -703,12 +705,29 @@ export class SubagentContinuationManager {
     }
   }
 
-  /** Send one report while translating only the parent's own rejection. */
+  /**
+   * Durably record the report before sending it, then send it while
+   * translating only the parent's own rejection. The mailbox append precedes
+   * the send so a send that throws after this durable commit still leaves a
+   * record a later parent resume redelivers.
+   * @throws {SubagentError} `NOT_SERIALIZABLE` when the message does not
+   *   survive the lossless JSON durable-log boundary — nothing is appended or
+   *   sent. `PARENT_UNAVAILABLE` when the parent rejects the send.
+   */
   private sendReport(
     parent: Agent,
     message: ReturnType<typeof createUserMessage>,
     delivery: SubagentReportDelivery,
   ): void {
+    try {
+      appendReportMailbox(parent.session, message, delivery)
+    } catch (error: unknown) {
+      throw new SubagentError(
+        'report content is not durably recordable and was not delivered',
+        'NOT_SERIALIZABLE',
+        { cause: error },
+      )
+    }
     try {
       if (delivery === 'wakeup') parent.followup(message)
       else parent.inject(message)

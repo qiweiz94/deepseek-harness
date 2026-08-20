@@ -22,6 +22,8 @@ import SubagentRuntime, {
 } from '../src/index.ts'
 import type { SubagentRunEndInfo, SubagentRunInfo } from '../src/index.ts'
 import * as SubagentInvariant from '../src/invariant.ts'
+import { SUBAGENT_REPORT_MAILBOX_VERSION } from '../src/report-mailbox.ts'
+import type { SubagentReportMailboxData } from '../src/report-mailbox.ts'
 
 type Script = ConstructorParameters<typeof MockAdapter>[0]
 
@@ -2064,6 +2066,92 @@ describe('continuable settlement delivery', () => {
       .rejects.toMatchObject({ code: 'DRAINING' })
     await Promise.all(drains)
     expect(settlementNotices(parent)).toEqual([])
+  })
+})
+
+describe('durable subagent report mailbox', () => {
+  it('rejects a report whose content cannot survive the durable JSON log boundary, delivering nothing', async () => {
+    const { ctx, parent } = await setup([textResponse('child turn')])
+    const started = await ctx.subagents.startContinuable(startSpec(parent))
+    const child = await vi.waitFor(() => {
+      const live = ctx.agents.get(started.childId)
+      expect(live).toBeDefined()
+      return live!
+    })
+
+    await expect(ctx.subagents.reportFrom(child, [{ type: 'text', text: Number.NaN as unknown as string }], {
+      delivery: 'quiet',
+      signal: testSignal,
+    })).rejects.toMatchObject({ code: 'NOT_SERIALIZABLE' })
+    expect(parent.session.events.some(event => event.type === 'subagent/report')).toBe(false)
+  })
+
+  it('redelivers an accepted report the parent never claimed, across a crash and resume', async () => {
+    const { ctx } = await setup([textResponse('child turn')])
+    const parentId = SessionId('mailbox-crash-parent')
+    const host = await ctx.agents.create({
+      sessionId: parentId,
+      agentOptions: { provider: 'mock', model: 'mock' },
+    })
+    // Parked so the accepted report's `quiet` inject never wakes a turn that
+    // would claim it — the crash below must find it still unclaimed.
+    parkParent(ctx, host.agent)
+    const started = await ctx.subagents.startContinuable(startSpec(host.agent))
+    const child = await vi.waitFor(() => {
+      const live = ctx.agents.get(started.childId)
+      expect(live).toBeDefined()
+      return live!
+    })
+
+    await ctx.subagents.reportFrom(child, message('the durable report'), {
+      delivery: 'quiet',
+      signal: testSignal,
+    })
+    // The mailbox record is already durable; the pending inject is not.
+    expect(hasUserText(host.agent.session.events, 'the durable report')).toBe(false)
+
+    // Crash: disposal is a `keepInbox: false` cancel, so the unclaimed inject
+    // is durably lost. Only the mailbox event survives in the log.
+    await host.dispose()
+
+    const resumed = await ctx.agents.resume({
+      resumeSessionId: parentId,
+      agentOptions: { provider: 'mock', model: 'mock' },
+    })
+    const redelivered = resumed.agent.inbox.nextStep.filter(pending =>
+      pending.content.some(block => block.type === 'text' && block.text === 'the durable report'))
+    // Exactly once: neither missing (the redelivery gap this mailbox closes)
+    // nor doubled (ordinary `agent/inbox/spliced` replay racing the mailbox).
+    expect(redelivered).toHaveLength(1)
+    expect(resumed.agent.inbox.nextTurn).toHaveLength(0)
+    await resumed.dispose()
+  })
+
+  it('warns and resumes cleanly over a mailbox record no build of this shape could have written', async () => {
+    const { ctx } = await setup([])
+    const warnings: string[] = []
+    ctx.logger.warn = (text: string) => { warnings.push(text) }
+    const parentId = SessionId('mailbox-corrupt-parent')
+    const host = await ctx.agents.create({
+      sessionId: parentId,
+      agentOptions: { provider: 'mock', model: 'mock' },
+    })
+    // An unsupported delivery policy: a shape a future/different harness
+    // could have written, which this build must reject without failing resume.
+    host.agent.session.append('subagent/report', {
+      version: SUBAGENT_REPORT_MAILBOX_VERSION,
+      delivery: 'urgent',
+      message: createUserMessage({ content: message('unreadable'), source: { kind: 'user' } }),
+    } as unknown as SubagentReportMailboxData)
+    await host.dispose()
+
+    const resumed = await ctx.agents.resume({
+      resumeSessionId: parentId,
+      agentOptions: { provider: 'mock', model: 'mock' },
+    })
+    expect(resumed.agent.inbox.hasPending).toBe(false)
+    expect(warnings.some(text => text.includes('corrupt'))).toBe(true)
+    await resumed.dispose()
   })
 })
 

@@ -59,15 +59,21 @@ export class AssistantOutputFold {
 }
 
 /**
- * Apply the selection rule to one complete child-owned event suffix.
+ * Apply the selection rule to one complete child-owned event suffix. Runs once
+ * per run or epoch settlement: the backward scan exits at the last non-empty
+ * assistant message, and only a suffix with none folds its text deltas.
  * @param events - the child-owned events (after any seed or epoch boundary).
  * @returns the selected output, or `undefined` when the child produced none.
  */
 export function finalAssistantOutput(events: readonly SessionEvent[]): ContentBlock[] | undefined {
-  // TODO: this folds the complete suffix once per run/epoch settlement. If a
-  // long continuable epoch ever profiles hot here, scan backward with early
-  // exit for the last non-empty message and fold text deltas only on the
-  // no-message fallback.
+  for (let i = events.length - 1; i >= 0; i--) {
+    // oxlint-disable-next-line typescript/no-non-null-assertion -- the index is bounded by the array length
+    const event = events[i]!
+    if (event.type === 'assistant/message') {
+      const content = event.data.message.content
+      if (content.length > 0) return content
+    }
+  }
   const fold = new AssistantOutputFold()
   for (const event of events) fold.push(event)
   return fold.collect()
