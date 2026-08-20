@@ -180,6 +180,18 @@ describe('Vitest failure parsing', () => {
     ])
   })
 
+  it('drops the named-project prefix a projects config puts in front of the path', () => {
+    // Verbatim from this repository's own reporter, whose config declares projects.
+    expect(parseVitestDiagnostics(
+      ' FAIL  |thread-safe| packages/plugins/plugin-diagnostic-sifter/tests/sifter.spec.ts > run_diagnostic_check > registers',
+    )).toEqual([{
+      file: 'packages/plugins/plugin-diagnostic-sifter/tests/sifter.spec.ts',
+      line: 0,
+      code: 'test-failure',
+      message: 'packages/plugins/plugin-diagnostic-sifter/tests/sifter.spec.ts > run_diagnostic_check > registers',
+    }])
+  })
+
   it('ends a frameless failure block at the next failure header', () => {
     expect(parseVitestDiagnostics([
       ' FAIL  tests/first.spec.ts > one',
@@ -409,8 +421,9 @@ describe('call presentation', () => {
       kind: 'execute',
       rawInput: '',
     })
-    // Each call owns its child process tree and writes no repository state.
-    expect(definition?.isConcurrencySafe?.({ command: 'test' })).toBe(true)
+    // Sibling checks share `cwd` and its incremental state, so the tool keeps
+    // the registry's exclusive default rather than declaring itself parallel.
+    expect(definition?.isConcurrencySafe).toBeUndefined()
     await ctx.fiber.dispose()
   })
 

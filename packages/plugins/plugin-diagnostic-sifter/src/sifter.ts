@@ -55,6 +55,13 @@ const TS_GLOBAL = /^(?:error|warning)\s+(?<code>TS\d+):\s+(?<message>.+)$/
 /** ` FAIL  path/to/file.spec.ts > suite > case` — one failed Vitest case. */
 const VITEST_FAIL = /^\s*FAIL\s+(?<target>\S.*)$/
 
+/**
+ * A named-project prefix (` FAIL  |thread-safe| path/to/file.spec.ts > case`).
+ * Vitest emits it for every failure once the config declares `projects`, so it
+ * is part of the header, not part of the path.
+ */
+const VITEST_PROJECT_PREFIX = /^\|[^|]*\|\s*/
+
 /** `AssertionError: expected 1 to be 2` — the error class opening a failure block. */
 const VITEST_ERROR = /^\s*(?<code>[A-Z][A-Za-z0-9_$]*(?:Error|Exception))(?::\s*(?<message>.*))?$/
 
@@ -138,7 +145,7 @@ export function parseVitestDiagnostics(raw: string): Diagnostic[] {
   for (const [index, line] of lines.entries()) {
     const header = VITEST_FAIL.exec(line)?.groups as FailGroups | undefined
     if (header === undefined) continue
-    const target = header.target
+    const target = header.target.replace(VITEST_PROJECT_PREFIX, '')
     let code = 'test-failure'
     let message = target.trim()
     /* v8 ignore next -- String.split always yields at least one segment; the fallback answers the indexed-access type. */

@@ -154,9 +154,10 @@ export function apply(ctx: Context, config: Config = {}): void {
       render: (args, value) => [{ type: 'text', text: renderResult(args.command, value) }],
       presentationMeta: (_args, value) => ({ diagnostics: value }),
     },
-    // Each call spawns its own child process tree and mutates no repository
-    // state, so sibling checks cannot corrupt one another.
-    isConcurrencySafe: () => true,
+    // No `isConcurrencySafe`: the registry's exclusive default is correct here.
+    // Sibling checks share `cwd`, so two calls contend on the same incremental
+    // state — `tsc -b` build info, the runner's cache — which the plugin
+    // neither owns nor isolates.
     async execute(args, exec) {
       const cwd = config.cwd ?? process.cwd()
       const controller = new AbortController()
