@@ -16,6 +16,6 @@ None beyond the image block owned by the requesting adapter.
 
 ## Known Limitations and Deferred Work
 
-- Objects are retained indefinitely; reference-aware garbage collection is deferred.
+- Objects are retained indefinitely; this backend registers an honest `retains`/`retained` [`dsh-session-retention`](../../session/session-retention) participant rather than deleting on a session's behalf, because objects are content-addressed and may be shared by resumed or forked sessions. Reference-aware garbage collection across sessions is deferred.
 - The local backend assumes the host and provider adapter share this filesystem service.
 - Animated GIF metadata is validated from the logical screen; frame-level decoding policy is provider-owned.
