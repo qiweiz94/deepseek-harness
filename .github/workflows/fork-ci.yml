@@ -78,6 +78,10 @@ jobs:
       # suite and the coverage-exempt heavy suite; 4 is the hosted core count.
       DSH_COVERAGE_MAX_WORKERS: '4'
       DSH_GATE_CONCURRENCY: '2'
+      # Hosted 4-core runners overrun locally-tuned test timeouts by up to
+      # ~1.3x under gate contention; 4 gives proportional headroom without
+      # loosening any local default (vitest.shared.ts scaledTimeout).
+      DSH_TEST_TIMEOUT_FACTOR: '4'
     steps:
       - uses: actions/checkout@v6
         with:
@@ -115,6 +119,15 @@ jobs:
       DSH_OXLINT_THREADS: '4'
       DSH_PUBLINT_CONCURRENCY: '4'
       DSH_SNAPSHOT_MAX_CONCURRENCY: '4'
+      # Scales vitest test timeouts and the acp-snapshot harness persistence
+      # waits. Higher than the coverage lane's factor: this lane's
+      # subagent-continuable-inheritance scenario spawns multiple real agent
+      # subprocesses that compete for the same 4 cores as the other
+      # concurrently-running snapshot scenarios (DSH_SNAPSHOT_MAX_CONCURRENCY
+      # above), so it needs more headroom than the ~1.3x observed elsewhere —
+      # 4x measured insufficient in a live run (still timed out at 40s), so 8x
+      # is a first widening, not a measured sufficient bound.
+      DSH_TEST_TIMEOUT_FACTOR: '8'
     steps:
       - uses: actions/checkout@v6
         with:
