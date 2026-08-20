@@ -18,6 +18,7 @@
 | 工具包 | 模型可见名称 | 依赖 | 写入／影响 | 随产品发布的别名 | 部署说明 |
 | --- | --- | --- | --- | --- | --- |
 | `@deepseek-ai/dsh-plugin-ast-context` | `get_directory_outline`, `get_file_outline` | `ctx.tools` | `tool/call`、`tool/result` | - | get_file_outline 读取仓库相对路径的源文件并返回其顶层 TypeScript 符号；解析失败或文件缺失以错误结果呈现，而不是部分大纲。 |
+| `@deepseek-ai/dsh-plugin-doc-sync-automator` | `sync_bilingual_pair` | `ctx.tools` | `tool/call`、`tool/result`、磁盘上配对的 `.zh.md` 镜像文档及其 `.i18n.yaml` 一致性记录 | - | sync_bilingual_pair 把英文文档中变更的一个小节拼接进其 `.zh.md` 镜像文档，外层包裹 NEEDS-TRANSLATION 标记，并重新记录该配对的 `.i18n.yaml` 一致性哈希；它从不进行机器翻译，只保持配对在结构上有效并标记出翻译欠账。 |
 | `@deepseek-ai/dsh-plugin-subagent-router` | `subagent` | `ctx.tools`、`ctx.subagents` | `tool/call`、`tool/result`、`child session events through the chosen provider` | - | 单个委托入口把任务路由到由配置所拥有的策略选出的具备能力的子代理 provider；模型只描述任务（description + prompt），从不指名 provider 或传输方式。 |
 | `@deepseek-ai/dsh-plugin-worktree-sandbox` | `sandbox_exec` | `ctx.tools`、`ctx.subprocess` | `tool/call`、`tool/result`、`.dsh/worktrees` 下的一次性 git worktree | - | sandbox_exec 在隔离的 detached git worktree 中运行命令，并返回有界的结构化 diff 与退出状态；调用后移除该 worktree。 |
 | `@deepseek-ai/dsh-tool-ask-user` | `ask_user_question` | `ctx.tools`、`ctx.userQuestions` | `tool/call`、`tool/result after a UI/provider answers the question` | - | ask_user_question 会暂停工具调用，直到当前 UI 提供方返回人类答案。 |
@@ -230,6 +231,48 @@ Source: [`packages/plugins/plugin-ast-context/src/index.ts`](../packages/plugins
 来源：[`packages/plugins/plugin-ast-context/src/index.ts`](../packages/plugins/plugin-ast-context/src/index.ts)
 
 get_file_outline 读取仓库相对路径的源文件并返回其顶层 TypeScript 符号；解析失败或文件缺失以错误结果呈现，而不是部分大纲。
+
+<a id="deepseek-aidsh-plugin-doc-sync-automator"></a>
+
+## `@deepseek-ai/dsh-plugin-doc-sync-automator`
+
+### `sync_bilingual_pair`
+
+把英文 Markdown 文档中变更的一个小节，拼接进其配对的简体中文镜像文档（`<doc>.zh.md`），保持双语配对在结构上有效。本工具不进行翻译：拼接进去的内容就是原样的英文文本，外层包裹 NEEDS-TRANSLATION 标记，同时配对的 `.i18n.yaml` 一致性记录会被重写，使 `pnpm run verify-translation-pairing` 将其视为已确认一致，而不是失步配对。请在编辑完一份英文文档（docs/、.agents/notes/ 或某个包的 README）后立即调用它，避免镜像文档悄悄失步；之后由人工译者替换被标记的英文文本。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "docPath": {
+      "type": "string",
+      "description": "Repository-relative path to the English Markdown source, e.g. \"docs/architecture.md\" or \"packages/plugins/plugin-foo/README.md\". Must end in .md and not .zh.md."
+    },
+    "updatedSection": {
+      "type": "object",
+      "description": "Identifies which section of docPath changed.",
+      "additionalProperties": false,
+      "properties": {
+        "heading": {
+          "type": "string",
+          "description": "Exact heading text (without leading #s) of the changed section in docPath, e.g. \"Configuration\"."
+        }
+      },
+      "required": [
+        "heading"
+      ]
+    }
+  },
+  "required": [
+    "docPath",
+    "updatedSection"
+  ]
+}
+```
+
+来源：[`packages/plugins/plugin-doc-sync-automator/src/index.ts`](../packages/plugins/plugin-doc-sync-automator/src/index.ts)
+
+sync_bilingual_pair 把英文文档中变更的一个小节拼接进其 `.zh.md` 镜像文档，外层包裹 NEEDS-TRANSLATION 标记，并重新记录该配对的 `.i18n.yaml` 一致性哈希；它从不进行机器翻译，只保持配对在结构上有效并标记出翻译欠账。
 
 <a id="deepseek-aidsh-plugin-subagent-router"></a>
 

@@ -54,6 +54,7 @@ import * as ToolGoal from '@deepseek-ai/dsh-tool-goal'
 import * as ToolSchedule from '@deepseek-ai/dsh-schedule'
 import Lsp from '@deepseek-ai/dsh-lsp'
 import * as ToolAstContext from '@deepseek-ai/dsh-plugin-ast-context'
+import * as ToolDocSyncAutomator from '@deepseek-ai/dsh-plugin-doc-sync-automator'
 import * as ToolSubagentRouter from '@deepseek-ai/dsh-plugin-subagent-router'
 import * as ToolWorktreeSandbox from '@deepseek-ai/dsh-plugin-worktree-sandbox'
 import * as ToolLsp from '@deepseek-ai/dsh-tool-lsp'
@@ -237,6 +238,18 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'get_file_outline reads a repo-relative source file and returns its top-level TypeScript symbols; a parse failure or missing file surfaces as an error result rather than a partial outline.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-plugin-doc-sync-automator',
+    dir: 'plugin-doc-sync-automator',
+    source: 'packages/plugins/plugin-doc-sync-automator/src/index.ts',
+    requires: ['ctx.tools'],
+    writes: ['tool/call', 'tool/result', 'the paired .zh.md mirror and its .i18n.yaml consistency record on disk'],
+    async mount(ctx) {
+      await ctx.plugin(ToolDocSyncAutomator, { root })
+    },
+    note:
+      'sync_bilingual_pair splices a changed section of an English doc into its .zh.md mirror behind a NEEDS-TRANSLATION marker and re-records the pair\'s .i18n.yaml consistency hashes; it never machine-translates, only keeps the pair structurally valid and flags the debt.',
   },
   {
     pkg: '@deepseek-ai/dsh-plugin-subagent-router',
