@@ -54,6 +54,7 @@ import * as ToolGoal from '@deepseek-ai/dsh-tool-goal'
 import * as ToolSchedule from '@deepseek-ai/dsh-schedule'
 import Lsp from '@deepseek-ai/dsh-lsp'
 import * as ToolAstContext from '@deepseek-ai/dsh-plugin-ast-context'
+import * as ToolWorktreeSandbox from '@deepseek-ai/dsh-plugin-worktree-sandbox'
 import * as ToolLsp from '@deepseek-ai/dsh-tool-lsp'
 import * as ToolSkill from '@deepseek-ai/dsh-tool-skill'
 import * as ToolSessionQuery from '@deepseek-ai/dsh-tool-session-query'
@@ -235,6 +236,19 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'get_file_outline reads a repo-relative source file and returns its top-level TypeScript symbols; a parse failure or missing file surfaces as an error result rather than a partial outline.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-plugin-worktree-sandbox',
+    dir: 'plugin-worktree-sandbox',
+    source: 'packages/plugins/plugin-worktree-sandbox/src/index.ts',
+    requires: ['ctx.tools', 'ctx.subprocess'],
+    writes: ['tool/call', 'tool/result', 'a disposable git worktree under .dsh/worktrees'],
+    async mount(ctx) {
+      await ctx.plugin(LocalSubprocessRuntime)
+      await ctx.plugin(ToolWorktreeSandbox, { cwd: root })
+    },
+    note:
+      'sandbox_exec runs a command in an isolated detached git worktree and returns the bounded structured diff and exit status; the worktree is removed after the call.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-bash',
