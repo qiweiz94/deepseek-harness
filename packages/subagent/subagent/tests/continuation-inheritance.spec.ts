@@ -11,10 +11,10 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { Agent, AgentOptions } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import SandboxPolicyService, { effectiveSandboxMode, setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
@@ -35,7 +35,7 @@ afterEach(async () => {
 })
 
 /** Boot the continuable stack plus both policy services the manager consumes opportunistically. */
-async function setup(script: Script) {
+async function setup(script: Script, parentOptions: Partial<AgentOptions> = {}) {
   const ctx = new Context()
   contexts.push(ctx)
   await mountAgentLoopTestDependencies(ctx)
@@ -49,7 +49,7 @@ async function setup(script: Script) {
   await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
   await ctx.plugin(SubagentFork, { providerName: 'fork' })
   ctx.llm.registerAdapter(['mock'], new MockAdapter(script))
-  const parent = ctx.agentLoop.create(SessionId('parent'), { provider: 'mock', model: 'mock' })
+  const parent = ctx.agentLoop.create(SessionId('parent'), { provider: 'mock', model: 'mock', ...parentOptions })
   return { ctx, parent }
 }
 
@@ -227,5 +227,55 @@ describe('continuable policy inheritance', () => {
       { data: { mode: 'read-only', source: 'delegation' } },
     ])
     expect(effectiveSandboxMode(loaded.events)).toBe('read-only')
+  })
+})
+
+describe('continuable AgentOptions inheritance', () => {
+  it('inherits the parent reasoningEffort route when the request does not override it', { timeout: 20_000 }, async () => {
+    const { ctx, parent } = await setup([textResponse('child done')], { reasoningEffort: ReasoningEffortId('high') })
+
+    let child: Agent | undefined
+    ctx.on('agent/created', ({ agent }) => {
+      if (agent !== parent) child = agent
+    })
+    const started = await ctx.subagents.startContinuable(startSpec(parent))
+    if (child === undefined) throw new Error('expected the continuable child to be created')
+    expect(child.options.reasoningEffort).toBe('high')
+    await waitNoActivation(ctx, started.childId)
+  })
+
+  it('lets an explicit per-child request override the inherited parent reasoningEffort', { timeout: 20_000 }, async () => {
+    const { ctx, parent } = await setup([textResponse('child done')], { reasoningEffort: ReasoningEffortId('high') })
+
+    let child: Agent | undefined
+    ctx.on('agent/created', ({ agent }) => {
+      if (agent !== parent) child = agent
+    })
+    const started = await ctx.subagents.startContinuable({
+      provider: 'spawn',
+      label: 'child task',
+      request: {
+        prompt: [{ type: 'text', text: 'child task' }],
+        parent,
+        agentOptions: { reasoningEffort: ReasoningEffortId('low') },
+      },
+      signal: new AbortController().signal,
+    })
+    if (child === undefined) throw new Error('expected the continuable child to be created')
+    expect(child.options.reasoningEffort).toBe('low')
+    await waitNoActivation(ctx, started.childId)
+  })
+
+  it('leaves the child reasoningEffort unset when neither the parent nor the request declares one', { timeout: 20_000 }, async () => {
+    const { ctx, parent } = await setup([textResponse('child done')])
+
+    let child: Agent | undefined
+    ctx.on('agent/created', ({ agent }) => {
+      if (agent !== parent) child = agent
+    })
+    const started = await ctx.subagents.startContinuable(startSpec(parent))
+    if (child === undefined) throw new Error('expected the continuable child to be created')
+    expect(child.options.reasoningEffort).toBeUndefined()
+    await waitNoActivation(ctx, started.childId)
   })
 })

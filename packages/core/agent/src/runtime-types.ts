@@ -7,7 +7,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Scoped } from '@deepseek-ai/dsh-scope'
-import type { LlmCallConfig, LlmFailure, ResolvedRetryPolicy } from '@deepseek-ai/dsh-llm'
+import type { LlmCallConfig, LlmFailure, ReasoningEffortId, ResolvedRetryPolicy } from '@deepseek-ai/dsh-llm'
 import type { AgentCancelCause, Session, SessionId, UserMessage } from '@deepseek-ai/dsh-session'
 export type { AgentCancelCause } from '@deepseek-ai/dsh-session'
 import type { Inbox } from './inbox.ts'
@@ -28,6 +28,13 @@ export interface AgentOptions {
   model?: string
   /** Maximum output tokens for each conversation-model request. */
   maxTokens?: number
+  /**
+   * Default reasoning effort seeded into the first request this agent builds.
+   * A later request that restores a persisted, route-matched effort from the
+   * session's own request header (see `dsh-agent-loop`'s `buildRequest`)
+   * takes precedence over this default; it is not a fixed override.
+   */
+  reasoningEffort?: ReasoningEffortId
 }
 
 /** Options for {@link Agent.cancel}. */
