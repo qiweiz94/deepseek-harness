@@ -55,6 +55,7 @@ import * as ToolSchedule from '@deepseek-ai/dsh-schedule'
 import Lsp from '@deepseek-ai/dsh-lsp'
 import * as ToolAstContext from '@deepseek-ai/dsh-plugin-ast-context'
 import * as ToolSubagentRouter from '@deepseek-ai/dsh-plugin-subagent-router'
+import * as ToolTelemetryRecorder from '@deepseek-ai/dsh-plugin-telemetry-recorder'
 import * as ToolWorktreeSandbox from '@deepseek-ai/dsh-plugin-worktree-sandbox'
 import * as ToolLsp from '@deepseek-ai/dsh-tool-lsp'
 import * as ToolSkill from '@deepseek-ai/dsh-tool-skill'
@@ -251,6 +252,18 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'A single delegation entry routes a task to a capable subagent provider selected by config-owned policy; the model names only the task (description + prompt), never a provider or transport.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-plugin-telemetry-recorder',
+    dir: 'plugin-telemetry-recorder',
+    source: 'packages/plugins/plugin-telemetry-recorder/src/index.ts',
+    requires: ['ctx.tools', 'ctx.agents (call time, through the calling execution\'s agent)'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(ToolTelemetryRecorder)
+    },
+    note:
+      'get_session_telemetry reads the calling session\'s own durable log and the subagent lifecycle pair; it takes no arguments, writes nothing, and omits any figure the log has not yet produced evidence for instead of reporting it as zero.',
   },
   {
     pkg: '@deepseek-ai/dsh-plugin-worktree-sandbox',
