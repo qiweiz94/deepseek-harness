@@ -12,7 +12,7 @@
 
 **新增面向模型的插件 `@deepseek-ai/dsh-plugin-subagent-router`，注册一个 `subagent` 工具**（`toolName` 可配置，默认 `subagent`），按配置所拥有的策略路由委托任务。模型只描述任务（`description` + `prompt`）；从不指名 provider 或传输方式。
 
-**路由是确定性策略。** `Config.providers` 是默认的有序候选列表；`Config.routes` 提供按标签命中的覆盖，不区分大小写地匹配任务 `description`（第一条命中者生效）。调用时路由器遍历候选、跳过未注册的 provider，并派发给第一个 `SubagentCapabilities` 满足请求需求的 provider——只有当相应配置项被设置时才要求 `persona`/`toolFilter`/`depthLimit`。没有可用的候选时大声失败，并列出尝试过的候选与缺失的能力。
+**路由是确定性策略。** `Config.providers` 是默认的有序候选列表；`Config.routes` 提供按标签命中的覆盖，不区分大小写地匹配任务 `description`。每条命中的路由都按配置顺序贡献其有序 provider；任何命中路由的委托都不会回退到默认候选——路由即策略，无法路由的委托大声失败。调用时路由器遍历候选、跳过未注册的 provider，并派发给第一个 `SubagentCapabilities` 满足请求需求的 provider——只有当相应配置项被设置时才要求 `persona`/`toolFilter`/`depthLimit`。没有可用的候选时大声失败，并列出尝试过的候选与缺失的能力。
 
 **路由器是调用方/协调者，而非拦截器。** 子代理接缝没有暴露派发前 waterfall，因此插件注册自己的工具，调用 `ctx.subagents.start(provider, request)`。它不缓存任何 provider 状态；每次调用都对着实时注册表解析，因此兄弟加载顺序与 HMR 都无需 `subagent/provider-added` 记账。
 

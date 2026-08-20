@@ -275,7 +275,7 @@ Run a command inside an isolated git worktree (a disposable trial) and return th
   "properties": {
     "id": {
       "type": "string",
-      "description": "Trial id naming the worktree `.dsh/worktrees/subagent-<id>`. Omit to auto-generate; reuse an id to keep the same trial worktree across calls (with `cleanup: false`)."
+      "description": "Trial id naming the worktree `.dsh/worktrees/subagent-<id>`; letters, digits, `-` and `_`, max 64 characters. Omit to auto-generate; reuse an id to keep the same trial worktree across calls (with `cleanup: false`)."
     },
     "command": {
       "type": "string",

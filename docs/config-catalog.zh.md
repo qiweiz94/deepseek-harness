@@ -1409,7 +1409,7 @@ export interface Config {
 export interface Config {
   /** Ordered provider candidates used when no route matches. */
   providers: string[]
-  /** Label-routed provider overrides; the first matching route wins. */
+  /** Label-routed provider overrides; every matching route is tried in order. */
   routes?: RoutePolicy[]
   /** The model-facing tool name. */
   toolName?: string
@@ -1439,7 +1439,7 @@ export interface RoutePolicy {
 
 依赖：[`AgentOptions`](subsystems/core.md)
 
-来源：[`packages/plugins/plugin-subagent-router/src/index.ts:34`](../packages/plugins/plugin-subagent-router/src/index.ts)
+来源：[`packages/plugins/plugin-subagent-router/src/index.ts:36`](../packages/plugins/plugin-subagent-router/src/index.ts)
 
 <a id="deepseek-aidsh-plugin-worktree-sandbox"></a>
 

@@ -10,7 +10,7 @@ A trial subagent run has no safe place to experiment: any command it runs can mu
 
 ## Decision
 
-**A new model-facing plugin, `@deepseek-ai/dsh-plugin-worktree-sandbox`, registers one `sandbox_exec` tool** that runs a command inside an isolated git worktree. The worktree is created with `git worktree add --detach` from the configured base ref (default `HEAD`) under `<cwd>/.dsh/worktrees/subagent-<id>`, so it shares the object store but has its own working tree and index.
+**A new model-facing plugin, `@deepseek-ai/dsh-plugin-worktree-sandbox`, registers one `sandbox_exec` tool** that runs a command inside an isolated git worktree. The worktree is created with `git worktree add --detach` from the configured base ref (default `HEAD`) under `<cwd>/.dsh/worktrees/subagent-<id>`, so it shares the object store but has its own working tree and index. The `id` is validated against `[a-zA-Z0-9_-]` (max 64) before any worktree operation, so a model-supplied id cannot traverse out of the trial root.
 
 **The trial is disposable.** By default the worktree is removed with `git worktree remove --force` after the call, discarding the trial's uncommitted changes; the main tree and branch are never touched. `cleanup: false` keeps the worktree so a later call with the same `id` continues the same trial and its diff accumulates.
 
