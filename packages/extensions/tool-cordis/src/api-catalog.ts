@@ -1265,6 +1265,31 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'sessionRetention',
+    summary: 'Cross-store session deletion runtime.',
+    description: 'Cross-store session deletion runtime. Load as a plugin; it registers as `ctx.sessionRetention`. Participants are dispatched sequentially in registration order; one store\'s rejection is captured as a `failed` outcome so the remaining stores still run and report.',
+    methods: [
+      {
+        signature: 'register(participant: RetentionParticipant): () => void',
+        description: 'Register one store\'s deletion capability. The registration is an effect on the calling context\'s fiber: disposing the fiber (or calling the returned disposer) removes the store from subsequent plans and deletions. A store label already registered rejects loudly — two participants over one store would double-report its data.',
+        parameters: [{ name: 'participant', description: 'the store\'s unique label plus its plan and deletion operations.' }],
+        returns: 'the disposer that unregisters this participant.',
+      },
+      {
+        signature: 'async plan(id: SessionId, signal?: AbortSignal): Promise<SessionRetentionPlan>',
+        description: 'Enumerate what deleting one session\'s durable data would touch, per store, without mutating any store.',
+        parameters: [{ name: 'id', description: 'the session to enumerate.' }, { name: 'signal', description: 'optional cancellation for store read work.' }],
+        returns: 'one plan entry per registered participant, in registration order.',
+      },
+      {
+        signature: 'async deleteSession(id: SessionId, signal?: AbortSignal): Promise<SessionRetentionReport>',
+        description: 'Delete one session\'s durable data across every registered store. Refuses a live session before any store runs; the persistence participant enforces the same refusal in its own executor. A participant rejection becomes that store\'s `failed` outcome and later stores still run, so a partial deletion is reported, never hidden; rerunning converges because participants treat already-deleted data as `absent`. An abort between stores rejects — the stores that already ran keep their effect, and a rerun reports them `absent`.',
+        parameters: [{ name: 'id', description: 'the session whose durable data is deleted.' }, { name: 'signal', description: 'optional cancellation checked between stores and forwarded to each participant.' }],
+        returns: 'one outcome per registered participant, in registration order.',
+      },
+    ],
+  },
+  {
     key: 'sessions',
     summary: 'In-memory session store (`ctx.sessions`).',
     description: 'In-memory session store (`ctx.sessions`).\n\nPersistence is intentionally not implemented here — persistence plugins subscribe to `session/event` and flush on `session/flush` / dispose.',
@@ -3626,6 +3651,26 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ResumeAgentOptions {\n    readonly resumeSessionId: SessionId;\n    readonly agentOptions?: AgentOptions;\n    readonly signal?: AbortSignal;\n    readonly setup?: AgentSetup;\n}',
   },
   {
+    name: 'RetentionParticipant',
+    declaration: 'export interface RetentionParticipant {\n    readonly store: string;\n    plan(id: SessionId, signal?: AbortSignal): Promise<RetentionStorePlan>;\n    deleteSession(id: SessionId, signal?: AbortSignal): Promise<RetentionStoreDeletion>;\n}',
+  },
+  {
+    name: 'RetentionStoreDeletion',
+    declaration: 'export type RetentionStoreDeletion = {\n    readonly kind: \'deleted\';\n    readonly targets: readonly RetentionTarget[];\n} | {\n    readonly kind: \'absent\';\n} | {\n    readonly kind: \'retained\';\n    readonly reason: string;\n};',
+  },
+  {
+    name: 'RetentionStoreOutcome',
+    declaration: 'export type RetentionStoreOutcome = RetentionStoreDeletion | {\n    readonly kind: \'failed\';\n    readonly message: string;\n};',
+  },
+  {
+    name: 'RetentionStorePlan',
+    declaration: 'export type RetentionStorePlan = {\n    readonly kind: \'targets\';\n    readonly targets: readonly RetentionTarget[];\n} | {\n    readonly kind: \'retains\';\n    readonly reason: string;\n};',
+  },
+  {
+    name: 'RetentionTarget',
+    declaration: 'export interface RetentionTarget {\n    readonly kind: \'file\' | \'directory\' | \'records\';\n    readonly location: string;\n    readonly count?: number;\n}',
+  },
+  {
     name: 'RpcError',
     declaration: 'export type RpcError = {\n    [C in RpcErrorCode]: {\n        code: C;\n        message: string;\n        details: RpcErrorDetailsMap[C];\n    };\n}[RpcErrorCode];',
   },
@@ -3864,6 +3909,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionResultRange',
     declaration: 'export interface SessionResultRange {\n    from?: number;\n    to?: number;\n}',
+  },
+  {
+    name: 'SessionRetentionPlan',
+    declaration: 'export interface SessionRetentionPlan {\n    readonly sessionId: SessionId;\n    readonly stores: ReadonlyArray<{\n        readonly store: string;\n        readonly plan: RetentionStorePlan;\n    }>;\n}',
+  },
+  {
+    name: 'SessionRetentionReport',
+    declaration: 'export interface SessionRetentionReport {\n    readonly sessionId: SessionId;\n    readonly stores: ReadonlyArray<{\n        readonly store: string;\n        readonly outcome: RetentionStoreOutcome;\n    }>;\n}',
   },
   {
     name: 'SessionSearchCursor',

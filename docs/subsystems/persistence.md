@@ -235,6 +235,10 @@ Both implement the same abstract `SessionPersistence` (locate/create/append/prep
 - **[dsh-session-persistence-jsonl](../../packages/session/session-persistence-jsonl)** — an append-only logical JSONL log per session, stored as checksummed concatenated Zstandard frames by default or raw lines by configuration, with crash-safe atomic writes, interrupted-turn recovery, and a read/replay path.
 - **[dsh-session-persistence-sqlite](../../packages/session/session-persistence-sqlite)** — `node:sqlite`, one row per `SessionEvent`. The row fields `(session_id, seq, type, time, data, source_event_seqs, surface_op)` map 1:1 onto the event, including optional surface metadata, so there is no parallel persisted schema to keep in sync.
 
+## Session retention
+
+[dsh-session-retention](../../packages/session/session-retention) owns cross-store deletion of one session's durable data. Each participating store registers a `RetentionParticipant` (unique `store` label) exposing `plan` — enumerate what a deletion would remove, without mutating — and `deleteSession`. `ctx.sessionRetention.plan(id)` aggregates the participants' plans into a `SessionRetentionPlan`; `ctx.sessionRetention.deleteSession(id)` fans deletion out and returns a `SessionRetentionReport` with one closed-union outcome per store (`deleted` with the removed targets, `absent`, `retained` with the store's reason, or `failed` for a caught participant rejection). Deletion refuses live sessions and refuses to run with zero registered participants; rerunning a partial deletion converges because participants report already-deleted data as `absent`. The persistence backends participate through the coordinator's optional `planStored`/`deleteStored` hooks; `dsh-spill-local` removes its per-session spill directory; `dsh-attachment-local` registers an honest `retained` participant because content-addressed objects may be shared across resumed or forked sessions. Design rationale in the [session-retention-seam note](../../.agents/notes/implemented/architecture/2026-08-20-session-retention-seam.md).
+
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
 <a id="cordis-surface"></a>
@@ -382,4 +386,50 @@ abstract listSnapshots(signal?: AbortSignal): Promise<SessionPersistenceSnapshot
 Types: [SessionEvent](session.md) · [SessionId](core.md)
 
 Source: [`packages/session/session-persistence/src/index.ts:84`](../../packages/session/session-persistence/src/index.ts)
+
+<a id="ctxsessionretention--sessionretentionruntime"></a>
+
+### `ctx.sessionRetention` — `SessionRetentionRuntime`
+
+Cross-store session deletion runtime. Load as a plugin; it registers as `ctx.sessionRetention`. Participants are dispatched sequentially in registration order; one store's rejection is captured as a `failed` outcome so the remaining stores still run and report.
+
+```ts cordis-catalog
+/**
+ * Register one store's deletion capability. The registration is an effect on
+ * the calling context's fiber: disposing the fiber (or calling the returned
+ * disposer) removes the store from subsequent plans and deletions. A store
+ * label already registered rejects loudly — two participants over one store
+ * would double-report its data.
+ * @param participant - the store's unique label plus its plan and deletion operations.
+ * @returns the disposer that unregisters this participant.
+ */
+register(participant: RetentionParticipant): () => void
+
+/**
+ * Enumerate what deleting one session's durable data would touch, per store,
+ * without mutating any store.
+ * @param id - the session to enumerate.
+ * @param signal - optional cancellation for store read work.
+ * @returns one plan entry per registered participant, in registration order.
+ */
+async plan(id: SessionId, signal?: AbortSignal): Promise<SessionRetentionPlan>
+
+/**
+ * Delete one session's durable data across every registered store. Refuses a
+ * live session before any store runs; the persistence participant enforces
+ * the same refusal in its own executor. A participant rejection becomes that
+ * store's `failed` outcome and later stores still run, so a partial deletion
+ * is reported, never hidden; rerunning converges because participants treat
+ * already-deleted data as `absent`. An abort between stores rejects — the
+ * stores that already ran keep their effect, and a rerun reports them `absent`.
+ * @param id - the session whose durable data is deleted.
+ * @param signal - optional cancellation checked between stores and forwarded to each participant.
+ * @returns one outcome per registered participant, in registration order.
+ */
+async deleteSession(id: SessionId, signal?: AbortSignal): Promise<SessionRetentionReport>
+```
+
+Types: [SessionId](core.md)
+
+Source: [`packages/session/session-retention/src/index.ts:43`](../../packages/session/session-retention/src/index.ts)
 <!-- END GENERATED cordis-surface -->

@@ -235,6 +235,10 @@ interface SessionPersistenceSnapshot {
 - **[dsh-session-persistence-jsonl](../../packages/session/session-persistence-jsonl)**——每个会话一份仅追加的逻辑 JSONL 日志，默认存储为带 checksum 的连续 Zstandard frame，也可配置为原始行；支持崩溃安全的原子写入、被中断轮次的恢复以及读取/回放路径。
 - **[dsh-session-persistence-sqlite](../../packages/session/session-persistence-sqlite)**：基于 `node:sqlite`，每个 `SessionEvent` 一行。行字段 `(session_id, seq, type, time, data, source_event_seqs, surface_op)` 与事件 1:1 映射（包含可选的 surface 元数据），因此没有需要保持同步的并行持久化 schema。
 
+## 会话留存
+
+[dsh-session-retention](../../packages/session/session-retention) 拥有跨存储删除单个会话持久数据的能力。每个参与存储注册一个 `RetentionParticipant`（`store` 标签唯一），暴露 `plan`——枚举一次删除会移除的内容而不做修改——与 `deleteSession`。`ctx.sessionRetention.plan(id)` 把各参与者的 plan 聚合为 `SessionRetentionPlan`；`ctx.sessionRetention.deleteSession(id)` 扇出删除并返回 `SessionRetentionReport`，每个存储一个封闭联合结果（`deleted` 附被移除目标、`absent`、`retained` 附该存储的理由、或 `failed` 表示被捕获的参与者拒绝）。删除拒绝存活会话，也拒绝在零个参与者注册时执行；部分删除的重跑会收敛，因为参与者把已删除数据报告为 `absent`。持久化后端经协调器可选的 `planStored`/`deleteStored` hook 参与；`dsh-spill-local` 移除其按会话的 spill 目录；`dsh-attachment-local` 注册诚实的 `retained` 参与者，因为按内容寻址的对象可能被 resume 或 fork 的会话共享。设计理由见[会话留存接缝笔记](../../.agents/notes/implemented/architecture/2026-08-20-session-retention-seam.md)。
+
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
 <a id="cordis-surface"></a>
@@ -382,4 +386,50 @@ abstract listSnapshots(signal?: AbortSignal): Promise<SessionPersistenceSnapshot
 Types: [SessionEvent](session.md) · [SessionId](core.md)
 
 Source: [`packages/session/session-persistence/src/index.ts:84`](../../packages/session/session-persistence/src/index.ts)
+
+<a id="ctxsessionretention--sessionretentionruntime"></a>
+
+### `ctx.sessionRetention` — `SessionRetentionRuntime`
+
+Cross-store session deletion runtime. Load as a plugin; it registers as `ctx.sessionRetention`. Participants are dispatched sequentially in registration order; one store's rejection is captured as a `failed` outcome so the remaining stores still run and report.
+
+```ts cordis-catalog
+/**
+ * Register one store's deletion capability. The registration is an effect on
+ * the calling context's fiber: disposing the fiber (or calling the returned
+ * disposer) removes the store from subsequent plans and deletions. A store
+ * label already registered rejects loudly — two participants over one store
+ * would double-report its data.
+ * @param participant - the store's unique label plus its plan and deletion operations.
+ * @returns the disposer that unregisters this participant.
+ */
+register(participant: RetentionParticipant): () => void
+
+/**
+ * Enumerate what deleting one session's durable data would touch, per store,
+ * without mutating any store.
+ * @param id - the session to enumerate.
+ * @param signal - optional cancellation for store read work.
+ * @returns one plan entry per registered participant, in registration order.
+ */
+async plan(id: SessionId, signal?: AbortSignal): Promise<SessionRetentionPlan>
+
+/**
+ * Delete one session's durable data across every registered store. Refuses a
+ * live session before any store runs; the persistence participant enforces
+ * the same refusal in its own executor. A participant rejection becomes that
+ * store's `failed` outcome and later stores still run, so a partial deletion
+ * is reported, never hidden; rerunning converges because participants treat
+ * already-deleted data as `absent`. An abort between stores rejects — the
+ * stores that already ran keep their effect, and a rerun reports them `absent`.
+ * @param id - the session whose durable data is deleted.
+ * @param signal - optional cancellation checked between stores and forwarded to each participant.
+ * @returns one outcome per registered participant, in registration order.
+ */
+async deleteSession(id: SessionId, signal?: AbortSignal): Promise<SessionRetentionReport>
+```
+
+Types: [SessionId](core.md)
+
+Source: [`packages/session/session-retention/src/index.ts:43`](../../packages/session/session-retention/src/index.ts)
 <!-- END GENERATED cordis-surface -->

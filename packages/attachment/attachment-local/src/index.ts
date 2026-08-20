@@ -33,6 +33,7 @@ export const ATTACHMENT_RETAINS_REASON
  * This store's registered retention participant. Content-addressed objects
  * are always retained, never deleted: a deleted shared object would corrupt
  * other sessions' replay.
+ * @returns a participant whose plan and deletion both report `retains`/`retained`.
  */
 export function attachmentRetentionParticipant(): RetentionParticipant {
   return {
