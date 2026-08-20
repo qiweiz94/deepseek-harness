@@ -54,6 +54,7 @@ import * as ToolGoal from '@deepseek-ai/dsh-tool-goal'
 import * as ToolSchedule from '@deepseek-ai/dsh-schedule'
 import Lsp from '@deepseek-ai/dsh-lsp'
 import * as ToolAstContext from '@deepseek-ai/dsh-plugin-ast-context'
+import * as ToolImpactedTests from '@deepseek-ai/dsh-plugin-impacted-tests'
 import * as ToolSubagentRouter from '@deepseek-ai/dsh-plugin-subagent-router'
 import * as ToolWorktreeSandbox from '@deepseek-ai/dsh-plugin-worktree-sandbox'
 import * as ToolLsp from '@deepseek-ai/dsh-tool-lsp'
@@ -237,6 +238,19 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'get_file_outline reads a repo-relative source file and returns its top-level TypeScript symbols; a parse failure or missing file surfaces as an error result rather than a partial outline.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-plugin-impacted-tests',
+    dir: 'plugin-impacted-tests',
+    source: 'packages/plugins/plugin-impacted-tests/src/index.ts',
+    requires: ['ctx.tools', 'ctx.subprocess'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(LocalSubprocessRuntime)
+      await ctx.plugin(ToolImpactedTests, { cwd: root })
+    },
+    note:
+      'run_impacted_tests selects test suites by walking the workspace import DAG in reverse from the changed files (the uncommitted working-tree changes when `files` is omitted) and runs strictly the selected suites. An empty change set, or a changed file no suite imports, runs nothing — that is the answer, not a failure.',
   },
   {
     pkg: '@deepseek-ai/dsh-plugin-subagent-router',
