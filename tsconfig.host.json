@@ -278,6 +278,7 @@
     { "path": "./packages/extensions/tool-cordis" },
     { "path": "./packages/plugins/plugin-ast-context" },
     { "path": "./packages/guard/budget-governor" },
+    { "path": "./packages/plugins/plugin-diagnostic-sifter" },
     { "path": "./packages/plugins/plugin-pinned-scratchpad" },
     { "path": "./packages/plugins/plugin-subagent-router" },
     { "path": "./packages/plugins/plugin-worktree-sandbox" },
