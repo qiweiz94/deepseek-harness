@@ -49,6 +49,8 @@
     "@deepseek-ai/dsh-permission-presets": "workspace:*",
     "@deepseek-ai/dsh-plan-mode": "workspace:*",
     "@deepseek-ai/dsh-plugin-ast-context": "workspace:*",
+    "@deepseek-ai/dsh-plugin-subagent-router": "workspace:*",
+    "@deepseek-ai/dsh-plugin-worktree-sandbox": "workspace:*",
     "@deepseek-ai/dsh-terminal": "workspace:*",
     "@deepseek-ai/dsh-terminal-bash": "workspace:*",
     "@deepseek-ai/dsh-pwsh-local": "workspace:*",

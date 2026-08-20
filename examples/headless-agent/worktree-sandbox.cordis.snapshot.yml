@@ -1,0 +1,51 @@
+# Keyless real-Loader composition for the worktree-sandbox snapshot. The test
+# prepares a real git repository at the run cwd; the replayed turn runs one
+# `sandbox_exec` command in a detached trial worktree, so the assembled app
+# proves the isolation physically: the tool result reports the write while the
+# main working tree never gains the file. The scripted call passes an explicit
+# `id` because the auto-generated fallback (`randomUUID().slice(0, 8)`) is not
+# a normalizable token and would leak into the golden.
+
+- id: persistence
+  name: '@deepseek-ai/dsh-session-persistence-jsonl'
+  config:
+    root: './.sessions'
+    compression: none
+
+# file/override both default to their DSH_SNAPSHOT_* env vars.
+- id: replay
+  name: '@deepseek-ai/dsh-llm-replay'
+  config:
+    providers:
+      - id: replay
+        models:
+          - id: deepseek-v4-flash
+            contextWindow: 128000
+
+# This scenario probes the sandbox tool only, so the bash/fs stacks are absent
+# and the bundle's optional surfaces stay off. The tool runs its command
+# through the `subprocess` service, which `dsh-subprocess-local` provides.
+- id: agent
+  name: '@deepseek-ai/dsh-agent-spine-demo'
+  config:
+    agents:
+      - id: main
+        provider: replay
+        model: deepseek-v4-flash
+        cwd: !!js process.cwd()
+    workspaceContext: false
+    skills:
+      enabled: false
+    toolBash: false
+    toolJobs: false
+    goals: false
+    persona: |
+      You are headless-agent, a sandbox snapshot fixture.
+
+- id: subprocess
+  name: '@deepseek-ai/dsh-subprocess-local'
+
+- id: sandbox
+  name: '@deepseek-ai/dsh-plugin-worktree-sandbox'
+  config:
+    cwd: !!js process.cwd()
