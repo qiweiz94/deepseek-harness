@@ -6,8 +6,43 @@ import WebRuntime from '@deepseek-ai/dsh-web'
 import { HttpFetchProvider, LOCAL_FETCH_PROVIDER_ID } from '@deepseek-ai/dsh-web-fetch-http'
 import type { HttpFetchLimits } from '@deepseek-ai/dsh-web-fetch-http'
 import * as fetchPlugin from '@deepseek-ai/dsh-web-fetch-http'
-import { classifyContentType, decoderForCharset, isSameOrigin, parseCharset, validateFetchUrl } from '../src/policy.ts'
+import { classifyContentType, decoderForCharset, isPrivateNetworkAddress, isSameOrigin, literalAddressOf, parseCharset, validateFetchUrl } from '../src/policy.ts'
 
+/**
+ * Queued DNS answers for the private-network-blocking suite's rebinding test:
+ * `resolveHostname`'s one call site imports `lookup` from this module, so
+ * queuing distinct answers per call simulates a hostname's records changing
+ * between the initial request and a same-origin redirect hop, without a real
+ * (flaky, network-dependent) DNS rebind. Real hostnames not queued here fall
+ * through to the actual resolver, unaffected.
+ */
+const dnsControl = vi.hoisted(() => ({
+  queued: [] as Array<Array<{ address: string; family: 4 | 6 }>>,
+  nextError: undefined as Error | undefined,
+}))
+
+vi.mock('node:dns/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:dns/promises')>()
+  return {
+    ...actual,
+    async lookup(...args: Parameters<typeof actual.lookup>): ReturnType<typeof actual.lookup> {
+      if (dnsControl.nextError !== undefined) {
+        const error = dnsControl.nextError
+        dnsControl.nextError = undefined
+        throw error
+      }
+      const next = dnsControl.queued.shift()
+      if (next !== undefined) return next as never
+      return actual.lookup(...args)
+    },
+  }
+})
+
+// This suite's own fixture server binds to loopback, so every general
+// transport/cap/charset/redirect test below deliberately targets a private
+// address unrelated to what it tests; `blockPrivateNetworks: false` keeps
+// them exercising the real server. The dedicated 'private-network blocking'
+// suite below enables the check explicitly.
 const limits: HttpFetchLimits = {
   maxUrlLength: 2048,
   maxResponseBytes: 5_000_000,
@@ -15,6 +50,7 @@ const limits: HttpFetchLimits = {
   timeoutMs: 5_000,
   maxRedirects: 5,
   userAgent: 'test-agent/1.0',
+  blockPrivateNetworks: false,
 }
 
 type Handler = (req: IncomingMessage, res: ServerResponse) => void
@@ -33,6 +69,8 @@ beforeEach(async () => {
 
 afterEach(async () => {
   vi.unstubAllGlobals()
+  dnsControl.queued.length = 0
+  dnsControl.nextError = undefined
   await new Promise<void>(resolve => server.close(() => { resolve() }))
 })
 
@@ -75,6 +113,37 @@ describe('policy helpers', () => {
     expect(decoderForCharset(undefined).encoding).toBe('utf-8')
     expect(decoderForCharset('iso-8859-1').encoding).toBe('windows-1252')
     expect(() => decoderForCharset('not-a-charset')).toThrow(expect.objectContaining({ code: 'WEB_UNSUPPORTED_CONTENT_TYPE' }))
+  })
+
+  it('classifies known-bad private/loopback/link-local addresses as non-public', () => {
+    expect(isPrivateNetworkAddress('169.254.169.254', 4)).toBe(true) // cloud instance metadata
+    expect(isPrivateNetworkAddress('127.0.0.1', 4)).toBe(true) // loopback
+    expect(isPrivateNetworkAddress('10.1.2.3', 4)).toBe(true) // RFC 1918
+    expect(isPrivateNetworkAddress('172.16.0.1', 4)).toBe(true) // RFC 1918, low edge
+    expect(isPrivateNetworkAddress('172.31.255.255', 4)).toBe(true) // RFC 1918, high edge
+    expect(isPrivateNetworkAddress('192.168.1.1', 4)).toBe(true) // RFC 1918
+    expect(isPrivateNetworkAddress('100.64.0.1', 4)).toBe(true) // carrier-grade NAT
+    expect(isPrivateNetworkAddress('0.0.0.0', 4)).toBe(true) // "this network"
+    expect(isPrivateNetworkAddress('255.255.255.255', 4)).toBe(true) // broadcast (reserved range)
+    expect(isPrivateNetworkAddress('::1', 6)).toBe(true) // loopback
+    expect(isPrivateNetworkAddress('fe80::1', 6)).toBe(true) // link-local
+    expect(isPrivateNetworkAddress('fc00::1', 6)).toBe(true) // unique local
+    expect(isPrivateNetworkAddress('::ffff:127.0.0.1', 6)).toBe(true) // IPv4-mapped loopback
+    expect(isPrivateNetworkAddress('::ffff:10.1.2.3', 6)).toBe(true) // IPv4-mapped RFC 1918
+  })
+
+  it('does not flag public addresses or the RFC 1918 range boundaries as private', () => {
+    expect(isPrivateNetworkAddress('8.8.8.8', 4)).toBe(false)
+    expect(isPrivateNetworkAddress('1.1.1.1', 4)).toBe(false)
+    expect(isPrivateNetworkAddress('172.15.255.255', 4)).toBe(false) // just below the RFC 1918 172.16.0.0/12 block
+    expect(isPrivateNetworkAddress('172.32.0.0', 4)).toBe(false) // just above it
+    expect(isPrivateNetworkAddress('2606:4700:4700::1111', 6)).toBe(false) // a public IPv6 address
+  })
+
+  it('resolves a URL hostname to its literal address, or undefined for a DNS name', () => {
+    expect(literalAddressOf('127.0.0.1')).toEqual({ address: '127.0.0.1', family: 4 })
+    expect(literalAddressOf('[::1]')).toEqual({ address: '::1', family: 6 }) // URL.hostname keeps IPv6 brackets
+    expect(literalAddressOf('example.com')).toBeUndefined()
   })
 })
 
@@ -284,6 +353,66 @@ describe('HttpFetchProvider redirects', () => {
   })
 })
 
+describe('HttpFetchProvider private-network blocking', () => {
+  it.each([
+    'http://169.254.169.254/latest/meta-data/', // cloud instance metadata endpoint
+    'http://127.0.0.1/',
+    'http://10.1.2.3/',
+    'http://[::1]/',
+  ])('refuses the known-bad private destination %s with no network attempt', async (url) => {
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+    await expect(provider({ blockPrivateNetworks: true }).fetch({ url }))
+      .rejects.toThrow(expect.objectContaining({ code: 'WEB_BLOCKED_PRIVATE_NETWORK' }))
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('re-checks a same-origin redirect target, refusing a hostname whose DNS record rebound to a private address between hops', async () => {
+    // The hostname string never changes across the two hops (same-origin), but
+    // this queues a public answer for the initial check and a private one for
+    // the redirect-target recheck, simulating a DNS record change in between.
+    dnsControl.queued.push(
+      [{ address: '8.8.8.8', family: 4 }],
+      [{ address: '127.0.0.1', family: 4 }],
+    )
+    const redirect = { status: 302, headers: new Headers({ location: 'http://rebind.example.test/next' }), body: { cancel: () => Promise.resolve() } } as unknown as Response
+    const fetchSpy = vi.fn(async () => redirect)
+    vi.stubGlobal('fetch', fetchSpy)
+    await expect(provider({ blockPrivateNetworks: true }).fetch({ url: 'http://rebind.example.test/' }))
+      .rejects.toThrow(expect.objectContaining({ code: 'WEB_BLOCKED_PRIVATE_NETWORK' }))
+    // Only the first hop's request actually ran; the rebound second hop never connected.
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('blocks a DNS name whose resolved IPv6 record is private', async () => {
+    dnsControl.queued.push([{ address: 'fe80::1', family: 6 }])
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+    await expect(provider({ blockPrivateNetworks: true }).fetch({ url: 'http://ipv6-only.example.test/' }))
+      .rejects.toThrow(expect.objectContaining({ code: 'WEB_BLOCKED_PRIVATE_NETWORK' }))
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('surfaces a DNS resolution failure as WEB_PROVIDER_ERROR', async () => {
+    dnsControl.nextError = Object.assign(new Error('queryA ENOTFOUND unresolvable.example.test'), { code: 'ENOTFOUND' })
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+    await expect(provider({ blockPrivateNetworks: true }).fetch({ url: 'http://unresolvable.example.test/' }))
+      .rejects.toThrow(expect.objectContaining({ code: 'WEB_PROVIDER_ERROR' }))
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('still fetches a private-network destination when the provider is configured to allow it', async () => {
+    handler = (_req, res) => { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('internal') }
+    // Sanity: base (127.0.0.1) IS refused when the guard is on.
+    await expect(provider({ blockPrivateNetworks: true }).fetch({ url: base }))
+      .rejects.toThrow(expect.objectContaining({ code: 'WEB_BLOCKED_PRIVATE_NETWORK' }))
+
+    const allowed = await provider({ blockPrivateNetworks: false }).fetch({ url: base })
+    expect(allowed.body.content).toBe('internal')
+  })
+})
+
 describe('HttpFetchProvider invalid URLs and abort', () => {
   it('rejects a non-http scheme before any network access', async () => {
     await expect(provider().fetch({ url: 'ftp://example.com' }))
@@ -382,12 +511,21 @@ describe('web-fetch-http plugin registration', () => {
   it('registers the provider into ctx.web (HMR-safe)', async () => {
     const ctx = new Context()
     await ctx.plugin(WebRuntime, { fetchProvider: LOCAL_FETCH_PROVIDER_ID })
-    const fiber = await ctx.plugin(fetchPlugin, {})
+    const fiber = await ctx.plugin(fetchPlugin, { blockPrivateNetworks: false })
     await expect(ctx.web.fetch({ url: `${base}/` }))
       .resolves.toMatchObject({ statusCode: 200 })
     await fiber.dispose()
     await expect(ctx.web.fetch({ url: `${base}/` }))
       .rejects.toThrow(expect.objectContaining({ code: 'WEB_PROVIDER_CONFIGURED_MISSING' }))
+  })
+
+  it('blocks a private-network destination by default (blockPrivateNetworks omitted)', async () => {
+    const ctx = new Context()
+    await ctx.plugin(WebRuntime, { fetchProvider: LOCAL_FETCH_PROVIDER_ID })
+    const fiber = await ctx.plugin(fetchPlugin, {})
+    await expect(ctx.web.fetch({ url: 'http://127.0.0.1/' }))
+      .rejects.toThrow(expect.objectContaining({ code: 'WEB_BLOCKED_PRIVATE_NETWORK' }))
+    await fiber.dispose()
   })
 
   it('has no default export (namespace plugin export shape)', () => {
@@ -432,7 +570,7 @@ describe('web-fetch-http plugin registration', () => {
   it('accepts maxRedirects: 0 (follow no redirects) as valid config', async () => {
     const ctx = new Context()
     await ctx.plugin(WebRuntime, { fetchProvider: LOCAL_FETCH_PROVIDER_ID })
-    const fiber = await ctx.plugin(fetchPlugin, { maxRedirects: 0 })
+    const fiber = await ctx.plugin(fetchPlugin, { maxRedirects: 0, blockPrivateNetworks: false })
     await expect(ctx.web.fetch({ url: `${base}/` }))
       .resolves.toMatchObject({ statusCode: 200 })
     await fiber.dispose()

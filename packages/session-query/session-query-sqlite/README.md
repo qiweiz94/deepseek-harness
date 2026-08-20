@@ -51,7 +51,7 @@ None; this package neither assembles nor sends a provider request.
 
 ## Known Limitations and Deferred Work
 
-- **No caller authorization** — this is a trusted context-wide service; a model tool or UI must enforce its own access policy.
+- **Trusted caller boundary** — inherited from the Service Definition package: this backend performs no per-caller authorization of its own, and every current consumer authorizes access at its own boundary before exposing anything beyond its own process (see [`dsh-session-query`'s fuller statement](../session-query/README.md#known-limitations-and-deferred-work)).
 - **Synchronous query execution** — `DatabaseSync` blocks the JavaScript thread during MATCH execution and cannot interrupt a statement already running.
 - **Token recall, not arbitrary substrings** — the `unicode61` tokenizer does not match substrings inside a larger token; use `filterEvents()` for literal scans.
 - **Single-owner derived index** — one service in one process must own each index path; external writers and multi-process sharing are unsupported.

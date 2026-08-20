@@ -3151,6 +3151,13 @@ export interface Config {
   maxRedirects?: number
   /** `User-Agent` header sent on every request. */
   userAgent?: string
+  /**
+   * Refuse a destination that resolves to a private, loopback, link-local, or
+   * otherwise non-globally-routable address. Defaults to `true`; disable only
+   * for a deployment that deliberately needs this provider to reach internal
+   * network targets.
+   */
+  blockPrivateNetworks?: boolean
 }
 ```
 

@@ -20,8 +20,22 @@ A shipping web-tool deployment sets the provider backstop above the tool budget,
 - Enforces a max URL length, response byte cap (`WEB_FETCH_TOO_LARGE`), decoded body character cap, timeout (`WEB_FETCH_TIMEOUT`), and redirect hop cap.
 - Propagates the caller's abort signal (`WEB_ABORTED`) into the network request and the streaming read.
 - Follows only **same-origin** redirects; a cross-origin redirect fails with `WEB_REDIRECT_BLOCKED`, requiring a fresh tool call (the model of Claude Code's WebFetch).
+- Refuses a private, loopback, link-local, carrier-grade-NAT, or otherwise non-globally-routable destination (`WEB_BLOCKED_PRIVATE_NETWORK`) — see [Private-network blocking](#private-network-blocking).
 - Sends an explicit product `User-Agent`, never a browser disguise.
 - Rejects unsupported (e.g. binary) content types with `WEB_UNSUPPORTED_CONTENT_TYPE`.
+
+## Private-network blocking
+
+On by default (`Config.blockPrivateNetworks`, default `true`). Before the initial request and again before following each redirect hop:
+
+- A literal IP hostname (`http://127.0.0.1/`, `http://[::1]/`) is classified directly.
+- A DNS hostname is resolved (`dns.lookup(hostname, { all: true })`) and **every** returned address is classified; one private address among several public ones still refuses the request.
+- A classified address in a private (RFC 1918), loopback, link-local (including the `169.254.169.254` cloud-instance-metadata endpoint), carrier-grade-NAT (RFC 6598), IETF-protocol-assignment, documentation/benchmarking, multicast, or reserved/unspecified range throws `WEB_BLOCKED_PRIVATE_NETWORK`. An IPv4-mapped IPv6 address (`::ffff:127.0.0.1`) is classified by its embedded IPv4 address.
+- Re-running the check on the redirect target (not just the initial URL) catches a same-origin hostname whose DNS records changed between hops, not only a cross-origin redirect (which `WEB_REDIRECT_BLOCKED` already refuses regardless of destination).
+
+A deployment that deliberately needs this provider to reach internal network targets sets `blockPrivateNetworks: false`.
+
+**Known residual gap**: the address this check validates is not the address the subsequent `fetch()` connects to — `fetch()` re-resolves DNS independently moments later. A hostname whose DNS record changes between this check and that connection (DNS rebinding) is not defended against; see [the private-network blocking Agent Note](../../../.agents/notes/implemented/feature/2026-08-20-web-fetch-http-private-network-blocking.md) for what would close that gap. DNS resolution for this check also does not observe the request's timeout or abort signal, so a slow or hung resolver can extend a request past its configured `timeoutMs`.
 
 ## Config
 
@@ -33,6 +47,7 @@ A shipping web-tool deployment sets the provider backstop above the tool budget,
 | `timeoutMs` | `30_000` | Fetch timeout within Node's timer range — a resource backstop for direct `ctx.web.fetch()` callers, not the model-facing tool-call budget (that is `dsh-tool-call-timeout-policy`). |
 | `maxRedirects` | `5` | Maximum same-origin redirect hops (`0` follows none). |
 | `userAgent` | `deepseek-harness/…` | `User-Agent` header. |
+| `blockPrivateNetworks` | `true` | Refuse a private/loopback/link-local/non-public destination — see [Private-network blocking](#private-network-blocking). |
 
 The numeric limits are validated at plugin construction: every cap except `maxRedirects` must be a positive finite number, and `maxRedirects` must be a non-negative integer. An invalid value throws rather than silently constructing a provider with nonsensical limits.
 
@@ -46,6 +61,6 @@ No direct invalidation; the named consumer owns any request-prefix changes.
 
 ## Known Limitations and Deferred Work
 
-- **SSRF / private-network protection is deferred** — no blocking of private, loopback, link-local, multicast, or otherwise non-public destinations, no DNS-resolve-then-validate, no per-hop re-validation (see [the web capability seam Agent Note](../../../.agents/notes/implemented/architecture/2026-06-24-web-capability-seam.md)). Until it lands, this provider is an SSRF primitive and **must not be enabled** in a deployment that can reach sensitive internal network targets.
+- **Private-network blocking does not pin the validated address into the connection** — see [Private-network blocking](#private-network-blocking) for the DNS-rebinding gap this leaves and the deployments it does not fully protect.
 - **Only textual content decodes** — html/xhtml and `text/*`-plus-JSON/XML families; a missing `Content-Type` or any binary type throws `WEB_UNSUPPORTED_CONTENT_TYPE`, and text-extractable PDF decoding is named deferred work.
 - **Charset comes only from the `Content-Type` header** (UTF-8 default) — an HTML `<meta charset>` declaration is ignored, and a declared-but-unrecognized charset label throws rather than falling back.

@@ -2110,7 +2110,17 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
                 cursor = undefined
                 continue
               }
-              throw error
+              // SESSION_QUERY_ABORTED carries a fixed, safe message and must
+              // reach the outer catch unwrapped so it still routes to
+              // cancelled() there. Every other provider failure (a corrupt
+              // index, a persistence fault, an unclassified rejection) can
+              // carry raw backend detail — a SQLite error string, an index
+              // file path — that a caller of this gateway is not authorized
+              // to see, so it is redacted here at the provider boundary; full
+              // detail still reaches the operator through the log.
+              if (error instanceof SessionQueryError && error.code === 'SESSION_QUERY_ABORTED') throw error
+              ctx.logger.warn(`api-proxy: session search provider failed: ${String(error)}`)
+              throw new Error('session search provider failed')
             }
             if (isAborted(signal)) return cancelled()
             const providerItemCount = page.items.length
@@ -2162,8 +2172,6 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             isAborted(signal)
             || (error instanceof SessionQueryError && error.code === 'SESSION_QUERY_ABORTED')
           ) return cancelled()
-          // XXX: Redact provider details before exposing this gateway beyond
-          // its current single-user local deployment.
           return err(request, {
             code: 'internal',
             message: `session search failed: ${String(error)}`,

@@ -13,6 +13,12 @@
             name: '@deepseek-ai/dsh-web'
           - id: web-fetch-http
             name: '@deepseek-ai/dsh-web-fetch-http'
+            config:
+              # The scenario prompt deliberately fetches the loopback fixture
+              # server below for deterministic, no-external-network content;
+              # the private-network block (on by default) would refuse that
+              # same loopback target the scenario relies on.
+              blockPrivateNetworks: false
           - id: web-fetch-fixture
             name: './web-fetch-fixture-server.mjs'
           - id: tool-web
