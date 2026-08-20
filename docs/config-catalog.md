@@ -387,6 +387,57 @@ Depends on: [`LocalConfig`](#deepseek-aidsh-bash-local)
 
 Source: [`packages/shell/bash-sandbox/src/index.ts:35`](../packages/shell/bash-sandbox/src/index.ts)
 
+<a id="deepseek-aidsh-budget-governor"></a>
+
+## `@deepseek-ai/dsh-budget-governor`
+
+Requires: `subagents` · `agents` · `tokenMeter`
+
+```ts config-catalog
+/**
+ * Runtime configuration; at least one ceiling must be configured. Declared
+ * here (not in `./types.ts`) so it merges with the runtime schema value of
+ * the same name declared immediately below — a re-exported type-only binding
+ * cannot merge with a same-named value export (TS2395/TS2323).
+ */
+export interface Config {
+  /**
+   * Terminate a child run whose session measures above this many tokens
+   * (`ctx.tokenMeter.measure` — the model-visible request surface, not
+   * provider-billed spend). Integer >= 1.
+   */
+  maxChildTokens?: number
+  /** Terminate a child run after this many consecutive failed tool calls. Integer >= 1. */
+  maxConsecutiveToolFailures?: number
+  /** Terminate a child run that keeps re-editing one file (see {@link EditChurnConfig}). */
+  editChurn?: EditChurnConfig
+}
+
+/**
+ * Same-file edit-churn ceiling over a bounded window of a child run's most
+ * recent edit-tool calls. All three fields are required together: the governed
+ * tool set is deployment vocabulary, so no tool list is assumed.
+ */
+export interface EditChurnConfig {
+  /** Edits to one file within the window that terminate the run. Integer >= 2. */
+  maxSameFileEdits: number
+  /** How many recent edit calls the window retains. Integer >= `maxSameFileEdits`. */
+  window: number
+  /** Non-empty, duplicate-free edit tools tracked by the detector. */
+  tools: EditToolSpec[]
+}
+
+/** One model-facing edit tool whose calls participate in churn detection. */
+export interface EditToolSpec {
+  /** Registered tool name exactly as it appears in `tool/call` events. */
+  name: string
+  /** Argument key whose string value is the edited file path (e.g. `file_path`). */
+  pathArgument: string
+}
+```
+
+Source: [`packages/guard/budget-governor/src/index.ts:43`](../packages/guard/budget-governor/src/index.ts)
+
 <a id="deepseek-aidsh-client-connection"></a>
 
 ## `@deepseek-ai/dsh-client-connection`
