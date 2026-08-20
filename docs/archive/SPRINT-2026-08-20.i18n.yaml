@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/archive/SPRINT-2026-08-20.md
+SPRINT-2026-08-20.md: 3ede268785db4a4272d18aa7039f3fcf3adba016
+SPRINT-2026-08-20.zh.md: 7acc5660fea9bbd1060ca1ede8a62dfa97eafd72
