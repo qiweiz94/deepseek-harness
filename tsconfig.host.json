@@ -280,6 +280,7 @@
     { "path": "./packages/plugins/plugin-ast-context" },
     { "path": "./packages/plugins/plugin-budget-governor" },
     { "path": "./packages/plugins/plugin-diagnostic-sifter" },
+    { "path": "./packages/plugins/plugin-doc-sync-automator" },
     { "path": "./packages/plugins/plugin-impacted-tests" },
     { "path": "./packages/plugins/plugin-lsp-references" },
     { "path": "./packages/plugins/plugin-pinned-scratchpad" },

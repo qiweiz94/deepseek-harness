@@ -56,6 +56,7 @@ import Lsp from '@deepseek-ai/dsh-lsp'
 import * as ToolArchGuard from '@deepseek-ai/dsh-plugin-arch-guard'
 import * as ToolAstContext from '@deepseek-ai/dsh-plugin-ast-context'
 import * as ToolDiagnosticSifter from '@deepseek-ai/dsh-plugin-diagnostic-sifter'
+import * as ToolDocSyncAutomator from '@deepseek-ai/dsh-plugin-doc-sync-automator'
 import * as ToolImpactedTests from '@deepseek-ai/dsh-plugin-impacted-tests'
 import * as ToolLspReferences from '@deepseek-ai/dsh-plugin-lsp-references'
 import * as ToolPinnedScratchpad from '@deepseek-ai/dsh-plugin-pinned-scratchpad'
@@ -282,6 +283,18 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'run_diagnostic_check runs the configured typecheck or test binary and returns at most a few root-cause diagnostics: cascading repeats of one defect collapse onto the diagnostic that caused them, passing-test output and out-of-project stack frames are dropped, and the result is bounded to a compact JSON budget.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-plugin-doc-sync-automator',
+    dir: 'plugin-doc-sync-automator',
+    source: 'packages/plugins/plugin-doc-sync-automator/src/index.ts',
+    requires: ['ctx.tools'],
+    writes: ['tool/call', 'tool/result', 'the paired .zh.md mirror and its .i18n.yaml consistency record on disk'],
+    async mount(ctx) {
+      await ctx.plugin(ToolDocSyncAutomator, { root })
+    },
+    note:
+      'sync_bilingual_pair splices a changed section of an English doc into its .zh.md mirror behind a NEEDS-TRANSLATION marker and re-records the pair\'s .i18n.yaml consistency hashes; it never machine-translates, only keeps the pair structurally valid and flags the debt.',
   },
   {
     pkg: '@deepseek-ai/dsh-plugin-impacted-tests',
