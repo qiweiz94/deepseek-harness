@@ -21,6 +21,16 @@ import type {} from '@deepseek-ai/dsh-system-prompt'
 export const name = 'tool-subagent'
 export const inject = ['tools', 'subagents', 'systemPrompt']
 
+/**
+ * Model-facing tool names claimed by live tool-subagent instances, per root
+ * context (unrelated apps in one process — tests — must not see each other's
+ * claims). The claim is made at plugin load, before any provider appears:
+ * without it, two instances waiting on the same provider would collide only
+ * inside the `subagent/provider-added` dispatch, where the duplicate
+ * `tools.register` throw rolls back the provider registration itself.
+ */
+const activeToolNames = new WeakMap<Context, Set<string>>()
+
 /** Prompt order after bounded delegation policy and before child reporting. */
 const SUBAGENT_SECTION_ORDER = 116.5
 
@@ -30,7 +40,7 @@ export interface Config {
   provider: string
   /**
    * Model-facing tool name (default `subagent`). Each loaded instance must use
-   * a distinct name.
+   * a distinct name; a duplicate fails that instance at plugin load.
    */
   toolName?: string
   /**
@@ -187,6 +197,24 @@ export function apply(ctx: Context, config: Config): void {
   const backgroundEnabled = config.enableRunInBackground !== false
   const continuable = (config.backgroundMode ?? 'one-shot') === 'continuable'
   const toolName = config.toolName ?? 'subagent'
+  // Claim the name before any other registration: a duplicate toolName fails
+  // THIS instance at load with an actionable error, leaves the earlier
+  // instance intact, and never reaches a provider-lifecycle dispatch.
+  ctx.effect(() => {
+    let names = activeToolNames.get(ctx.root)
+    if (names === undefined) {
+      names = new Set()
+      activeToolNames.set(ctx.root, names)
+    }
+    if (names.has(toolName)) {
+      throw new Error(
+        `tool-subagent: toolName "${toolName}" is already used by another tool-subagent instance — give each instance a distinct toolName in cordis.yml`,
+      )
+    }
+    names.add(toolName)
+    const claimed = names
+    return () => void claimed.delete(toolName)
+  }, 'tool-subagent.toolName')
   // Mirror provider lifecycle because sibling load order and HMR replacement
   // can change provider availability while this fiber remains active.
   let disposeTool: (() => void) | undefined
@@ -344,11 +372,6 @@ export function apply(ctx: Context, config: Config): void {
   }
 
   // Register listeners before checking presence so no synchronous change is missed.
-  // TODO(subagent-dup-toolname): two waiting one-shot fibers configured with the
-  // same toolName collide when their provider appears, and the duplicate-name
-  // throw rolls back the provider registration. Continuable instances reserve
-  // their prompt-section name during apply() and fail earlier. Add an intent
-  // registry if the late one-shot collision occurs in a shipped composition.
   ctx.on('subagent/provider-added', (provider) => {
     if (provider.name === config.provider && disposeTool === undefined) mount(provider)
   })

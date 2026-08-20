@@ -203,6 +203,37 @@ describe('dsh-tool-subagent', () => {
     expect(text(viaAcp)).toBe('from acp')
   })
 
+  it('a duplicate toolName fails the second instance at plugin load, before its provider appears', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(SubagentRuntime)
+    // Both instances wait on an unregistered provider, so nothing has reached
+    // `tools.register` yet; the name claim must still collide at load.
+    await ctx.plugin(tool, { provider: 'later', toolName: 'dup' })
+    const second = ctx.plugin(tool, { provider: 'later', toolName: 'dup' })
+    await expect(second).rejects.toThrow(/toolName "dup" is already used by another tool-subagent instance/)
+    // The earlier instance is intact and the provider registration is never
+    // rolled back by a late duplicate-name throw: the backend mounts cleanly
+    // and the surviving instance registers its tool.
+    await mock.mountScriptedProvider(ctx, { name: 'later', reply: 'ok' })
+    expect(ctx.subagents.getProvider('later')).toBeDefined()
+    expect(ctx.tools.schemas().some(s => s.name === 'dup')).toBe(true)
+  })
+
+  it('disposal releases the toolName claim so a replacement instance can load', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(SubagentRuntime)
+    await mock.mountScriptedProvider(ctx, { name: 'mock', reply: 'from replacement' })
+    const first = await ctx.plugin(tool, { provider: 'mock' })
+    await first.dispose()
+    await ctx.plugin(tool, { provider: 'mock' })
+    const result = await callSubagent(ctx, { description: 'd', prompt: 'p' })
+    expect(text(result)).toBe('from replacement')
+  })
+
   it('treats an unknown (plugin-added) stop reason as an isError result', async () => {
     // SubagentStopReason is merge-extensible; the tool's stopReasonError default
     // arm must treat an unrecognized terminal reason as a failure, not success.
