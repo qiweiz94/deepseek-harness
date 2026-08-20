@@ -5,7 +5,7 @@ import { delimiter, join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, describe, expect, it, vi } from 'vitest'
 import { PROTOCOL_VERSION } from '@agentclientprotocol/sdk'
-import { runScenario, snapshotSpillRoot, type AgentUnderTest, type InputStep } from '../src/harness.ts'
+import { runScenario, snapshotSpillRoot, waitTimeoutFactor, type AgentUnderTest, type InputStep } from '../src/harness.ts'
 import { launchAcpTestAgent } from '../src/launcher.ts'
 
 const fsControl = vi.hoisted(() => ({ cleanupFailure: undefined as Error | undefined }))
@@ -67,6 +67,33 @@ it('keeps scenario-owned snapshot spill root length stable across platforms', ()
   expect(posix).toMatch(/^\/tmp\/dsh-acp-snap-[0-9a-f]{9}$/)
   expect(windows).toMatch(/^\/t\/dsh-acp-snap-[0-9a-f]{9}$/)
   expect(windows.length + 2).toBe(posix.length)
+})
+
+describe('waitTimeoutFactor', () => {
+  const previous = process.env.DSH_TEST_TIMEOUT_FACTOR
+  afterAll(() => {
+    if (previous === undefined) delete process.env.DSH_TEST_TIMEOUT_FACTOR
+    else process.env.DSH_TEST_TIMEOUT_FACTOR = previous
+  })
+
+  it('defaults to 1 when unset or empty', () => {
+    delete process.env.DSH_TEST_TIMEOUT_FACTOR
+    expect(waitTimeoutFactor()).toBe(1)
+    process.env.DSH_TEST_TIMEOUT_FACTOR = ''
+    expect(waitTimeoutFactor()).toBe(1)
+  })
+
+  it('returns a validly set factor', () => {
+    process.env.DSH_TEST_TIMEOUT_FACTOR = '4'
+    expect(waitTimeoutFactor()).toBe(4)
+  })
+
+  it('rejects a non-numeric or below-1 factor', () => {
+    process.env.DSH_TEST_TIMEOUT_FACTOR = 'not-a-number'
+    expect(() => waitTimeoutFactor()).toThrow(/must be a finite number >= 1/)
+    process.env.DSH_TEST_TIMEOUT_FACTOR = '0.5'
+    expect(() => waitTimeoutFactor()).toThrow(/must be a finite number >= 1/)
+  })
 })
 
 function environmentEcho(rawStdout: string): Record<string, unknown> {
