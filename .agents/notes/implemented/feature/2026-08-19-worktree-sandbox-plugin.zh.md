@@ -10,7 +10,7 @@
 
 ## 决策
 
-**新增面向模型的插件 `@deepseek-ai/dsh-plugin-worktree-sandbox`，注册一个 `sandbox_exec` 工具**，在隔离的 git worktree 中运行命令。worktree 通过 `git worktree add --detach` 从配置的基准 ref（默认 `HEAD`）在 `<cwd>/.dsh/worktrees/subagent-<id>` 创建，与仓库共享对象库，但拥有独立的工作树与索引。
+**新增面向模型的插件 `@deepseek-ai/dsh-plugin-worktree-sandbox`，注册一个 `sandbox_exec` 工具**，在隔离的 git worktree 中运行命令。worktree 通过 `git worktree add --detach` 从配置的基准 ref（默认 `HEAD`）在 `<cwd>/.dsh/worktrees/subagent-<id>` 创建，与仓库共享对象库，但拥有独立的工作树与索引。`id` 在任何 worktree 操作前按 `[a-zA-Z0-9_-]`（最多 64 位）校验，因此模型提供的 id 无法越出试用根目录。
 
 **试运行是可丢弃的。** 默认在调用后以 `git worktree remove --force` 移除 worktree，丢弃试运行的未提交改动；主工作树与分支永不被触碰。`cleanup: false` 会保留 worktree，使后续使用相同 `id` 的调用继续同一试运行，diff 会累积。
 
