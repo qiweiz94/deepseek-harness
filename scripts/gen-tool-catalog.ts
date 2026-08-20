@@ -53,6 +53,7 @@ import * as ToolPty from '@deepseek-ai/dsh-tool-terminal'
 import * as ToolGoal from '@deepseek-ai/dsh-tool-goal'
 import * as ToolSchedule from '@deepseek-ai/dsh-schedule'
 import Lsp from '@deepseek-ai/dsh-lsp'
+import * as ToolArchGuard from '@deepseek-ai/dsh-plugin-arch-guard'
 import * as ToolAstContext from '@deepseek-ai/dsh-plugin-ast-context'
 import * as ToolDiagnosticSifter from '@deepseek-ai/dsh-plugin-diagnostic-sifter'
 import * as ToolImpactedTests from '@deepseek-ai/dsh-plugin-impacted-tests'
@@ -243,6 +244,19 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'exit_plan_mode stays in the model-facing schema while planning is inactive so transitions add no tool-catalog churn on top of the plan-policy change. Its execute path rejects calls outside plan mode; in plan mode it presents the plan over the user-questions seam (approve / keep planning with feedback), and approval logs plan mode inactive at the step boundary.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-plugin-arch-guard',
+    dir: 'plugin-arch-guard',
+    source: 'packages/plugins/plugin-arch-guard/src/index.ts',
+    requires: ['ctx.tools'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(ToolArchGuard, { root })
+    },
+    note:
+      'check_module_boundary scans the workspace package graph from config.root once at mount and answers each call as a '
+      + 'pure function of that graph; a package added after mount is not visible until the next mount.',
   },
   {
     pkg: '@deepseek-ai/dsh-plugin-ast-context',

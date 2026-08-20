@@ -276,6 +276,7 @@
     { "path": "./packages/guard/repeat-tool-reminder" },
     { "path": "./packages/extensions/cordis-host-runner" },
     { "path": "./packages/extensions/tool-cordis" },
+    { "path": "./packages/plugins/plugin-arch-guard" },
     { "path": "./packages/plugins/plugin-ast-context" },
     { "path": "./packages/plugins/plugin-budget-governor" },
     { "path": "./packages/plugins/plugin-diagnostic-sifter" },
