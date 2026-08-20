@@ -1,14 +1,24 @@
 /**
- * Foreground run settlement for the routing delegation tool: collect and
- * release one one-shot subagent run, mapping a non-`completed` stop reason to
- * a tool error that still preserves the child's partial output.
- * @module @deepseek-ai/dsh-plugin-subagent-router/foreground
+ * Settlement of one ONE-SHOT subagent run into a foreground tool result: the
+ * shared surface of the delegation tool Consumers (`dsh-tool-subagent` and
+ * `dsh-plugin-subagent-router`), which block on the child and return its
+ * output as the tool value. A non-`completed` stop reason becomes a tool
+ * error that still preserves the child's partial output. The background-Task
+ * counterpart is `./run-settlement.ts`.
+ *
+ * @module @deepseek-ai/dsh-subagent/foreground-settlement
  */
 
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { JsonValue } from '@deepseek-ai/dsh-session'
-import type { SubagentResult, SubagentRun } from '@deepseek-ai/dsh-subagent'
-import type { ForegroundToolResult } from './types.ts'
+import type { SubagentResult, SubagentRun } from './types.ts'
+
+/** The foreground delegation tool's result value. */
+export interface ForegroundToolResult {
+  readonly kind: 'foreground'
+  readonly runId: SubagentRun['id']
+  readonly output: JsonValue[]
+}
 
 /** A non-`completed` stop reason means the child did not finish cleanly. */
 function stopReasonError(result: SubagentResult): string | undefined {

@@ -93,12 +93,7 @@ export interface ScannedFile {
 export function scanSlotFiles(scanRoot: string, patterns: readonly string[]): ScannedFile[] {
   const out: ScannedFile[] = []
   const names = new Map<string, string>()
-  const rels = [...new Set(globSync(patterns as string[], { cwd: scanRoot })
-    .map(path => path.split(sep).join('/')))].sort()
-  for (const rel of rels) {
-    const abs = resolve(scanRoot, rel)
-    const text = readText(abs)
-    if (text === undefined) continue
+  for (const { rel, abs, text } of readMatchedFiles(scanRoot, patterns)) {
     if (!MERGE_HEAD.test(text) && !REGISTER_HEAD.test(text)) continue
     out.push({
       rel,
@@ -107,6 +102,26 @@ export function scanSlotFiles(scanRoot: string, patterns: readonly string[]): Sc
     })
   }
   return out
+}
+
+/**
+ * Glob, `/`-normalize, deduplicate, and sort the matched paths, then yield
+ * each surviving file with its text. A file that a concurrent test suite
+ * removed mid-scan (e.g. oxlint-contract probe files created and deleted on
+ * the fly) is skipped rather than failing the scan.
+ * @param scanRoot - repository root the patterns resolve against.
+ * @param patterns - glob(s) selecting the TypeScript/TSX files to read.
+ * @returns the readable matches in path order.
+ */
+function* readMatchedFiles(scanRoot: string, patterns: readonly string[]): Generator<{ rel: string; abs: string; text: string }> {
+  const rels = [...new Set(globSync(patterns as string[], { cwd: scanRoot })
+    .map(path => path.split(sep).join('/')))].sort()
+  for (const rel of rels) {
+    const abs = resolve(scanRoot, rel)
+    const text = readText(abs)
+    if (text === undefined) continue
+    yield { rel, abs, text }
+  }
 }
 
 /**
@@ -136,12 +151,7 @@ function readText(path: string): string | undefined {
 export function indexExportedTypes(scanRoot: string, patterns: readonly string[]): Map<string, TypeDeclaration> {
   const index = new Map<string, TypeDeclaration>()
   const ambiguous = new Set<string>()
-  const rels = [...new Set(globSync(patterns as string[], { cwd: scanRoot })
-    .map(path => path.split(sep).join('/')))].sort()
-  for (const rel of rels) {
-    const abs = resolve(scanRoot, rel)
-    const text = readText(abs)
-    if (text === undefined) continue
+  for (const { rel, abs, text } of readMatchedFiles(scanRoot, patterns)) {
     const sf = ts.createSourceFile(abs, text, ts.ScriptTarget.Latest, true, scriptKindOf(rel))
     for (const statement of sf.statements) {
       if (!ts.isInterfaceDeclaration(statement) && !ts.isTypeAliasDeclaration(statement)) continue
