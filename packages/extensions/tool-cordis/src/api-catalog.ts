@@ -1613,7 +1613,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Deliver selected content from one live continuable child to its durable direct parent. The child is the authority credential; callers cannot name a recipient. Reporting does not conclude the child\'s turn or Activation.',
         parameters: [{ name: 'child', description: 'exact live reporting child.' }, { name: 'content', description: 'selected model-facing content.' }, { name: 'options', description: 'parent scheduling and pre-acceptance cancellation.' }],
         returns: 'the stable identity of the parent-accepted message.',
-        throws: ['when continuation services are unavailable, sender authorization fails, or the direct parent is not live.'],
+        throws: ['when continuation services are unavailable, sender authorization fails, the content does not survive the durable-log JSON boundary, or the direct parent is not live.'],
       },
       {
         signature: 'registerContinuableSetup(contribution: ContinuableSetupContribution): () => void',
