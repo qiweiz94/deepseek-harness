@@ -1449,6 +1449,42 @@ export interface Config {
 
 来源：[`packages/plugins/plugin-ast-context/src/index.ts:52`](../packages/plugins/plugin-ast-context/src/index.ts)
 
+<a id="deepseek-aidsh-plugin-diagnostic-sifter"></a>
+
+## `@deepseek-ai/dsh-plugin-diagnostic-sifter`
+
+依赖：`tools` · `subprocess`
+
+```ts config-catalog
+/** Runtime configuration for the diagnostic tool. */
+export interface Config {
+  /** Directory the checks run in (the repository root); defaults to the process cwd. */
+  cwd?: string
+  /**
+   * Typecheck argv (executable first); defaults to
+   * `['node_modules/.bin/tsc', '-b', '--pretty', 'false']` — a `cwd`-relative
+   * executable path the OS resolves directly, like {@link vitestBin}, never a
+   * bare name that depends on an ambient `PATH` possibly resolving to an
+   * unrelated global install; `--pretty false` is the sifter's input-format
+   * contract with `siftTypecheck` (its `TSC_LOCATED`/`TSC_GLOBAL` patterns
+   * match only the non-pretty, single-line diagnostic layout), not a
+   * deployment-varying choice, so it stays in the default rather than
+   * becoming independently configurable. A `targetPath` argument is appended.
+   */
+  tscArgs?: string[]
+  /** Vitest executable; defaults to `node_modules/.bin/vitest` (resolved by the OS against `cwd`). */
+  vitestBin?: string
+  /** Output-retention envelope in bytes; defaults to 15_000 (15 KB). */
+  maxOutputBytes?: number
+  /** Per-check timeout in milliseconds; defaults to 120_000. */
+  timeoutMs?: number
+  /** Model-facing tool name; defaults to `run_diagnostic_check`. */
+  toolName?: string
+}
+```
+
+来源：[`packages/plugins/plugin-diagnostic-sifter/src/index.ts:25`](../packages/plugins/plugin-diagnostic-sifter/src/index.ts)
+
 <a id="deepseek-aidsh-plugin-pinned-scratchpad"></a>
 
 ## `@deepseek-ai/dsh-plugin-pinned-scratchpad`
