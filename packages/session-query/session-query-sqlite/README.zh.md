@@ -51,7 +51,7 @@
 
 ## 已知限制与暂缓事项
 
-- **无调用方授权**：这是上下文范围内的可信服务；模型工具或 UI 必须强制执行自己的访问策略。
+- **受信任调用方边界**：继承自 Service Definition 包：该后端自身不做任何按调用方的授权，当前每一个消费方都会在各自的边界上先做好访问授权，才会把内容暴露到自身进程之外（完整说明见 [`dsh-session-query` 的相应条目](../session-query/README.md#known-limitations-and-deferred-work)）。
 - **同步查询执行**：`DatabaseSync` 在 MATCH 执行期间会阻塞 JavaScript 线程，且无法中断已运行的语句。
 - **Token 召回，而非任意子字符串**：`unicode61` tokenizer 不会匹配更大 token 中的子字符串；对字面扫描使用 `filterEvents()`。
 - **单一所有者的派生索引**：每个索引路径必须仅归一个进程中的一个服务所有；不支持外部写入者和多进程共享。
