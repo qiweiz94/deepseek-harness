@@ -545,6 +545,12 @@ importers:
       '@deepseek-ai/dsh-plugin-ast-context':
         specifier: workspace:*
         version: link:../packages/plugins/plugin-ast-context
+      '@deepseek-ai/dsh-plugin-subagent-router':
+        specifier: workspace:*
+        version: link:../packages/plugins/plugin-subagent-router
+      '@deepseek-ai/dsh-plugin-worktree-sandbox':
+        specifier: workspace:*
+        version: link:../packages/plugins/plugin-worktree-sandbox
       '@deepseek-ai/dsh-pwsh-local':
         specifier: workspace:*
         version: link:../packages/shell/pwsh-local
