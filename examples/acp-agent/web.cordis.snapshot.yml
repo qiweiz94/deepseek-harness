@@ -14,6 +14,11 @@
             name: '@deepseek-ai/dsh-web'
           - id: web-fetch-http
             name: '@deepseek-ai/dsh-web-fetch-http'
+            config:
+              # See web.cordis.yml: the scenario prompt deliberately fetches
+              # the loopback fixture server, which the private-network block
+              # (on by default) would otherwise refuse.
+              blockPrivateNetworks: false
           - id: web-fetch-fixture
             name: './web-fetch-fixture-server.mjs'
           - id: tool-web

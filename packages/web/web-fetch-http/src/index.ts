@@ -44,6 +44,13 @@ export interface Config {
   maxRedirects?: number
   /** `User-Agent` header sent on every request. */
   userAgent?: string
+  /**
+   * Refuse a destination that resolves to a private, loopback, link-local, or
+   * otherwise non-globally-routable address. Defaults to `true`; disable only
+   * for a deployment that deliberately needs this provider to reach internal
+   * network targets.
+   */
+  blockPrivateNetworks?: boolean
 }
 
 export const Config: z<Config> = z.object({
@@ -53,6 +60,7 @@ export const Config: z<Config> = z.object({
   timeoutMs: z.number().default(30_000),
   maxRedirects: z.number().default(5),
   userAgent: z.string().default(DEFAULT_USER_AGENT),
+  blockPrivateNetworks: z.boolean().default(true),
 })
 
 /** Complete config after schemastery applies every field default. */
@@ -96,6 +104,7 @@ export function apply(ctx: Context, config: Config): void {
     timeoutMs: resolved.timeoutMs,
     maxRedirects: resolved.maxRedirects,
     userAgent: resolved.userAgent,
+    blockPrivateNetworks: resolved.blockPrivateNetworks,
   }
   ctx.web.registerFetchProvider(new HttpFetchProvider(limits))
 }

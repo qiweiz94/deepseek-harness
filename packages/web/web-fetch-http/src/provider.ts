@@ -1,18 +1,17 @@
 /**
- * Safe HTTP(S) retrieval for `ctx.web`: validates URLs, follows only same-origin redirects,
- * enforces time and size limits, classifies and decodes text, and leaves presentation to
- * `@deepseek-ai/dsh-tool-web`. Requests carry no browser cookies or ambient credentials.
- *
- * Private-network and SSRF protection is not implemented; do not enable this provider where
- * it can reach sensitive internal targets.
+ * Safe HTTP(S) retrieval for `ctx.web`: validates URLs, blocks private-network destinations,
+ * follows only same-origin redirects, enforces time and size limits, classifies and decodes
+ * text, and leaves presentation to `@deepseek-ai/dsh-tool-web`. Requests carry no browser
+ * cookies or ambient credentials.
  * @module @deepseek-ai/dsh-web-fetch-http/provider
  */
 
+import { lookup } from 'node:dns/promises'
 import { WebError } from '@deepseek-ai/dsh-web'
 import type { WebFetchBody, WebFetchProvider, WebFetchRequest, WebFetchResult } from '@deepseek-ai/dsh-web'
 import { codePointLength, truncateCodePoints } from '@deepseek-ai/dsh-output-retention'
 import { deadline, timeoutOf } from '@deepseek-ai/dsh-timeout'
-import { classifyContentType, decoderForCharset, isSameOrigin, parseCharset, validateFetchUrl } from './policy.ts'
+import { classifyContentType, decoderForCharset, isPrivateNetworkAddress, isSameOrigin, literalAddressOf, parseCharset, validateFetchUrl } from './policy.ts'
 
 /** Resolved provider limits (the plugin's schemastery Config supplies defaults). */
 export interface HttpFetchLimits {
@@ -28,6 +27,12 @@ export interface HttpFetchLimits {
   maxRedirects: number
   /** `User-Agent` header sent on every request. */
   userAgent: string
+  /**
+   * Refuse a destination that resolves to a private, loopback, link-local, or
+   * otherwise non-globally-routable address, checked before the initial
+   * request and again before following each redirect hop.
+   */
+  blockPrivateNetworks: boolean
 }
 
 /** Stable id this provider registers under. */
@@ -56,6 +61,7 @@ export class HttpFetchProvider implements WebFetchProvider {
   /** Follow same-origin redirects up to the hop cap, then read the final response. */
   private async followAndRead(initialUrl: string, signal: AbortSignal): Promise<WebFetchResult> {
     let currentUrl = validateFetchUrl(initialUrl, this.limits.maxUrlLength)
+    await this.assertPublicDestination(currentUrl)
     let redirectsFollowed = 0
 
     for (;;) {
@@ -87,6 +93,10 @@ export class HttpFetchProvider implements WebFetchProvider {
               'WEB_REDIRECT_BLOCKED',
             )
           }
+          // Re-checked per hop, not just on the initial URL: DNS for a
+          // same-origin hostname can rebind to a private address between
+          // hops even though the hostname string itself never changes.
+          await this.assertPublicDestination(validatedTarget)
         } catch (error: unknown) {
           await response.body?.cancel()
           throw error
@@ -98,6 +108,38 @@ export class HttpFetchProvider implements WebFetchProvider {
       }
 
       return await this.readBody(response, currentUrl, signal)
+    }
+  }
+
+  /**
+   * Refuse `url` when it resolves to a private-network destination, unless
+   * the provider is configured to allow them. A literal IP hostname is
+   * checked directly; a DNS name is resolved and every returned address is
+   * checked, so a name with a mix of public and private records still
+   * refuses. Not a defense against DNS rebinding between this check and the
+   * connection `fetch()` makes moments later (see the package README).
+   */
+  private async assertPublicDestination(url: URL): Promise<void> {
+    if (!this.limits.blockPrivateNetworks) return
+    const literal = literalAddressOf(url.hostname)
+    const candidates = literal !== undefined ? [literal] : await this.resolveHostname(url.hostname)
+    for (const candidate of candidates) {
+      if (isPrivateNetworkAddress(candidate.address, candidate.family)) {
+        throw new WebError(
+          `destination "${candidate.address}" for host "${url.hostname}" is a private, loopback, link-local, or otherwise non-public network address`,
+          'WEB_BLOCKED_PRIVATE_NETWORK',
+        )
+      }
+    }
+  }
+
+  /** Resolve every address a hostname's DNS records carry, for {@link assertPublicDestination}. */
+  private async resolveHostname(hostname: string): Promise<Array<{ address: string; family: 4 | 6 }>> {
+    try {
+      const records = await lookup(hostname, { all: true, order: 'verbatim' })
+      return records.map(record => ({ address: record.address, family: record.family === 6 ? 6 : 4 }))
+    } catch (error: unknown) {
+      throw new WebError(`could not resolve host "${hostname}": ${String(error)}`, 'WEB_PROVIDER_ERROR', { cause: error })
     }
   }
 
