@@ -54,6 +54,7 @@ import * as ToolGoal from '@deepseek-ai/dsh-tool-goal'
 import * as ToolSchedule from '@deepseek-ai/dsh-schedule'
 import Lsp from '@deepseek-ai/dsh-lsp'
 import * as ToolAstContext from '@deepseek-ai/dsh-plugin-ast-context'
+import * as ToolPinnedScratchpad from '@deepseek-ai/dsh-plugin-pinned-scratchpad'
 import * as ToolSubagentRouter from '@deepseek-ai/dsh-plugin-subagent-router'
 import * as ToolWorktreeSandbox from '@deepseek-ai/dsh-plugin-worktree-sandbox'
 import * as ToolLsp from '@deepseek-ai/dsh-tool-lsp'
@@ -237,6 +238,18 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'get_file_outline reads a repo-relative source file and returns its top-level TypeScript symbols; a parse failure or missing file surfaces as an error result rather than a partial outline.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-plugin-pinned-scratchpad',
+    dir: 'plugin-pinned-scratchpad',
+    source: 'packages/plugins/plugin-pinned-scratchpad/src/index.ts',
+    requires: ['ctx.tools', 'ctx.systemPrompt'],
+    writes: ['tool/call', 'tool/result', 'the pinned <agent_scratchpad> prompt section on every assembly'],
+    async mount(ctx) {
+      await ctx.plugin(ToolPinnedScratchpad)
+    },
+    note:
+      'scratchpad_update pins a short key/value note the model maintains itself; the pinned block is re-rendered into the system prompt by a section provider on every assembly (never into the message log), so it is unaffected by compaction. The whole block is capped at a token budget and the least recently written entries are dropped first behind a truncation marker.',
   },
   {
     pkg: '@deepseek-ai/dsh-plugin-subagent-router',
