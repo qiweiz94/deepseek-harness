@@ -27,6 +27,12 @@ const COMPILER_OPTIONS = {
   strict: true,
   allowImportingTsExtensions: true,
   noEmit: true,
+  // `pkg-a` imports `shared` by PACKAGE NAME, resolvable only through this map —
+  // exactly how real workspace sources import each other. It pins that the
+  // options handed to the language service keep their `paths` base directory:
+  // without it the host answers same-package-only and every cross-package claim
+  // this plugin makes becomes false, silently.
+  paths: { '@fixture/shared': ['./shared/src/types.ts'] },
 }
 
 async function project(dir: string, references: string[]): Promise<void> {
@@ -52,7 +58,7 @@ export async function buildFixture(): Promise<Fixture> {
   await project(join(root, 'pkg-a'), ['../shared'])
   await writeFile(
     join(root, 'pkg-a', 'src', 'index.ts'),
-    'import type { Widget } from \'../../shared/src/types.ts\'\n'
+    'import type { Widget } from \'@fixture/shared\'\n'
     + '\n'
     + 'export function helper(widget: Widget): string {\n'
     + '  return widget.id\n'

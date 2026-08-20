@@ -15,8 +15,6 @@ import type { CodeLocation, DefinitionResult, ReferencesResult } from './types.t
 export const name = 'plugin-lsp-references'
 export const inject = ['tools']
 
-export { loadProjectFileSet, readSnapshot, ReferenceService, sortLocations } from './service.ts'
-
 /** Author-facing schema for one resolved source position, shared by both output schemas. */
 const LOCATION_SCHEMA = {
   type: 'object',
