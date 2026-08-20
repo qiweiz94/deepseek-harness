@@ -54,6 +54,7 @@ import * as ToolGoal from '@deepseek-ai/dsh-tool-goal'
 import * as ToolSchedule from '@deepseek-ai/dsh-schedule'
 import Lsp from '@deepseek-ai/dsh-lsp'
 import * as ToolAstContext from '@deepseek-ai/dsh-plugin-ast-context'
+import * as ToolLspReferences from '@deepseek-ai/dsh-plugin-lsp-references'
 import * as ToolSubagentRouter from '@deepseek-ai/dsh-plugin-subagent-router'
 import * as ToolWorktreeSandbox from '@deepseek-ai/dsh-plugin-worktree-sandbox'
 import * as ToolLsp from '@deepseek-ai/dsh-tool-lsp'
@@ -237,6 +238,18 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'get_file_outline reads a repo-relative source file and returns its top-level TypeScript symbols; a parse failure or missing file surfaces as an error result rather than a partial outline.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-plugin-lsp-references',
+    dir: 'plugin-lsp-references',
+    source: 'packages/plugins/plugin-lsp-references/src/index.ts',
+    requires: ['ctx.tools'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(ToolLspReferences)
+    },
+    note:
+      'find_references and get_definition answer from an in-process TypeScript language service over the transitive file set of the configured tsconfig (default tsconfig.host.json), so a reference in another package is found; the service is built on the first call and released with the fiber. Positions are 1-based line and 1-based UTF-16 character; an off-symbol position returns an empty result rather than an error, while a file outside the project file set is an error result.',
   },
   {
     pkg: '@deepseek-ai/dsh-plugin-subagent-router',
