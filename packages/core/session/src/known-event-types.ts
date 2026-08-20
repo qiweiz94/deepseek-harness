@@ -43,6 +43,7 @@ export const KNOWN_SESSION_EVENT_TYPES: ReadonlySet<string> = new Set([
   'request/header',
   'sandbox/mode',
   'schedule/change',
+  'scratchpad/write',
   'session/end-seed',
   'session/title',
   'session/title-llm-request',

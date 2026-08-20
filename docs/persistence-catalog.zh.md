@@ -631,6 +631,27 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 来源：[`packages/schedule/schedule/src/types.ts:219`](../packages/schedule/schedule/src/types.ts)
 
+### `scratchpad/*`
+
+<a id="scratchpadwrite--log-only"></a>
+
+#### `scratchpad/write` — log-only
+
+```ts persistence-catalog
+/**
+ * Whole-store scratchpad snapshot; latest write wins on replay. Log-only
+ * (never derived history), but model-visible: the `scratchpad:pinned`
+ * prompt section renders the latest snapshot into every request, so the
+ * event is required-on-read and never carries the envelope's `ignorable`
+ * marker — a reader that does not know this type must refuse the log
+ * rather than silently drop pinned state.
+ * @param data - the complete replacement entry list, in insertion order.
+ */
+'scratchpad/write': { entries: ScratchpadEntry[] }
+```
+
+来源：[`packages/plugins/plugin-pinned-scratchpad/src/types.ts:37`](../packages/plugins/plugin-pinned-scratchpad/src/types.ts)
+
 ### `session/*`
 
 <a id="sessionend-seed--log-only"></a>

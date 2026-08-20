@@ -18,6 +18,7 @@
 | 工具包 | 模型可见名称 | 依赖 | 写入／影响 | 随产品发布的别名 | 部署说明 |
 | --- | --- | --- | --- | --- | --- |
 | `@deepseek-ai/dsh-plugin-ast-context` | `get_directory_outline`, `get_file_outline` | `ctx.tools` | `tool/call`、`tool/result` | - | get_file_outline 读取仓库相对路径的源文件并返回其顶层 TypeScript 符号；解析失败或文件缺失以错误结果呈现，而不是部分大纲。 |
+| `@deepseek-ai/dsh-plugin-pinned-scratchpad` | `scratchpad_update` | `ctx.tools`、`ctx.systemPrompt` | `tool/call`、`tool/result`、`scratchpad/write` | - | scratchpad_update 在调用代理的会话级存储中插入、替换或删除一条键值项；scratchpad:pinned 提示词区块把当前存储渲染进每次请求，作为有界的 <agent_scratchpad> 块，在上下文压缩后仍然存在。 |
 | `@deepseek-ai/dsh-plugin-subagent-router` | `subagent` | `ctx.tools`、`ctx.subagents` | `tool/call`、`tool/result`、`child session events through the chosen provider` | - | 单个委托入口把任务路由到由配置所拥有的策略选出的具备能力的子代理 provider；模型只描述任务（description + prompt），从不指名 provider 或传输方式。 |
 | `@deepseek-ai/dsh-plugin-worktree-sandbox` | `sandbox_exec` | `ctx.tools`、`ctx.subprocess` | `tool/call`、`tool/result`、`.dsh/worktrees` 下的一次性 git worktree | - | sandbox_exec 在隔离的 detached git worktree 中运行命令，并返回有界的结构化 diff 与退出状态；调用后移除该 worktree。 |
 | `@deepseek-ai/dsh-tool-ask-user` | `ask_user_question` | `ctx.tools`、`ctx.userQuestions` | `tool/call`、`tool/result after a UI/provider answers the question` | - | ask_user_question 会暂停工具调用，直到当前 UI 提供方返回人类答案。 |
@@ -230,6 +231,45 @@ Source: [`packages/plugins/plugin-ast-context/src/index.ts`](../packages/plugins
 来源：[`packages/plugins/plugin-ast-context/src/index.ts`](../packages/plugins/plugin-ast-context/src/index.ts)
 
 get_file_outline 读取仓库相对路径的源文件并返回其顶层 TypeScript 符号；解析失败或文件缺失以错误结果呈现，而不是部分大纲。
+
+<a id="deepseek-aidsh-plugin-pinned-scratchpad"></a>
+
+## `@deepseek-ai/dsh-plugin-pinned-scratchpad`
+
+### `scratchpad_update`
+
+把一条事实钉到你的 scratchpad，或删除一条。scratchpad 作为系统提示词的 <agent_scratchpad> 块在每次请求中渲染，并在上下文压缩后仍然存在，因此把绝不能丢的少数事实放在这里：当前目标、关键决定、文件路径、id。字符串值在 key 下新增或替换条目；null 删除它。整个渲染块受字节预算限制——会溢出的更新失败并报告用量，所以保持条目简短并删掉过时项。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "key": {
+      "type": "string",
+      "description": "Entry name — short and single-line. An existing key is replaced or deleted; a new key is appended."
+    },
+    "value": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The fact to pin under key, or null to delete the entry."
+    }
+  },
+  "required": [
+    "key",
+    "value"
+  ]
+}
+```
+
+来源：[`packages/plugins/plugin-pinned-scratchpad/src/index.ts`](../packages/plugins/plugin-pinned-scratchpad/src/index.ts)
+
+scratchpad_update 在调用代理的会话级存储中插入、替换或删除一条键值项；scratchpad:pinned 提示词区块把当前存储渲染进每次请求，作为有界的 <agent_scratchpad> 块，在上下文压缩后仍然存在。
 
 <a id="deepseek-aidsh-plugin-subagent-router"></a>
 
