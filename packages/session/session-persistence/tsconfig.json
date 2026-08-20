@@ -21,6 +21,9 @@
       "path": "../../core/session"
     },
     {
+      "path": "../session-retention"
+    },
+    {
       "path": "../../runtime-diagnostics/invariants"
     }
   ]

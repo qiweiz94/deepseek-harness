@@ -10,7 +10,7 @@
 
 import { createHash, randomBytes } from 'node:crypto'
 import { mkdtempSync } from 'node:fs'
-import { mkdir, open } from 'node:fs/promises'
+import { mkdir, open, readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
@@ -73,6 +73,45 @@ export function encodeSegment(raw: string): string {
 export function sessionDir(root: string, sessionId: string): string {
   const hash = createHash('sha256').update(sessionId).digest('hex').slice(0, 12)
   return join(root, `session-${hash}`)
+}
+
+/** One session's spill directory and its current entry count. */
+export interface SpillDirListing {
+  /** The absolute session-scoped spill directory. */
+  dir: string
+  /** Number of directory entries currently inside it. */
+  entries: number
+}
+
+/**
+ * Observe a session's spill directory without mutating it.
+ * @param root The spill root directory.
+ * @param sessionId The owning session id.
+ * @returns The directory and its entry count, or undefined when the session has no spill directory.
+ */
+export async function listSpillDir(root: string, sessionId: string): Promise<SpillDirListing | undefined> {
+  const dir = sessionDir(root, sessionId)
+  try {
+    const entries = await readdir(dir)
+    return { dir, entries: entries.length }
+  } catch (error) {
+    // Only ENOENT means "no spills for this session"; surface every other I/O failure.
+    if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') return undefined
+    throw error
+  }
+}
+
+/**
+ * Remove a session's spill directory and everything inside it.
+ * @param root The spill root directory.
+ * @param sessionId The owning session id.
+ * @returns The removed directory's listing, or undefined when no directory existed.
+ */
+export async function removeSpillDir(root: string, sessionId: string): Promise<SpillDirListing | undefined> {
+  const listing = await listSpillDir(root, sessionId)
+  if (listing === undefined) return undefined
+  await rm(listing.dir, { recursive: true, force: true })
+  return listing
 }
 
 /** Options for {@link saveTextFile} — the resolved root and the request fields the store needs. */

@@ -6,6 +6,7 @@ import z from '@deepseek-ai/schemastery'
 import { AttachmentStore } from '@deepseek-ai/dsh-attachment'
 import type { ImageAttachmentLimits, ImageAttachmentRef, SaveImageAttachment, StoredImageAttachment } from '@deepseek-ai/dsh-attachment'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
+import type { RetentionParticipant } from '@deepseek-ai/dsh-session-retention'
 import { readImageFile, saveImageFile, validateImageFile } from './store.ts'
 
 export { detectImage } from './image.ts'
@@ -19,6 +20,27 @@ export const DEFAULT_MAX_IMAGES_PER_MESSAGE = 20
 export const DEFAULT_MAX_MESSAGE_IMAGE_BYTES = 100 * 1024 * 1024
 /** Default maximum intrinsic pixels for one image. */
 export const DEFAULT_MAX_IMAGE_PIXELS = 40_000_000
+
+/**
+ * Why a session deletion leaves attachment objects in place: objects are
+ * content-addressed and deduplicated, so resumed and forked sessions may share
+ * them, and single-session evidence cannot prove an object unreferenced.
+ */
+export const ATTACHMENT_RETAINS_REASON
+  = 'content-addressed attachment objects may be shared by resumed or forked sessions; reference-aware garbage collection is deferred'
+
+/**
+ * This store's registered retention participant. Content-addressed objects
+ * are always retained, never deleted: a deleted shared object would corrupt
+ * other sessions' replay.
+ */
+export function attachmentRetentionParticipant(): RetentionParticipant {
+  return {
+    store: 'attachment-local',
+    plan: () => Promise.resolve({ kind: 'retains', reason: ATTACHMENT_RETAINS_REASON }),
+    deleteSession: () => Promise.resolve({ kind: 'retained', reason: ATTACHMENT_RETAINS_REASON }),
+  }
+}
 
 /** Local attachment backend configuration. */
 export interface Config {
@@ -50,6 +72,33 @@ export class LocalAttachmentStore extends AttachmentStore {
 
   constructor(ctx: Context, config: Config) {
     super(ctx)
+    // Retention is an optional sibling, attached reactively (arrival-order
+    // independent, like `ctx.inject`) but WITHOUT `ctx.plugin`/`ctx.inject`:
+    // this package's own suite-wide test harness auto-mounts a competing
+    // `attachments` fixture on the first `ctx.plugin`-family call made
+    // anywhere on a test root (`scripts/test-invariants.ts`), which would
+    // deadlock this registration's own callback. `internal/service` plus
+    // `ctx.get` gives the same "attach once, whenever available" behavior
+    // without routing through the intercepted call.
+    ctx.effect(function* () {
+      let dispose: (() => void) | undefined
+      const attach = (): void => {
+        if (dispose !== undefined) return
+        const runtime = ctx.get('sessionRetention')
+        if (runtime === undefined) return
+        dispose = runtime.register(attachmentRetentionParticipant())
+      }
+      attach()
+      // Deferred to a microtask: `internal/service` can fire re-entrantly
+      // from INSIDE another service's own constructor (via `ctx.provide`),
+      // before that constructor's field initializers (e.g. a registry Map)
+      // have run. A microtask always runs after the triggering constructor
+      // call returns.
+      const off = ctx.on('internal/service', (name: string) => {
+        if (name === 'sessionRetention') queueMicrotask(attach)
+      })
+      yield () => { off(); dispose?.() }
+    }, 'attachment-local.retention')
     this.root = resolve(join(resolveDshHome(config.dshHome), 'attachments', 'v1'))
     this.imageLimits = Object.freeze({
       maxImageBytes: config.maxImageBytes ?? DEFAULT_MAX_IMAGE_BYTES,

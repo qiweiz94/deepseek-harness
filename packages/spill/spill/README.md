@@ -38,5 +38,5 @@ No direct invalidation; the named consumer owns any request-prefix changes.
 
 ## Known Limitations and Deferred Work
 
-- **The seam has no retrieval or deletion API** — consumers can only render the backend's locator and guidance; lifecycle and access semantics remain backend-specific.
+- **The seam has no retrieval or deletion API of its own** — consumers can only render the backend's locator and guidance; lifecycle and access semantics remain backend-specific. A backend may separately register with [`dsh-session-retention`](../../session/session-retention) to support session deletion (as `dsh-spill-local` does); that seam, not `SpillStore`, owns deletion.
 - **Storage is not access control** — `SpillOwner` namespaces writes but does not authorize reads of a locator; each backend and retrieval consumer must enforce its own boundary.

@@ -4,7 +4,9 @@
     "rootDir": "src",
     "outDir": "lib/types"
   },
-  "include": ["src"],
+  "include": [
+    "src"
+  ],
   "references": [
     {
       "path": "../../../vendor/cosmokit"
@@ -13,13 +15,7 @@
       "path": "../../../vendor/cordis"
     },
     {
-      "path": "../../../vendor/schemastery"
-    },
-    {
-      "path": "../spill"
-    },
-    {
-      "path": "../../session/session-retention"
+      "path": "../../core/session"
     },
     {
       "path": "../../runtime-diagnostics/invariants"
