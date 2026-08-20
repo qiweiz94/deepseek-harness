@@ -153,7 +153,9 @@ export function deepEqualJson(a: unknown, b: unknown): boolean {
   const right = b as Record<string, unknown>
   const keys = Object.keys(left)
   if (keys.length !== Object.keys(right).length) return false
-  return keys.every(key => key in right && deepEqualJson(left[key], right[key]))
+  // Own-property membership: `key in right` would also match inherited state,
+  // so a stored "__proto__" key could compare equal to a prototype object.
+  return keys.every(key => Object.hasOwn(right, key) && deepEqualJson(left[key], right[key]))
 }
 
 /**
@@ -190,6 +192,21 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * Define `key` as an own data property. Plain assignment on a dynamic key
+ * would follow a setter or the prototype chain, so a valid JSON key such as
+ * `"__proto__"` in a parsed document would silently reparent the object
+ * instead of remaining own data.
+ */
+function setOwn(target: Record<string, unknown>, key: string, value: unknown): void {
+  Object.defineProperty(target, key, { value, writable: true, enumerable: true, configurable: true })
+}
+
+/** Read `key` from a section only when it is own data (never inherited state). */
+function getOwn(source: Record<string, unknown>, key: string): unknown {
+  return Object.hasOwn(source, key) ? source[key] : undefined
+}
+
+/**
  * One path-addressed edit to a namespace's user section. Path mutation exists
  * for a caller holding an INCOMPLETE view of the section — a configuration UI
  * reads the redacted descriptor, which by construction never received the
@@ -217,7 +234,7 @@ function applyPathOp(section: Record<string, unknown>, op: SettingsPathOp): Reco
     const { [head]: _removed, ...kept } = section
     return kept
   }
-  const child = section[head]
+  const child = getOwn(section, head)
   if (!isPlainObject(child)) {
     // Unsetting through an absent path is already satisfied; setting through
     // one creates the intermediate objects it needs.
@@ -272,12 +289,10 @@ function cloneJsonShaped(
     if (isPlainObject(value)) {
       if (visiting.has(value)) throw reject('a circular reference', path)
       visiting.add(value)
-      // TODO(settings-json-properties): Use property-safe construction here and
-      // in mergeLayers so valid JSON keys such as "__proto__" remain own data.
       const out: Record<string, unknown> = {}
       for (const [key, entry] of Object.entries(value)) {
         if (entry === undefined) continue
-        out[key] = clone(entry, `${path}.${key}`)
+        setOwn(out, key, clone(entry, `${path}.${key}`))
       }
       visiting.delete(value)
       return out
@@ -299,7 +314,7 @@ function mergeLayers(under: unknown, over: unknown): unknown {
   if (!isPlainObject(under) || !isPlainObject(over)) return over
   const merged: Record<string, unknown> = { ...under }
   for (const [key, value] of Object.entries(over)) {
-    merged[key] = key in merged ? mergeLayers(merged[key], value) : value
+    setOwn(merged, key, Object.hasOwn(merged, key) ? mergeLayers(merged[key], value) : value)
   }
   return merged
 }

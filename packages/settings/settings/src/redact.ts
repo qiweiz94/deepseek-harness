@@ -47,6 +47,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+/**
+ * Define `key` as an own data property. Plain assignment on a dynamic key
+ * would follow the prototype chain, so a valid JSON key such as `"__proto__"`
+ * would reparent the rebuilt value instead of remaining own data.
+ */
+function setOwn(target: Record<string, unknown>, key: string, value: unknown): void {
+  Object.defineProperty(target, key, { value, writable: true, enumerable: true, configurable: true })
+}
+
 function walk(node: SchemaNode | undefined, value: unknown, path: string[], secrets: RedactedSecret[]): unknown {
   if (node === undefined) return value
   if (node.meta?.role === 'secret') {
@@ -60,13 +69,14 @@ function walk(node: SchemaNode | undefined, value: unknown, path: string[], secr
       const rebuilt: Record<string, unknown> = {}
       if (source !== undefined) {
         for (const [key, entry] of Object.entries(source)) {
-          if (key in properties) continue
-          rebuilt[key] = entry
+          if (Object.hasOwn(properties, key)) continue
+          setOwn(rebuilt, key, entry)
         }
       }
       for (const [key, child] of Object.entries(properties)) {
-        const stripped = walk(child, source?.[key], [...path, key], secrets)
-        if (stripped !== undefined) rebuilt[key] = stripped
+        const entry = source !== undefined && Object.hasOwn(source, key) ? source[key] : undefined
+        const stripped = walk(child, entry, [...path, key], secrets)
+        if (stripped !== undefined) setOwn(rebuilt, key, stripped)
       }
       return source === undefined && Object.keys(rebuilt).length === 0 ? value : rebuilt
     }
@@ -75,7 +85,7 @@ function walk(node: SchemaNode | undefined, value: unknown, path: string[], secr
       const rebuilt: Record<string, unknown> = {}
       for (const [key, entry] of Object.entries(value)) {
         const stripped = walk(node.inner, entry, [...path, key], secrets)
-        if (stripped !== undefined) rebuilt[key] = stripped
+        if (stripped !== undefined) setOwn(rebuilt, key, stripped)
       }
       return rebuilt
     }

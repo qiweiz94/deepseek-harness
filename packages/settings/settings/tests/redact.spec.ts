@@ -96,6 +96,14 @@ describe('redactSecrets', () => {
     ])
   })
 
+  it('rebuilds a parsed "__proto__" key as own data instead of reparenting', () => {
+    const source = JSON.parse('{"apiKey":"sk","__proto__":{"polluted":1}}') as object
+    const { value } = redactSecrets(Profile as z<never>, source)
+    expect(Object.getOwnPropertyDescriptor(value as object, '__proto__')?.value).toEqual({ polluted: 1 })
+    expect(Object.getPrototypeOf(value)).toBe(Object.prototype)
+    expect(({} as { polluted?: number }).polluted).toBeUndefined()
+  })
+
   it('tolerates structural nodes missing their relation maps', () => {
     expect(redactSecrets({ type: 'dict' } as never, { k: 'v' })).toEqual({ value: { k: 'v' }, secrets: [] })
     expect(redactSecrets({ type: 'object' } as never, { k: 'v' })).toEqual({ value: { k: 'v' }, secrets: [] })
