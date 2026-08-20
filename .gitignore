@@ -38,4 +38,5 @@ apps/web/dist/
 worktrees/
 .agents/worktrees/
 .dsh/
+!examples/acp-agent/tests/snapshots/skill-load/workspace/.dsh/
 .typert-*/
