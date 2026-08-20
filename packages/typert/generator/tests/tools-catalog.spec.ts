@@ -12,12 +12,27 @@ import { FaceModelEmitter } from '../src/emitter.ts'
 const workspaceRoot = resolve(import.meta.dirname, '../../../..')
 const temporaryRoots: string[] = []
 
+// Mirrors `vitest.shared.ts`'s `scaledTimeout`: this test file compiles under
+// `tsconfig.host.json`, whose explicit file list (and stricter
+// `exactOptionalPropertyTypes`) cannot reach a repository-root config module,
+// so the same small scaling logic lives here too — see the harness.ts
+// duplication this test file shares the reason with.
+function scaledTimeout(baseMs: number): number {
+  const raw = process.env.DSH_TEST_TIMEOUT_FACTOR
+  if (raw === undefined || raw === '') return baseMs
+  const factor = Number(raw)
+  if (!Number.isFinite(factor) || factor < 1) {
+    throw new Error(`DSH_TEST_TIMEOUT_FACTOR must be a finite number >= 1, got ${JSON.stringify(raw)}`)
+  }
+  return Math.round(baseMs * factor)
+}
+
 afterEach(() => {
   for (const root of temporaryRoots.splice(0)) rmSync(root, { recursive: true, force: true })
 })
 
 describe('model-driven dsh-tools generation', () => {
-  it('round-trips the complete service and event structure through the runtime registry', { timeout: 30_000 }, async () => {
+  it('round-trips the complete service and event structure through the runtime registry', { timeout: scaledTimeout(30_000) }, async () => {
     const workspace = new WorkspaceAnalyzer({
       root: workspaceRoot,
       faces: ['host'],

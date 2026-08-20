@@ -33,7 +33,38 @@ import { launchAcpTestAgent, type AgentUnderTest, type LaunchedAcpTestAgent } fr
 
 export type { AgentUnderTest } from './launcher.ts'
 
-const DEFAULT_WAIT_TIMEOUT_MS = 10_000
+const TIMEOUT_FACTOR_ENV = 'DSH_TEST_TIMEOUT_FACTOR'
+
+/**
+ * Multiplier for persistence-wait timeouts, read from `DSH_TEST_TIMEOUT_FACTOR`
+ * — the same variable the repository vitest configs validate and apply to
+ * per-test timeouts (`vitest.shared.ts`'s `testTimeoutFactor`; this package's
+ * `rootDir: src` keeps it from importing that repository-root module, so the
+ * same small validation lives here too). Unset or empty means 1, leaving
+ * every wait at its local 10s meaning; a set value must parse as a finite
+ * number >= 1.
+ * @returns the validated factor.
+ */
+export function waitTimeoutFactor(): number {
+  const raw = process.env[TIMEOUT_FACTOR_ENV]
+  if (raw === undefined || raw === '') return 1
+  const factor = Number(raw)
+  if (!Number.isFinite(factor) || factor < 1) {
+    throw new Error(`${TIMEOUT_FACTOR_ENV} must be a finite number >= 1, got ${JSON.stringify(raw)}`)
+  }
+  return factor
+}
+
+/**
+ * Default persistence-wait timeout: 10s scaled by {@link waitTimeoutFactor}.
+ * Evaluated per call (a default-parameter expression), so it re-reads the
+ * environment for every wait a scenario issues rather than fixing the factor
+ * at module load.
+ * @returns the scaled timeout in milliseconds.
+ */
+function defaultWaitTimeoutMs(): number {
+  return Math.round(10_000 * waitTimeoutFactor())
+}
 const WAIT_POLL_INTERVAL_MS = 10
 
 /**
@@ -62,7 +93,7 @@ const WAIT_POLL_INTERVAL_MS = 10
  * type follows the latest closed turn — for scenarios whose asserted state
  * (e.g. a goal pause) is appended only after cancellation reaches idle.
  * A standalone `cancel` may also wait for a cwd-relative readiness marker.
- * All wait timeouts default to 10s.
+ * All wait timeouts default to 10s, scaled by `DSH_TEST_TIMEOUT_FACTOR` when set.
  */
 export type InputStep =
   | { op: 'initialize' }
@@ -519,7 +550,7 @@ async function runStep(
 async function waitForPersistedTurnStart(
   root: string,
   sessionId: string,
-  timeoutMs = DEFAULT_WAIT_TIMEOUT_MS,
+  timeoutMs = defaultWaitTimeoutMs(),
   minimumTurn?: number,
 ): Promise<void> {
   let invalidRecord: { error: unknown } | undefined
@@ -544,6 +575,30 @@ async function waitForPersistedTurnStart(
 }
 
 /**
+ * Wait until the selected session's harvested log content satisfies a
+ * predicate, shared by the single-condition persistence waits below.
+ * @param root - the harvest root.
+ * @param sessionId - the session to select.
+ * @param predicate - tested against the found log's raw content.
+ * @param description - names the awaited condition in the timeout message.
+ * @param timeoutMs - the wait bound, echoed into the timeout message.
+ */
+async function waitForPersistedLogCondition(
+  root: string,
+  sessionId: string,
+  predicate: (content: string) => boolean,
+  description: string,
+  timeoutMs: number,
+): Promise<void> {
+  await vi.waitFor(async () => {
+    const log = (await harvestSessionLogs(root)).find(candidate => candidate.id === sessionId)
+    if (log === undefined || !predicate(log.content)) {
+      throw new Error(`snapshot-harness: session "${sessionId}" did not persist ${description} within ${timeoutMs}ms`)
+    }
+  }, { interval: WAIT_POLL_INTERVAL_MS, timeout: timeoutMs })
+}
+
+/**
  * Wait until the raw JSONL backend exposes one complete closing turn boundary.
  * The ACP cancel notification settles its prompt before the agent necessarily
  * reaches quiescence, so cancellation snapshots use this external boundary to
@@ -552,14 +607,9 @@ async function waitForPersistedTurnStart(
 async function waitForPersistedTurnEnd(
   root: string,
   sessionId: string,
-  timeoutMs = DEFAULT_WAIT_TIMEOUT_MS,
+  timeoutMs = defaultWaitTimeoutMs(),
 ): Promise<void> {
-  await vi.waitFor(async () => {
-    const log = (await harvestSessionLogs(root)).find(candidate => candidate.id === sessionId)
-    if (log === undefined || !latestTurnIsClosed(log.content)) {
-      throw new Error(`snapshot-harness: session "${sessionId}" did not persist turn/end within ${timeoutMs}ms`)
-    }
-  }, { interval: WAIT_POLL_INTERVAL_MS, timeout: timeoutMs })
+  await waitForPersistedLogCondition(root, sessionId, latestTurnIsClosed, 'turn/end', timeoutMs)
 }
 
 /**
@@ -573,7 +623,7 @@ async function waitForPersistedTurnEnd(
 async function waitForPersistedChildTurnEnd(
   root: string,
   child: number,
-  timeoutMs = DEFAULT_WAIT_TIMEOUT_MS,
+  timeoutMs = defaultWaitTimeoutMs(),
   minimumTurn = 1,
 ): Promise<void> {
   await vi.waitFor(async () => {
@@ -601,7 +651,7 @@ async function waitForPersistedGoalPhase(
   root: string,
   sessionId: string,
   phase: string,
-  timeoutMs = DEFAULT_WAIT_TIMEOUT_MS,
+  timeoutMs = defaultWaitTimeoutMs(),
 ): Promise<void> {
   await vi.waitFor(async () => {
     const content = (await harvestSessionLogs(root)).find(log => log.id === sessionId)?.content
@@ -620,7 +670,7 @@ async function waitForPersistedInboxMessage(
   root: string,
   sessionId: string,
   text: string,
-  timeoutMs = DEFAULT_WAIT_TIMEOUT_MS,
+  timeoutMs = defaultWaitTimeoutMs(),
 ): Promise<void> {
   await vi.waitFor(async () => {
     const log = (await harvestSessionLogs(root)).find(candidate => candidate.id === sessionId)
@@ -655,14 +705,9 @@ function hasRequestHeaderAfterDescriptor(content: string): boolean {
 async function waitForPersistedTitleAfterTurnEnd(
   root: string,
   sessionId: string,
-  timeoutMs = DEFAULT_WAIT_TIMEOUT_MS,
+  timeoutMs = defaultWaitTimeoutMs(),
 ): Promise<void> {
-  await vi.waitFor(async () => {
-    const log = (await harvestSessionLogs(root)).find(candidate => candidate.id === sessionId)
-    if (log === undefined || !latestTitleFollowsTurnEnd(log.content)) {
-      throw new Error(`snapshot-harness: session "${sessionId}" did not persist session/title after turn/end within ${timeoutMs}ms`)
-    }
-  }, { interval: WAIT_POLL_INTERVAL_MS, timeout: timeoutMs })
+  await waitForPersistedLogCondition(root, sessionId, latestTitleFollowsTurnEnd, 'session/title after turn/end', timeoutMs)
 }
 
 /** Wait until a complete record of `type` follows the latest closed turn. */
@@ -670,7 +715,7 @@ async function waitForPersistedEventAfterTurnEnd(
   root: string,
   sessionId: string,
   type: string,
-  timeoutMs = DEFAULT_WAIT_TIMEOUT_MS,
+  timeoutMs = defaultWaitTimeoutMs(),
 ): Promise<void> {
   await vi.waitFor(async () => {
     const log = (await harvestSessionLogs(root)).find(candidate => candidate.id === sessionId)
@@ -684,7 +729,7 @@ async function waitForPersistedEventAfterTurnEnd(
 async function waitForWorkspaceFile(
   cwd: string,
   path: string,
-  timeoutMs = DEFAULT_WAIT_TIMEOUT_MS,
+  timeoutMs = defaultWaitTimeoutMs(),
 ): Promise<void> {
   const target = join(cwd, path)
   await vi.waitFor(() => {
