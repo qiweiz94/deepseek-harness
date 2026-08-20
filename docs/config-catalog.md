@@ -1424,7 +1424,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/plugins/plugin-worktree-sandbox/src/index.ts:33`](../packages/plugins/plugin-worktree-sandbox/src/index.ts)
+Source: [`packages/plugins/plugin-worktree-sandbox/src/index.ts:34`](../packages/plugins/plugin-worktree-sandbox/src/index.ts)
 
 <a id="deepseek-aidsh-pwsh-local"></a>
 

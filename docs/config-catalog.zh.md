@@ -1426,7 +1426,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/plugins/plugin-worktree-sandbox/src/index.ts:33`](../packages/plugins/plugin-worktree-sandbox/src/index.ts)
+来源：[`packages/plugins/plugin-worktree-sandbox/src/index.ts:34`](../packages/plugins/plugin-worktree-sandbox/src/index.ts)
 
 <a id="deepseek-aidsh-pwsh-local"></a>
 
