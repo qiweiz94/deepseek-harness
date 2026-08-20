@@ -1398,6 +1398,29 @@ export interface Config {
 
 来源：[`packages/plugins/plugin-ast-context/src/index.ts:52`](../packages/plugins/plugin-ast-context/src/index.ts)
 
+<a id="deepseek-aidsh-plugin-pinned-scratchpad"></a>
+
+## `@deepseek-ai/dsh-plugin-pinned-scratchpad`
+
+依赖：`tools` · `systemPrompt`
+
+```ts config-catalog
+/** Pinned-scratchpad configuration. */
+export interface Config {
+  /**
+   * Byte budget for the complete rendered `<agent_scratchpad>` block: the
+   * UTF-8 byte length of the block, wrapper tags included. An update that
+   * would overflow it fails loud naming the needed, allowed, and current byte
+   * counts; stored entries are never silently truncated. The bound is bytes,
+   * not tokens — the harness has no tokenizer for the serving model, so a
+   * token bound would be a guess. Default 1000.
+   */
+  totalBudget: number
+}
+```
+
+来源：[`packages/plugins/plugin-pinned-scratchpad/src/index.ts:34`](../packages/plugins/plugin-pinned-scratchpad/src/index.ts)
+
 <a id="deepseek-aidsh-plugin-subagent-router"></a>
 
 ## `@deepseek-ai/dsh-plugin-subagent-router`
