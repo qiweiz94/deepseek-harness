@@ -758,6 +758,23 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 来源：[`packages/subagent/subagent/src/descriptor.ts:37`](../packages/subagent/subagent/src/descriptor.ts)
 
+<a id="subagentreport--log-only"></a>
+
+#### `subagent/report` — log-only
+
+```ts persistence-catalog
+/**
+ * Durable mailbox record of one accepted child report, appended to the
+ * parent's log in the acceptance span before the in-memory inbox send.
+ * Log-only: it carries no `surfaceOp` and never enters model history; the
+ * report reaches the model through the ordinary inbox → `user/message`
+ * path, on first delivery or on resume-time redelivery.
+ */
+'subagent/report': SubagentReportMailboxData
+```
+
+来源：[`packages/subagent/subagent/src/report-mailbox.ts:34`](../packages/subagent/subagent/src/report-mailbox.ts)
+
 ### `todo/*`
 
 <a id="todowrite--log-only"></a>
