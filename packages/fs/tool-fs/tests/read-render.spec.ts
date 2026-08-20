@@ -50,6 +50,14 @@ describe('buildWindow', () => {
     expect(result.lines[0]?.text).toContain(`... (line truncated to ${READ_MAX_LINE_LENGTH} chars)`)
   })
 
+  it('keeps an astral-heavy line whose code points fit even when its UTF-16 length exceeds the cap', async () => {
+    // 10 emoji = 20 UTF-16 units but only 10 code points: the unit length
+    // trips the cap check while the code-point bound keeps the whole line.
+    const line = '😀'.repeat(10)
+    const result = await buildWindow(whole(line), { offset: 1, limit: 10, maxLineLength: 15, maxBytes: READ_MAX_BYTES }, 'f')
+    expect(result.lines[0]?.text).toBe(line)
+  })
+
   it('truncates a line on a code-point boundary (no lone surrogate)', async () => {
     // 'a' + 3001 astral emoji (each 2 units): the 10-char cap lands inside an
     // emoji; the whole emoji is dropped, the suffix still fits, and the

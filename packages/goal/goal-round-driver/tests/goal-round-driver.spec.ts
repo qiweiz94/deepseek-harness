@@ -205,6 +205,35 @@ describe('goal-round outcome policy', () => {
     expect(repeat.text).toMatch(/\n<\/goal_round>$/)
   })
 
+  it('ignores admitted rounds from another goal or revision', () => {
+    const goal: GoalView = {
+      id: GoalId('goal-current'),
+      revision: 2,
+      objective: 'Ship verified support',
+      phase: 'active',
+      maxGoalRounds: 9,
+      roundsStarted: 1,
+      createdAt: 1,
+      updatedAt: 2,
+      activation: 'armed',
+    }
+    const admittedRound = (goalId: string, revision: number) => ({
+      type: 'user/message' as const,
+      seq: 0,
+      time: 1,
+      data: createUserMessage({
+        content: [{ type: 'text' as const, text: 'round prompt' }],
+        source: { kind: 'goal', goalId: GoalId(goalId), revision, round: 2 },
+      }),
+    })
+    expect(goalSession.objectiveAlreadyAdmitted(
+      [admittedRound('goal-other', 2)] as never, goal,
+    )).toBe(false)
+    expect(goalSession.objectiveAlreadyAdmitted(
+      [admittedRound('goal-current', 2)] as never, goal,
+    )).toBe(true)
+  })
+
   it('caps every goal-round prompt at the 1000-character budget', () => {
     const goal: GoalView = {
       id: GoalId('goal-huge-objective'),

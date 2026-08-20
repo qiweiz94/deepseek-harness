@@ -18,6 +18,7 @@ export const MAX_ROUND_PROMPT_CHARS = 1000
  * @returns a code-point-safe prefix of at most `maxUnits` units.
  */
 function limitObjectiveToUnits(text: string, maxUnits: number): string {
+  /* v8 ignore next -- callers invoke this only when the objective already exceeds the unit budget. */
   if (text.length <= maxUnits) return text
   let units = 0
   let codePoints = 0
@@ -82,6 +83,8 @@ export function renderGoalRoundPrompt(
   let text = head + DIRECTIVE + '\n</goal_round>'
   if (text.length > MAX_ROUND_PROMPT_CHARS && includeObjective) {
     const slack = MAX_ROUND_PROMPT_CHARS - (text.length - objective.length)
+    /* v8 ignore next 3 -- text over the cap implies the objective exceeds its
+       slack; the fitting arm answers the guard's arithmetic, not a reachable case. */
     const kept = objective.length <= slack
       ? objective
       : limitObjectiveToUnits(objective, Math.max(slack - 1, 0)) + '…'
