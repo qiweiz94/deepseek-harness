@@ -23,6 +23,7 @@ import { join } from 'node:path'
 import { isSurfaceEligibleType } from '@deepseek-ai/dsh-session/surface'
 import { describe, expect, it } from 'vitest'
 import { type AgentUnderTest, type HarvestedLog, type InputScript, runScenario } from './harness.ts'
+import { canonicalSessionFixture } from './session-fixture-canonical.ts'
 import {
   type CwdPathMode,
   type NormalizeContext,
@@ -1254,8 +1255,18 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
             ))))
             : result.sessionLogs.map(log => scrub(portableFixture(log.content)))
           const outputFixtures = stabilizeFixtureMessageIds(freshFixtures, existingFixtures)
-          await Promise.all(outputFixtures.map((fixture, index) =>
-            writeFile(join(dir, outputFixtureFiles[index] as string), fixture)))
+          await Promise.all(outputFixtures.map((fixture, index) => {
+            // Written fixtures always carry the canonical packed-row layout the
+            // repository-wide snapshot gate enforces, so a live re-record needs
+            // no separate canonicalization step.
+            const file = outputFixtureFiles[index] as string
+            const canonical = canonicalSessionFixture(fixture, file)
+            /* v8 ignore next 3 -- harvested logs always start with a session header; the guard fails loud on a harness defect. */
+            if (canonical === undefined) {
+              throw new Error(`${file}: harvested log is not a session fixture (missing session header)`)
+            }
+            return writeFile(join(dir, file), canonical)
+          }))
           if (RECORDING) {
             const outputNames = new Set(outputFixtureFiles)
             const entries = await readdir(dir, { withFileTypes: true })

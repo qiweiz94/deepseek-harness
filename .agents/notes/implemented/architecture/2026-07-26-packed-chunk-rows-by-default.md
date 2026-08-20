@@ -30,11 +30,9 @@ ACP and headless snapshot runs harvest the default JSONL backend output. TUI and
 
 Focused package tests keep unpacked and mixed-layout inputs for reader compatibility. They do not opt the default snapshot corpus out of the canonical layout.
 
-### In-flight branch convergence
+### Canonicalization at write-back
 
-The temporary [`scripts/migrate-packed-session-fixtures.ts`](../../../../scripts/migrate-packed-session-fixtures.ts) command lets in-flight branches converge after merging current `master`: `pnpm run migrate:packed-session-fixtures` discovers the same repository-wide fixture set as the permanent gate, preserves each header line, decodes existing mixed records, writes the canonical packed body, proves decoded equality, and proves idempotence. It never calls a model or regenerates transcript and presentation outputs.
-
-The command remains linked from the testing policy and ACP snapshot README while older branches may carry fixture edits. The [removal proposal](../../proposed/process/2026-07-26-remove-packed-session-fixture-migrator.md) deletes the CLI, package command, this transitional section, and the documentation links, then replaces the permanent gate's command-specific remediation text once a live open-PR inventory shows that every affected branch is merged, closed, or canonical. The shared canonicalizer and snapshot gate remain permanent.
+Snapshot record and refresh write-back canonicalizes every fixture through `canonicalSessionFixture` (`@deepseek-ai/dsh-acp-snapshot`): it preserves each header line, decodes existing mixed records, writes the canonical packed body, and proves decoded equality and idempotence, so a live re-record needs no separate migration step. The temporary branch-convergence migrator CLI and its package command are removed; the [removal note](../process/2026-07-26-remove-packed-session-fixture-migrator.md) owns that decision. The shared canonicalizer and snapshot gate remain permanent.
 
 ### Verification contract
 
