@@ -725,11 +725,19 @@ export interface Config {
   /**
    * Path to a `hooks.json` or a settings file whose `hooks` key holds the config.
    * Process-level: read once at load, a relative path resolves against the process
-   * launch cwd, so one config applies to the whole process.
-   * TODO(per-session-hook-config): per-session discovery of a project-local
-   * `hooks.json` from each `session/new.cwd`.
+   * launch cwd, so one config applies to the whole process. Combine with
+   * {@link sessionConfigFile} for per-session project-local discovery.
    */
   configPath: string
+  /**
+   * Per-session project-local hook config discovery: a path resolved against
+   * each agent session's workspace (the `session/new` cwd), e.g.
+   * `.claude/hooks.json`. Read and parsed once per session at first hook use;
+   * its groups run after the process-level groups on each point. Unset ⇒ no
+   * discovery. A workspace without the file has no session hooks; an unreadable
+   * or invalid file logs a warning and contributes nothing.
+   */
+  sessionConfigFile?: string
   /**
    * Replaces `${CLAUDE_PLUGIN_ROOT}` in command strings (the plugin's root dir).
    */
@@ -746,10 +754,16 @@ export interface Config {
   defaultTimeoutMs?: number
   /** Character cap for the `hook/result` event's persisted stderr summary. */
   stderrSummaryMaxChars?: number
+  /**
+   * Consecutive Stop-hook forced continuations allowed per turn before the
+   * bridge overrides the block and lets the turn stop. Claude Code's own guard
+   * overrides a Stop hook after 8 consecutive blocks.
+   */
+  maxConsecutiveStopBlocks?: number
 }
 ```
 
-来源：[`packages/hooks/hooks-claude-code/src/index.ts:45`](../packages/hooks/hooks-claude-code/src/index.ts)
+来源：[`packages/hooks/hooks-claude-code/src/index.ts:53`](../packages/hooks/hooks-claude-code/src/index.ts)
 
 <a id="deepseek-aidsh-hooks-codex"></a>
 
@@ -762,21 +776,35 @@ export interface Config {
 export interface Config {
   /**
    * Path to a Codex `hooks.json`. Process-level: read once at load, a relative
-   * path resolves against the process launch cwd.
-   * TODO(per-session-hook-config): per-session project-local discovery from each
-   * `session/new.cwd`.
+   * path resolves against the process launch cwd. Combine with
+   * {@link sessionConfigFile} for per-session project-local discovery.
    */
   configPath: string
+  /**
+   * Per-session project-local hook config discovery: a path resolved against
+   * each agent session's workspace (the `session/new` cwd), e.g.
+   * `.codex/hooks.json`. Read and parsed once per session at first hook use;
+   * its groups run after the process-level groups on each point. Unset ⇒ no
+   * discovery. A workspace without the file has no session hooks; an unreadable
+   * or invalid file logs a warning and contributes nothing.
+   */
+  sessionConfigFile?: string
   /** The model name stamped on every payload (Codex includes `model` on each event). */
   model?: string
   /** Default per-hook timeout in ms when a hook sets none (Codex default: 600000). */
   defaultTimeoutMs?: number
   /** Character cap for the `hook/result` event's persisted stderr summary. */
   stderrSummaryMaxChars?: number
+  /**
+   * Consecutive Stop-hook forced continuations allowed per turn before the
+   * bridge overrides the block and lets the turn stop. Codex documents no cap
+   * of its own; the default borrows Claude Code's 8-consecutive-blocks guard.
+   */
+  maxConsecutiveStopBlocks?: number
 }
 ```
 
-来源：[`packages/hooks/hooks-codex/src/index.ts:44`](../packages/hooks/hooks-codex/src/index.ts)
+来源：[`packages/hooks/hooks-codex/src/index.ts:52`](../packages/hooks/hooks-codex/src/index.ts)
 
 <a id="deepseek-aidsh-host-apiproxy"></a>
 
@@ -1447,7 +1475,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/plugins/plugin-ast-context/src/index.ts:52`](../packages/plugins/plugin-ast-context/src/index.ts)
+来源：[`packages/plugins/plugin-ast-context/src/index.ts:51`](../packages/plugins/plugin-ast-context/src/index.ts)
 
 <a id="deepseek-aidsh-plugin-diagnostic-sifter"></a>
 
@@ -1757,7 +1785,7 @@ export interface JsonRpcConfig {
 
 依赖：`Readable`（`node:stream`）· `Writable`（`node:stream`）
 
-来源：[`packages/sdk/server/src/index.ts:29`](../packages/sdk/server/src/index.ts)
+来源：[`packages/sdk/server/src/index.ts:25`](../packages/sdk/server/src/index.ts)
 
 <a id="deepseek-aidsh-session-persistence-jsonl"></a>
 

@@ -49,19 +49,17 @@ Claude Code always exports `CLAUDE_PROJECT_DIR`, and common unmodified hooks ref
 
 ### Containment
 
-The config is parsed ONCE at load; a read/parse failure logs and registers nothing rather than crashing boot (a typo'd path must not take the agent down). Only shell-form `type: 'command'` hooks run for CC; `http`, `mcp_tool`, `prompt`, and `agent` handlers are parsed-and-skipped. Codex runs only synchronous command handlers and skips `async: true` or non-command entries. The emit-listener paths (`session-start`, `subagent/start`) run detached, with their `inject` contained in a `.catch` that logs (a throwing inject must not break session boot or the loop).
+The config is parsed ONCE at load; a read/parse failure logs and registers nothing, unless a `sessionConfigFile` is also configured, in which case the bridge continues on session-local discovery alone. Only shell-form `type: 'command'` hooks run for CC; `http`, `mcp_tool`, `prompt`, and `agent` handlers are parsed-and-skipped. Codex runs only synchronous command handlers and skips `async: true` or non-command entries. The emit-listener paths (`session-start`, `subagent/start`) run detached; a rejected `session-start` run is contained inside `createStartGate.register`'s `onError` callback, and a throwing `deliver` (`agent.inject`) is caught by the bridge's own `.catch` — neither must break session boot or the loop. See [the continue:false / session-start-gating / stop-loop-guard / per-session-hook-config Agent Note](2026-08-20-hook-bridge-parity.md) for the mechanisms.
 
 ### Where hooks run, and where their config comes from
 
-Hooks run in the agent's session workspace, so relative paths target the user's project. `configPath` is resolved once against the process launch cwd and applies to every session. Per-session project-local discovery remains deferred under `TODO(per-session-hook-config)`.
+Hooks run in the agent's session workspace, so relative paths target the user's project. `configPath` is resolved once against the process launch cwd and applies to every session. An optional `sessionConfigFile` adds per-session project-local discovery on top, resolved against each session's workspace and read once per session at first hook use ([mechanism](2026-08-20-hook-bridge-parity.md)).
 
 ## Deferred compatibility gaps
 
 - **Tool-input rewrite.** A CC/Codex `updatedInput` is logged + warned, not honored — input rewrite is a deferred consistency-design problem ([the pre-tool-input-rewrite Agent Note](../../proposed/feature/2026-06-30-pre-tool-input-rewrite.md)), because the pre-execution args are read by `tool/call` audit + `assistant/message` history + tool presentation, so an honest rewrite is a design unit, not a field.
-- **Stop loop-guard** (`TODO(stop-loop-guard)`). Claude Code supplies `stop_hook_active` and overrides a hook after eight consecutive blocks; Codex supplies `stop_hook_active` but documents no equivalent cap. Both bridges always report `false`, so a Stop hook that unconditionally blocks force-continues every step — a hook author must self-limit until state tracking lands.
-- **Hook `continue:false` (hard halt).** A hook can ask to halt the whole run (CC/Codex `continue:false`); the shared merge folds it into `MergedHookOutcome.stop`/`stopReason`, but no bridge acts on it (`TODO(hook-continue-false)`) — the interception points have no "hard-halt the agent" primitive yet (a Decision blocks/steers a single point, not the run). Deferred with the loop-guard work; mid-turn requests record the halt in `hook/result`, and the hook keeps its per-point effect (decision/context) meanwhile.
-- **Config discovery.** The path is explicit in `cordis.yml` and process-level (see above); the full multi-layer CC/Codex precedence walk, per-session project-local discovery, and the trust/hash model are not reimplemented (`TODO(per-session-hook-config)`).
-- **Session-start / subagent-start context is best-effort (`TODO(session-start-gating)`).** Both hooks run detached from startup, so their context is injected when ready but may miss the first request or a short-lived child. Guaranteeing first-request delivery requires an awaited startup extension point.
+
+Stop loop-guard, `continue:false` run-level halt, per-session hook config discovery, and bounded SessionStart-context delivery all shipped — see [the hook-bridge-parity Agent Note](2026-08-20-hook-bridge-parity.md).
 
 ## Alternatives considered
 
