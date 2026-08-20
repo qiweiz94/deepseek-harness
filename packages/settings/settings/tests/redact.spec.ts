@@ -67,16 +67,62 @@ describe('redactSecrets', () => {
     expect((value as { extra: unknown }).extra).toEqual({ keep: true })
   })
 
-  it('passes malformed container values through untouched', () => {
+  it('strips a malformed value under a secret-declaring container and records the position', () => {
+    // A hand-edited document can leave any shape where the schema declares a
+    // container holding secrets. The walker cannot locate the secret inside a
+    // mismatched value, so nothing of it may cross the wire.
     const { value, secrets } = redactSecrets(Adapter as z<never>, {
-      providers: 'not-a-dict',
+      providers: ['sk-hidden-in-an-array'],
       fallbacks: 'not-an-array',
+      nested: 'not-an-object',
     })
-    expect(value).toEqual({ providers: 'not-a-dict', fallbacks: 'not-an-array' })
+    expect(value).toEqual({})
     expect(secrets).toEqual([
       { path: ['apiKey'], set: false },
-      { path: ['nested', 'token'], set: false },
+      { path: ['providers'], set: true },
+      { path: ['fallbacks'], set: true },
+      { path: ['nested'], set: true },
     ])
+  })
+
+  it('passes a malformed value through untouched when its subtree declares no secret', () => {
+    const Plain = z.object({ tags: z.array(z.string()), name: z.string() })
+    const { value, secrets } = redactSecrets(Plain as z<never>, { tags: 'not-an-array', name: 7 })
+    expect(value).toEqual({ tags: 'not-an-array', name: 7 })
+    expect(secrets).toEqual([])
+  })
+
+  it.each([
+    ['union', z.object({ auth: z.union([z.object({ apiKey: z.string().role('secret') }), z.const('anonymous')]) })],
+    ['intersect', z.object({ auth: z.intersect([z.object({ apiKey: z.string().role('secret') }), z.object({ url: z.string() })]) })],
+    ['tuple', z.object({ auth: z.tuple([z.string().role('secret'), z.string()]) })],
+  ])('fails closed on a secret reachable only through a %s node', (kind, schema) => {
+    expect(() => redactSecrets(schema as z<never>, { auth: { apiKey: 'sk-live' } }))
+      .toThrow(new RegExp(`\\$\\.auth.*unsupported "${kind}"`))
+    // The refusal is structural: it must fire before any value could leak,
+    // even when the secret slot is currently empty.
+    expect(() => redactSecrets(schema as z<never>, undefined)).toThrow(/unsupported/)
+  })
+
+  it('names the node "untyped" when a schema node reachable only through it declares no type', () => {
+    // The walker's structural view of a schema node (see its doc comment) only
+    // requires the relations it reads; a node with no `type` at all — outside
+    // what any current schemastery construct produces, but not excluded by the
+    // structural contract — must still fail closed and name itself, not throw
+    // `undefined` into the error message.
+    const untypedWithSecret = { list: [{ meta: { role: 'secret' } }] } as unknown as z<never>
+    expect(() => redactSecrets(untypedWithSecret, { anything: 'sk-live' }))
+      .toThrow(/\$ is reachable only through an unsupported "untyped" schema node/)
+  })
+
+  it('still walks a secret-free union verbatim', () => {
+    const Mixed = z.object({
+      mode: z.union(['fast', 'slow']),
+      apiKey: z.string().role('secret'),
+    })
+    const { value, secrets } = redactSecrets(Mixed as z<never>, { mode: 'fast', apiKey: 'sk' })
+    expect(value).toEqual({ mode: 'fast' })
+    expect(secrets).toEqual([{ path: ['apiKey'], set: true }])
   })
 
   it('treats a secret-role container as one opaque secret leaf', () => {
@@ -94,6 +140,14 @@ describe('redactSecrets', () => {
       { path: ['tokens', 'a'], set: true },
       { path: ['tokens', 'b'], set: true },
     ])
+  })
+
+  it('rebuilds a parsed "__proto__" key as own data instead of reparenting', () => {
+    const source = JSON.parse('{"apiKey":"sk","__proto__":{"polluted":1}}') as object
+    const { value } = redactSecrets(Profile as z<never>, source)
+    expect(Object.getOwnPropertyDescriptor(value as object, '__proto__')?.value).toEqual({ polluted: 1 })
+    expect(Object.getPrototypeOf(value)).toBe(Object.prototype)
+    expect(({} as { polluted?: number }).polluted).toBeUndefined()
   })
 
   it('tolerates structural nodes missing their relation maps', () => {

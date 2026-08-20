@@ -672,6 +672,156 @@ describe('third review regressions', () => {
   })
 })
 
+describe('replacement resync', () => {
+  it('re-resolves a replacement registration from a write persisted mid-replacement', async () => {
+    const { ctx, provider } = await boot({ persistDelayMs: 30 })
+    let scope: SettingsScope<ThemeConfig> | undefined
+    const fiber = ctx.plugin({
+      inject: ['settings'],
+      apply: (child: Context) => {
+        scope = child.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+      },
+    })
+    await fiber
+    const pending = scope!.update({ theme: 'light' })
+    await new Promise(resolve => setTimeout(resolve, 5))
+    await fiber.dispose()
+    const replacement = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+    const watcher = vi.fn()
+    replacement.watch(watcher)
+    // The replacement resolved from the pre-write document…
+    expect(replacement.get()).toEqual({ theme: 'dark', fontSize: 14 })
+    await pending
+    // …and the in-flight write re-resolves it instead of leaving it stale.
+    expect(replacement.get()).toEqual({ theme: 'light', fontSize: 14 })
+    await vi.waitFor(() => {
+      expect(watcher).toHaveBeenCalledWith(
+        { theme: 'light', fontSize: 14 },
+        { theme: 'dark', fontSize: 14 },
+      )
+    })
+    expect(provider.doc['ui-theme']).toEqual({ theme: 'light' })
+    // The raw section moved, so an editor holding the pre-write revision is stale.
+    expect(ctx.settings.describe()[0]!.revision).toBe(1)
+  })
+
+  it('keeps a replacement on its last good value when the persisted section fails its validate', async () => {
+    const { ctx } = await boot({ persistDelayMs: 30 })
+    let scope: SettingsScope<ThemeConfig> | undefined
+    const fiber = ctx.plugin({
+      inject: ['settings'],
+      apply: (child: Context) => {
+        scope = child.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+      },
+    })
+    await fiber
+    const pending = scope!.update({ fontSize: 4 })
+    await new Promise(resolve => setTimeout(resolve, 5))
+    await fiber.dispose()
+    const replacement = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema, {
+      validate: (value) => {
+        if (value.fontSize < 10) throw new Error(`font size ${String(value.fontSize)} is unreadable`)
+      },
+    })
+    await pending
+    expect(replacement.get()).toEqual({ theme: 'dark', fontSize: 14 })
+  })
+})
+
+describe('registration quiescence', () => {
+  it('waits for an in-flight watch invocation when the registrant fiber disposes', async () => {
+    const { ctx, provider } = await boot()
+    let release: (() => void) | undefined
+    let finished = false
+    const fiber = ctx.plugin({
+      inject: ['settings'],
+      apply: (child: Context) => {
+        const scope = child.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+        scope.watch(async () => {
+          await new Promise<void>((resolve) => { release = resolve })
+          finished = true
+        })
+      },
+    })
+    await fiber
+    provider.pushExternal({ 'ui-theme': { theme: 'light' } })
+    await vi.waitFor(() => { expect(release).toBeDefined() })
+    let disposed = false
+    const disposal = fiber.dispose().then(() => { disposed = true })
+    await new Promise(resolve => setTimeout(resolve, 15))
+    // The callback has not settled: the registrant fiber must still be tearing down.
+    expect(disposed).toBe(false)
+    release!()
+    await disposal
+    expect(finished).toBe(true)
+  })
+
+  it('starts no further invocation once the registrant fiber disposed', async () => {
+    const { ctx, provider } = await boot()
+    const watcher = vi.fn()
+    const fiber = ctx.plugin({
+      inject: ['settings'],
+      apply: (child: Context) => {
+        child.settings.register(settingsNamespace('ui-theme'), ThemeSchema).watch(watcher)
+      },
+    })
+    await fiber
+    await fiber.dispose()
+    provider.pushExternal({ 'ui-theme': { theme: 'light' } })
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(watcher).not.toHaveBeenCalled()
+  })
+})
+
+describe('property-safe JSON keys', () => {
+  const AnySchema: z<{ value: unknown }> = z.object({ value: z.any() })
+
+  /** Own-data descriptor of `key`, or undefined when the key is not own data. */
+  function ownData(target: unknown, key: string): unknown {
+    const descriptor = Object.getOwnPropertyDescriptor(target, key)
+    return descriptor === undefined ? undefined : descriptor.value
+  }
+
+  it('keeps a parsed "__proto__" key as own data through the write clone', async () => {
+    const { ctx, provider } = await boot()
+    const scope = ctx.settings.register(settingsNamespace('ui-theme'), AnySchema)
+    await scope.update(JSON.parse('{"value":{"__proto__":{"polluted":1}}}') as object)
+    const stored = provider.persisted[0]!.section['value']
+    expect(ownData(stored, '__proto__')).toEqual({ polluted: 1 })
+    expect(Object.getPrototypeOf(stored)).toBe(Object.prototype)
+    expect(({} as { polluted?: number }).polluted).toBeUndefined()
+  })
+
+  it('merges a "__proto__" key across updates as own data', async () => {
+    const { ctx, provider } = await boot()
+    const scope = ctx.settings.register(settingsNamespace('ui-theme'), AnySchema)
+    await scope.update(JSON.parse('{"__proto__":{"a":1}}') as object)
+    await scope.update(JSON.parse('{"__proto__":{"b":2}}') as object)
+    const section = provider.persisted[1]!.section
+    expect(ownData(section, '__proto__')).toEqual({ a: 1, b: 2 })
+    expect(Object.getPrototypeOf(section)).toBe(Object.prototype)
+  })
+
+  it('creates a "__proto__" path op as own data and leaves an absent one alone', async () => {
+    const ns = settingsNamespace('ui-theme')
+    const { ctx, provider } = await boot({ doc: { 'ui-theme': { value: 'kept' } } })
+    ctx.settings.register(ns, AnySchema)
+    // Unset through an absent "__proto__" path must not read the prototype as
+    // a child section (spreading Object.prototype into the stored document).
+    await ctx.settings.mutate(ns, [{ op: 'unset', path: ['__proto__', 'anything'] }])
+    expect(provider.persisted[0]!.section).toEqual({ value: 'kept' })
+    await ctx.settings.mutate(ns, [{ op: 'set', path: ['__proto__', 'x'], value: 1 }])
+    const section = provider.persisted[1]!.section
+    expect(ownData(section, '__proto__')).toEqual({ x: 1 })
+    expect(Object.getPrototypeOf(section)).toBe(Object.prototype)
+  })
+
+  it('compares an own "__proto__" key as data, never as inherited state', () => {
+    expect(deepEqualJson(JSON.parse('{"__proto__":{}}'), { a: 1 })).toBe(false)
+    expect(deepEqualJson(JSON.parse('{"__proto__":{}}'), JSON.parse('{"__proto__":{}}'))).toBe(true)
+  })
+})
+
 describe('watch', () => {
   it('stops after its disposer runs', async () => {
     const { ctx, provider } = await boot()
@@ -738,6 +888,27 @@ describe('installSettingsSection', () => {
     await vi.waitFor(() => {
       expect(changes).toBe(3)
     })
+    expect(current()).toEqual({ theme: 'entry' })
+  })
+
+  it('forwards a validate hook to the underlying registration', async () => {
+    const { ctx } = await boot()
+    const entry = { theme: 'entry' }
+    let current: () => { theme: string } = () => entry
+    installSettingsSection(ctx, settingsNamespace('helper-ns'), HelperSchema, entry, {
+      setSource: (source) => {
+        current = source
+      },
+      onChange: () => {},
+      validate: (value) => {
+        if (value.theme === 'forbidden') throw new Error('forbidden theme')
+      },
+    })
+    await vi.waitFor(() => {
+      expect(current()).toEqual({ theme: 'entry' })
+    })
+
+    await expect(ctx.settings.update(settingsNamespace('helper-ns'), { theme: 'forbidden' })).rejects.toThrow(/forbidden theme/)
     expect(current()).toEqual({ theme: 'entry' })
   })
 
