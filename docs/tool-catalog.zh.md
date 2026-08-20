@@ -18,6 +18,7 @@
 | 工具包 | 模型可见名称 | 依赖 | 写入／影响 | 随产品发布的别名 | 部署说明 |
 | --- | --- | --- | --- | --- | --- |
 | `@deepseek-ai/dsh-plugin-ast-context` | `get_directory_outline`, `get_file_outline` | `ctx.tools` | `tool/call`、`tool/result` | - | get_file_outline 读取仓库相对路径的源文件并返回其顶层 TypeScript 符号；解析失败或文件缺失以错误结果呈现，而不是部分大纲。 |
+| `@deepseek-ai/dsh-plugin-subagent-router` | `subagent` | `ctx.tools`、`ctx.subagents` | `tool/call`、`tool/result`、`child session events through the chosen provider` | - | 单个委托入口把任务路由到由配置所拥有的策略选出的具备能力的子代理 provider；模型只描述任务（description + prompt），从不指名 provider 或传输方式。 |
 | `@deepseek-ai/dsh-plugin-worktree-sandbox` | `sandbox_exec` | `ctx.tools`、`ctx.subprocess` | `tool/call`、`tool/result`、`.dsh/worktrees` 下的一次性 git worktree | - | sandbox_exec 在隔离的 detached git worktree 中运行命令，并返回有界的结构化 diff 与退出状态；调用后移除该 worktree。 |
 | `@deepseek-ai/dsh-tool-ask-user` | `ask_user_question` | `ctx.tools`、`ctx.userQuestions` | `tool/call`、`tool/result after a UI/provider answers the question` | - | ask_user_question 会暂停工具调用，直到当前 UI 提供方返回人类答案。 |
 | `@deepseek-ai/dsh-tools` | `run_code` | `ctx.tools`、`ctx.codeRuntime (execution time)`、`ctx.systemPrompt` | `tool/call`、`one tool/code-dispatch-start + tool/code-dispatch pair per bridged sub-call`、`tool/result` | - | 在 `mode: code`／`mode: both` 下，它由工具注册表所有，作为可过滤能力层之外的保留传输机制（参见 Code Mode Agent Note）。在 `code` 下，它是注册表对协议格式（wire format）的唯一贡献；其他可见能力在使用已加载运行时语言生成的 SDK 章节中声明。程序通过 binding 调用这些能力，调用按照原生并发约定调度：启动顺序和策略遵循提交顺序，并发安全的函数体最多重叠执行 `maxParallelSubCalls` 个。调用会重新进入完整且受守卫保护的工具流水线，并将每个嵌套执行关联到此外层结果。 |
@@ -229,6 +230,38 @@ Source: [`packages/plugins/plugin-ast-context/src/index.ts`](../packages/plugins
 来源：[`packages/plugins/plugin-ast-context/src/index.ts`](../packages/plugins/plugin-ast-context/src/index.ts)
 
 get_file_outline 读取仓库相对路径的源文件并返回其顶层 TypeScript 符号；解析失败或文件缺失以错误结果呈现，而不是部分大纲。
+
+<a id="deepseek-aidsh-plugin-subagent-router"></a>
+
+## `@deepseek-ai/dsh-plugin-subagent-router`
+
+### `subagent`
+
+把自包含任务委托给子代理并等待其结果。运行时按策略把委托路由到某个具备能力的子代理 provider；工具返回子代理的最终输出。在下一步依赖其结果时用它卸载工作。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "description": {
+      "type": "string",
+      "description": "A short (3-5 word) description of the delegated task, for display and routing."
+    },
+    "prompt": {
+      "type": "string",
+      "description": "The full task for the subagent."
+    }
+  },
+  "required": [
+    "description",
+    "prompt"
+  ]
+}
+```
+
+来源：[`packages/plugins/plugin-subagent-router/src/index.ts`](../packages/plugins/plugin-subagent-router/src/index.ts)
+
+单个委托入口把任务路由到由配置所拥有的策略选出的具备能力的子代理 provider；模型只描述任务（description + prompt），从不指名 provider 或传输方式。
 
 <a id="deepseek-aidsh-plugin-worktree-sandbox"></a>
 

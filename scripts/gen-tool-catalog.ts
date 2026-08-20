@@ -54,6 +54,7 @@ import * as ToolGoal from '@deepseek-ai/dsh-tool-goal'
 import * as ToolSchedule from '@deepseek-ai/dsh-schedule'
 import Lsp from '@deepseek-ai/dsh-lsp'
 import * as ToolAstContext from '@deepseek-ai/dsh-plugin-ast-context'
+import * as ToolSubagentRouter from '@deepseek-ai/dsh-plugin-subagent-router'
 import * as ToolWorktreeSandbox from '@deepseek-ai/dsh-plugin-worktree-sandbox'
 import * as ToolLsp from '@deepseek-ai/dsh-tool-lsp'
 import * as ToolSkill from '@deepseek-ai/dsh-tool-skill'
@@ -236,6 +237,20 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'get_file_outline reads a repo-relative source file and returns its top-level TypeScript symbols; a parse failure or missing file surfaces as an error result rather than a partial outline.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-plugin-subagent-router',
+    dir: 'plugin-subagent-router',
+    source: 'packages/plugins/plugin-subagent-router/src/index.ts',
+    requires: ['ctx.tools', 'ctx.subagents'],
+    writes: ['tool/call', 'tool/result', 'child session events through the chosen provider'],
+    async mount(ctx) {
+      await ctx.plugin(SubagentRuntime)
+      registerCatalogSubagentProvider(ctx, 'mock')
+      await ctx.plugin(ToolSubagentRouter, { providers: ['mock'] })
+    },
+    note:
+      'A single delegation entry routes a task to a capable subagent provider selected by config-owned policy; the model names only the task (description + prompt), never a provider or transport.',
   },
   {
     pkg: '@deepseek-ai/dsh-plugin-worktree-sandbox',

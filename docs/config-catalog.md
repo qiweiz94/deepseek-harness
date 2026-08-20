@@ -1396,6 +1396,49 @@ export interface Config {
 
 Source: [`packages/plugins/plugin-ast-context/src/index.ts:51`](../packages/plugins/plugin-ast-context/src/index.ts)
 
+<a id="deepseek-aidsh-plugin-subagent-router"></a>
+
+## `@deepseek-ai/dsh-plugin-subagent-router`
+
+Requires: `tools` · `subagents`
+
+```ts config-catalog
+/** Runtime configuration for the routing delegation tool. */
+export interface Config {
+  /** Ordered provider candidates used when no route matches. */
+  providers: string[]
+  /** Label-routed provider overrides; the first matching route wins. */
+  routes?: RoutePolicy[]
+  /** The model-facing tool name. */
+  toolName?: string
+  /** Per-child model/provider override forwarded to the provider. */
+  agentOptions?: AgentOptions
+  /** Per-child persona (requires the `persona` provider capability). */
+  persona?: string
+  /** Child tool scoping (requires the `toolFilter` provider capability). */
+  toolFilter?: {
+    /** Global tool names the child keeps; everything else is removed. */
+    allow?: string[]
+    /** Global tool names removed from the child. */
+    deny?: string[]
+  }
+  /** Absolute delegation-depth cap (requires the `depthLimit` capability). */
+  maxDepth?: number | 'provider-managed'
+}
+
+/** Ordered provider candidates for one label-routed delegation. */
+export interface RoutePolicy {
+  /** Case-insensitive substring matched against the delegated task label. */
+  label: string
+  /** Ordered provider candidates tried in sequence. */
+  providers: string[]
+}
+```
+
+Depends on: [`AgentOptions`](subsystems/core.md)
+
+Source: [`packages/plugins/plugin-subagent-router/src/index.ts:34`](../packages/plugins/plugin-subagent-router/src/index.ts)
+
 <a id="deepseek-aidsh-plugin-worktree-sandbox"></a>
 
 ## `@deepseek-ai/dsh-plugin-worktree-sandbox`
