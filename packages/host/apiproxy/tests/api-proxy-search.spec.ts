@@ -858,6 +858,7 @@ describe('session.search', () => {
       .mockRejectedValueOnce(new Error('database unavailable'))
     ctx.provide('sessionQuery', { searchSessions } as never)
     const api = createApiProxy(ctx, defaults)
+    const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
 
     const cancelled = await api.sessions.search(
       request('first'),
@@ -875,6 +876,36 @@ describe('session.search', () => {
     expect(failed.result.ok).toBe(false)
     if (failed.result.ok) throw new Error('unreachable')
     expect(failed.result.error.code).toBe('internal')
-    expect(failed.result.error.message).toContain('database unavailable')
+    // Redacted at the wire: a raw provider failure (here, a plain Error the
+    // mocked backend threw) must not reach the caller verbatim — only the
+    // operator log carries it.
+    expect(failed.result.error.message).not.toContain('database unavailable')
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('database unavailable'))
+  })
+
+  it('redacts a corrupt-index provider failure but still fails closed', async () => {
+    // SESSION_QUERY_INDEX_FAILED and SESSION_QUERY_PERSISTENCE_FAILED (the
+    // real sqlite backend's own codes) embed the underlying SQLite/fs error
+    // text, which can carry an index file path — exactly the provider detail
+    // this gateway must not expose.
+    const ctx = await baseContext()
+    ctx.sessions.create(sid('visible'), { meta: header('visible') })
+    const searchSessions = vi.fn(() => Promise.reject(new SessionQueryError(
+      'session-search SQLite index failed to open: ENOENT: /home/user/.dsh/private/index.db',
+      'SESSION_QUERY_INDEX_FAILED',
+    )))
+    ctx.provide('sessionQuery', { searchSessions } as never)
+    const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
+
+    const response = await createApiProxy(ctx, defaults).sessions.search(
+      request('corrupt-index'),
+      new AbortController().signal,
+    )
+
+    expect(response.result.ok).toBe(false)
+    if (response.result.ok) throw new Error('unreachable')
+    expect(response.result.error.code).toBe('internal')
+    expect(response.result.error.message).not.toContain('index.db')
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('index.db'))
   })
 })
