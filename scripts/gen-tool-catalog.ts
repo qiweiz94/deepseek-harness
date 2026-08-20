@@ -55,6 +55,7 @@ import * as ToolSchedule from '@deepseek-ai/dsh-schedule'
 import Lsp from '@deepseek-ai/dsh-lsp'
 import * as ToolAstContext from '@deepseek-ai/dsh-plugin-ast-context'
 import * as ToolSubagentRouter from '@deepseek-ai/dsh-plugin-subagent-router'
+import * as ToolWorktreeSandbox from '@deepseek-ai/dsh-plugin-worktree-sandbox'
 import * as ToolLsp from '@deepseek-ai/dsh-tool-lsp'
 import * as ToolSkill from '@deepseek-ai/dsh-tool-skill'
 import * as ToolSessionQuery from '@deepseek-ai/dsh-tool-session-query'
@@ -250,6 +251,19 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'A single delegation entry routes a task to a capable subagent provider selected by config-owned policy; the model names only the task (description + prompt), never a provider or transport.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-plugin-worktree-sandbox',
+    dir: 'plugin-worktree-sandbox',
+    source: 'packages/plugins/plugin-worktree-sandbox/src/index.ts',
+    requires: ['ctx.tools', 'ctx.subprocess'],
+    writes: ['tool/call', 'tool/result', 'a disposable git worktree under .dsh/worktrees'],
+    async mount(ctx) {
+      await ctx.plugin(LocalSubprocessRuntime)
+      await ctx.plugin(ToolWorktreeSandbox, { cwd: root })
+    },
+    note:
+      'sandbox_exec runs a command in an isolated detached git worktree and returns the bounded structured diff and exit status; the worktree is removed after the call.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-bash',

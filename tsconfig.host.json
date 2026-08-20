@@ -278,6 +278,7 @@
     { "path": "./packages/extensions/tool-cordis" },
     { "path": "./packages/plugins/plugin-ast-context" },
     { "path": "./packages/plugins/plugin-subagent-router" },
+    { "path": "./packages/plugins/plugin-worktree-sandbox" },
     { "path": "./packages/hooks/hook-protocol" },
     { "path": "./packages/hooks/hooks-claude-code" },
     { "path": "./packages/hooks/hooks-codex" },
