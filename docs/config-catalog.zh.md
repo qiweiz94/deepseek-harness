@@ -1434,12 +1434,18 @@ export interface RoutePolicy {
   label: string
   /** Ordered provider candidates tried in sequence. */
   providers: string[]
+  /**
+   * Per-route child model/provider override forwarded to the provider for
+   * delegations this route matches; the first matching route that declares one
+   * wins over the global `agentOptions`.
+   */
+  agentOptions?: AgentOptions
 }
 ```
 
 依赖：[`AgentOptions`](subsystems/core.md)
 
-来源：[`packages/plugins/plugin-subagent-router/src/index.ts:36`](../packages/plugins/plugin-subagent-router/src/index.ts)
+来源：[`packages/plugins/plugin-subagent-router/src/index.ts:42`](../packages/plugins/plugin-subagent-router/src/index.ts)
 
 <a id="deepseek-aidsh-plugin-worktree-sandbox"></a>
 

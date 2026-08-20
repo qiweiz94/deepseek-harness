@@ -60,7 +60,14 @@
   config:
     providers:
       - fork
+    # The route also pins the child's model tier: per-route agentOptions win
+    # over the global override, and the replayed child's request header carries
+    # the pinned maxTokens as durable proof.
     routes:
       - label: trial probe
         providers:
           - spawn
+        agentOptions:
+          provider: replay
+          model: deepseek-v4-flash
+          maxTokens: 512
