@@ -12,7 +12,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { AgentOptions } from '@deepseek-ai/dsh-agent'
-import type { ContentBlock } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { assertSubagentMaxDepth, outputValueText, settleForegroundRun, settleRun } from '@deepseek-ai/dsh-subagent'
 import type { SubagentProvider, SubagentRun } from '@deepseek-ai/dsh-subagent'
 import type { JobOutcome } from '@deepseek-ai/dsh-jobs'
@@ -97,7 +97,8 @@ export const Config: z<Config> = z.object({
     provider: z.string(),
     model: z.string(),
     maxTokens: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER),
-  }).default(undefined as unknown as { provider: string; model: string; maxTokens: number }),
+    reasoningEffort: z.string() as unknown as z<ReasoningEffortId>,
+  }).default(undefined as unknown as { provider: string; model: string; maxTokens: number; reasoningEffort: ReasoningEffortId }),
   persona: z.string(),
   // Preserve omission; Schemastery's `{ allow: [] }` default would deny every tool.
   toolFilter: z.object({

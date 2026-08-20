@@ -111,6 +111,66 @@ describe('request stability across the loop', () => {
     expectPrefixExtension(adapter.requests[0]!, adapter.requests[1]!)
   })
 
+  it('seeds AgentOptions.reasoningEffort into the first request when nothing is persisted yet', async () => {
+    const reasoning = {
+      efforts: [
+        { id: ReasoningEffortId('low'), name: 'Low' },
+        { id: ReasoningEffortId('high'), name: 'High' },
+      ],
+      defaultEffort: ReasoningEffortId('low'),
+    }
+    const adapter = new MockAdapter([textResponse('one')], reasoning)
+    const ctx = await harness(adapter)
+    const agent = ctx.agentLoop.create(SessionId('a1'), {
+      provider: 'mock',
+      model: 'mock',
+      reasoningEffort: ReasoningEffortId('high'),
+    })
+
+    send(agent, 'go')
+    await waitForIdle(ctx, agent)
+
+    // AgentOptions.reasoningEffort wins over the adapter's own catalog
+    // default (`low`), same precedence a caller-declared maxTokens has.
+    expect(adapter.requests[0]?.reasoningEffort).toBe(ReasoningEffortId('high'))
+    const headerEvents = agent.session.events.filter(e => e.type === 'request/header')
+    expect(headerEvents[0]?.type === 'request/header' && headerEvents[0].data.header.config.reasoningEffort)
+      .toBe(ReasoningEffortId('high'))
+  })
+
+  it('lets a later persisted, route-matched effort override AgentOptions.reasoningEffort', async () => {
+    const reasoning = {
+      efforts: [
+        { id: ReasoningEffortId('high'), name: 'High' },
+        { id: ReasoningEffortId('max'), name: 'Max' },
+      ],
+      defaultEffort: ReasoningEffortId('high'),
+    }
+    const adapter = new MockAdapter([textResponse('one'), textResponse('two')], reasoning)
+    const ctx = await harness(adapter)
+    const agent = ctx.agentLoop.create(SessionId('a1'), {
+      provider: 'mock',
+      model: 'mock',
+      reasoningEffort: ReasoningEffortId('high'),
+    })
+    ctx.on('agent/request', async ({ turn }, next) => {
+      const config = await next()
+      return turn === 2 ? { ...config, reasoningEffort: ReasoningEffortId('max') } : config
+    })
+
+    send(agent, 'first')
+    await waitForIdle(ctx, agent)
+    send(agent, 'second')
+    await waitForIdle(ctx, agent)
+
+    // Turn 2's persisted header change wins over the AgentOptions default that
+    // seeded turn 1 — the default seeds only requests with nothing persisted.
+    expect(adapter.requests.map(request => request.reasoningEffort)).toEqual([
+      ReasoningEffortId('high'),
+      ReasoningEffortId('max'),
+    ])
+  })
+
   it('logs adapter defaults, supports per-turn effort changes, and restores the effective value', async () => {
     const reasoning = {
       efforts: [

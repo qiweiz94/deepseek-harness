@@ -16,6 +16,8 @@ The scoped-registration surface: `Agent.ctx` is the agent's scope context (`dsh-
 
 `AgentOptions` supplies the initial provider/model route and an optional positive `maxTokens` output cap. The concrete loop resolves any exact-model adapter default, records the effective cap in the request header, and applies it to each conversation-model request; an explicit Agent option wins, while omission leaves the adapter or provider route default in control.
 
+`AgentOptions.reasoningEffort` seeds the same way, but only requests that would otherwise carry no effort: a later request/header value that matches the current provider/model route (an explicit per-turn effort switch, or a live `installModelSelection` selection) takes precedence over it, same as any adapter-owned default it would otherwise seed from.
+
 - `ctx.agents.register(agent: Agent): () => void` — record an **already-constructed** agent. Disposed with the calling fiber.
 - Advanced ordered lifecycle: `enter(agent, owner): () => void` enforces `agent.id === agent.session.id`, performs the authoritative ID collision check, and inserts without announcing; `owner` explicitly records the live creator-agent relation (or `undefined` for a root), independently of durable session lineage. `announce(agent)` emits `agent/created` exactly once. A detach requested synchronously by a creation listener is deferred until that dispatch unwinds, and every detach checks the captured entry object, so a stale capability cannot delete a later same-ID replacement. The async factory uses this split; ordinary plugins use `register()`.
 - `ctx.agents.get(id: SessionId): Agent | undefined`
