@@ -18,7 +18,13 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-tool-ask-user` | `ask_user_question` | `ctx.tools`, `ctx.userQuestions` | `tool/call`, `tool/result after a UI/provider answers the question` | - | ask_user_question pauses the tool call until the active UI provider returns a human answer. |
 | `@deepseek-ai/dsh-tools` | `run_code` | `ctx.tools`, `ctx.codeRuntime (execution time)`, `ctx.systemPrompt` | `tool/call`, `one tool/code-dispatch-start + tool/code-dispatch pair per bridged sub-call`, `tool/result` | - | Owned by the tool registry as a reserved transport outside filterable capability layers under `mode: code` / `mode: both` (see the Code Mode Agent Note). Under `code` it is the registry's only wire contribution; the other visible capabilities are declared in a generated SDK section in the loaded runtime's language, and a program calls them through bindings scheduled under the native concurrency contract (submission-ordered starts and policy; concurrency-safe bodies overlap up to `maxParallelSubCalls`) that re-enter the complete guarded tool pipeline and link each nested execution to this outer result. |
 | `@deepseek-ai/dsh-plan-mode` | `exit_plan_mode` | `ctx.tools`, `ctx.systemPrompt`, `ctx.userQuestions (execution time, opportunistic)` | `tool/call`, `plan/mode inactive on an approved review`, `tool/result` | - | exit_plan_mode stays in the model-facing schema while planning is inactive so transitions add no tool-catalog churn on top of the plan-policy change. Its execute path rejects calls outside plan mode; in plan mode it presents the plan over the user-questions seam (approve / keep planning with feedback), and approval logs plan mode inactive at the step boundary. |
+| `@deepseek-ai/dsh-plugin-arch-guard` | `check_module_boundary` | `ctx.tools` | `tool/call`, `tool/result` | - | check_module_boundary scans the workspace package graph from config.root once at mount and answers each call as a pure function of that graph; a package added after mount is not visible until the next mount. |
 | `@deepseek-ai/dsh-plugin-ast-context` | `get_directory_outline`, `get_file_outline` | `ctx.tools` | `tool/call`, `tool/result` | - | get_file_outline reads a repo-relative source file and returns its top-level TypeScript symbols; a parse failure or missing file surfaces as an error result rather than a partial outline. |
+| `@deepseek-ai/dsh-plugin-diagnostic-sifter` | `run_diagnostic_check` | `ctx.tools`, `ctx.subprocess` | `tool/call`, `tool/result` | - | run_diagnostic_check runs the configured typecheck or test binary and returns at most a few root-cause diagnostics: cascading repeats of one defect collapse onto the diagnostic that caused them, passing-test output and out-of-project stack frames are dropped, and the result is bounded to a compact JSON budget. |
+| `@deepseek-ai/dsh-plugin-doc-sync-automator` | `sync_bilingual_pair` | `ctx.tools` | `tool/call`, `tool/result`, `the paired .zh.md mirror and its .i18n.yaml consistency record on disk` | - | sync_bilingual_pair splices a changed section of an English doc into its .zh.md mirror behind a NEEDS-TRANSLATION marker and re-records the pair's .i18n.yaml consistency hashes; it never machine-translates, only keeps the pair structurally valid and flags the debt. |
+| `@deepseek-ai/dsh-plugin-impacted-tests` | `run_impacted_tests` | `ctx.tools`, `ctx.subprocess` | `tool/call`, `tool/result` | - | run_impacted_tests selects test suites by walking the workspace import DAG in reverse from the changed files (the uncommitted working-tree changes when `files` is omitted) and runs strictly the selected suites. An empty change set, or a changed file no suite imports, runs nothing — that is the answer, not a failure. |
+| `@deepseek-ai/dsh-plugin-lsp-references` | `find_references`, `get_definition` | `ctx.tools` | `tool/call`, `tool/result` | - | find_references and get_definition answer from an in-process TypeScript language service over the transitive file set of the configured tsconfig (default tsconfig.host.json), so a reference in another package is found; the service is built on the first call and released with the fiber. Positions are 1-based line and 1-based UTF-16 character; an off-symbol position returns an empty result rather than an error, while a file outside the project file set is an error result. |
+| `@deepseek-ai/dsh-plugin-pinned-scratchpad` | `scratchpad_update` | `ctx.tools`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `the pinned <agent_scratchpad> prompt section on every assembly` | - | scratchpad_update pins a short key/value note the model maintains itself; the pinned block is re-rendered into the system prompt by a section provider on every assembly (never into the message log), so it is unaffected by compaction. The whole block is capped at a token budget and the least recently written entries are dropped first behind a truncation marker. |
 | `@deepseek-ai/dsh-plugin-semantic-patcher` | `patch_symbol_body` | `ctx.tools` | `tool/call`, `tool/result`, `the patched source file, replaced by one atomic rename` | - | patch_symbol_body replaces one named symbol's body located in the parsed syntax tree rather than by text match; a name that matches no symbol or more than one fails with the candidate list, and a replacement that would not parse leaves the file byte-for-byte unchanged. |
 | `@deepseek-ai/dsh-plugin-subagent-router` | `subagent` | `ctx.tools`, `ctx.subagents` | `tool/call`, `tool/result`, `child session events through the chosen provider` | - | A single delegation entry routes a task to a capable subagent provider selected by config-owned policy; the model names only the task (description + prompt), never a provider or transport. |
 | `@deepseek-ai/dsh-plugin-telemetry-recorder` | `get_session_telemetry` | `ctx.tools`, `ctx.agents (call time, through the calling execution's agent)` | `tool/call`, `tool/result` | - | get_session_telemetry reads the calling session's own durable log and the subagent lifecycle pair; it takes no arguments, writes nothing, and omits any figure the log has not yet produced evidence for instead of reporting it as zero. |
@@ -183,6 +189,38 @@ Source: [`packages/plan/plan-mode/src/index.ts`](../packages/plan/plan-mode/src/
 
 exit_plan_mode stays in the model-facing schema while planning is inactive so transitions add no tool-catalog churn on top of the plan-policy change. Its execute path rejects calls outside plan mode; in plan mode it presents the plan over the user-questions seam (approve / keep planning with feedback), and approval logs plan mode inactive at the step boundary.
 
+<a id="deepseek-aidsh-plugin-arch-guard"></a>
+
+## `@deepseek-ai/dsh-plugin-arch-guard`
+
+### `check_module_boundary`
+
+Check whether importing targetImport from sourcePath is legal under the monorepo's package-layering rules: architectural tier direction (foundation packages < capability packages < surface/plugin packages), the plugins-may-not-import-each-other-unless-declared rule, package-graph acyclicity, and the target package's exports map. Use it before adding a new cross-package import.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sourcePath": {
+      "type": "string",
+      "description": "Repo-relative path of the file the import would be written in (e.g. packages/plugins/plugin-arch-guard/src/guard.ts)."
+    },
+    "targetImport": {
+      "type": "string",
+      "description": "The import specifier as it would be written at the source site (e.g. \"@deepseek-ai/dsh-tools\" or \"./helpers.ts\")."
+    }
+  },
+  "required": [
+    "sourcePath",
+    "targetImport"
+  ]
+}
+```
+
+Source: [`packages/plugins/plugin-arch-guard/src/index.ts`](../packages/plugins/plugin-arch-guard/src/index.ts)
+
+check_module_boundary scans the workspace package graph from config.root once at mount and answers each call as a pure function of that graph; a package added after mount is not visible until the next mount.
+
 <a id="deepseek-aidsh-plugin-ast-context"></a>
 
 ## `@deepseek-ai/dsh-plugin-ast-context`
@@ -230,6 +268,220 @@ Parse a local TypeScript (.ts or .tsx) file and list its top-level declarations 
 Source: [`packages/plugins/plugin-ast-context/src/index.ts`](../packages/plugins/plugin-ast-context/src/index.ts)
 
 get_file_outline reads a repo-relative source file and returns its top-level TypeScript symbols; a parse failure or missing file surfaces as an error result rather than a partial outline.
+
+<a id="deepseek-aidsh-plugin-diagnostic-sifter"></a>
+
+## `@deepseek-ai/dsh-plugin-diagnostic-sifter`
+
+### `run_diagnostic_check`
+
+Run the project's TypeScript build or test suite and return only the diagnostics that explain the failure. Repeated errors caused by one defect (a missing module reported at every import site, a renamed export reported at every use) are collapsed onto the single diagnostic that caused them, passing-test output and stack frames outside the project are dropped, and at most a handful of root causes come back. Use it instead of reading a full compiler or test transcript; fix the reported causes first, then run it again.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "command": {
+      "type": "string",
+      "description": "Which check to run: `typecheck` builds the TypeScript projects, `test` runs the test suite.",
+      "enum": [
+        "typecheck",
+        "test"
+      ]
+    },
+    "targetPath": {
+      "type": "string",
+      "description": "Optional repo-relative path narrowing the check to one project or test file. Omit to check everything."
+    }
+  },
+  "required": [
+    "command"
+  ]
+}
+```
+
+Source: [`packages/plugins/plugin-diagnostic-sifter/src/index.ts`](../packages/plugins/plugin-diagnostic-sifter/src/index.ts)
+
+run_diagnostic_check runs the configured typecheck or test binary and returns at most a few root-cause diagnostics: cascading repeats of one defect collapse onto the diagnostic that caused them, passing-test output and out-of-project stack frames are dropped, and the result is bounded to a compact JSON budget.
+
+<a id="deepseek-aidsh-plugin-doc-sync-automator"></a>
+
+## `@deepseek-ai/dsh-plugin-doc-sync-automator`
+
+### `sync_bilingual_pair`
+
+Propagate a changed section of an English Markdown document into its paired Simplified Chinese mirror (<doc>.zh.md), keeping the bilingual pair structurally valid. This tool does NOT translate: the spliced content is the exact English text wrapped in NEEDS-TRANSLATION markers, and the pair's .i18n.yaml consistency record is rewritten so `pnpm run verify-translation-pairing` accepts the result instead of flagging it out-of-sync. Call it right after editing an English doc (docs/, .agents/notes/, or a package README) so the mirror stops silently drifting; a human translator later replaces the marked English text.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "docPath": {
+      "type": "string",
+      "description": "Repository-relative path to the English Markdown source, e.g. \"docs/architecture.md\" or \"packages/plugins/plugin-foo/README.md\". Must end in .md and not .zh.md."
+    },
+    "updatedSection": {
+      "type": "object",
+      "description": "Identifies which section of docPath changed.",
+      "additionalProperties": false,
+      "properties": {
+        "heading": {
+          "type": "string",
+          "description": "Exact heading text (without leading #s) of the changed section in docPath, e.g. \"Configuration\"."
+        }
+      },
+      "required": [
+        "heading"
+      ]
+    }
+  },
+  "required": [
+    "docPath",
+    "updatedSection"
+  ]
+}
+```
+
+Source: [`packages/plugins/plugin-doc-sync-automator/src/index.ts`](../packages/plugins/plugin-doc-sync-automator/src/index.ts)
+
+sync_bilingual_pair splices a changed section of an English doc into its .zh.md mirror behind a NEEDS-TRANSLATION marker and re-records the pair's .i18n.yaml consistency hashes; it never machine-translates, only keeps the pair structurally valid and flags the debt.
+
+<a id="deepseek-aidsh-plugin-impacted-tests"></a>
+
+## `@deepseek-ai/dsh-plugin-impacted-tests`
+
+### `run_impacted_tests`
+
+Run only the test suites that a set of changed files can actually break. Builds the repository's import graph, finds every test suite that transitively imports a changed file, and runs strictly those suites. Omit `files` to use the uncommitted changes in the working tree. When nothing is changed, or when a changed file (a Markdown document, say) is imported by no suite, nothing is run — that is the answer, not a failure. Use it after editing source to get a fast, targeted verdict instead of the whole suite.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "files": {
+      "type": "array",
+      "description": "The changed files to analyse. Omit to use the uncommitted modified files in the working tree.",
+      "items": {
+        "type": "string",
+        "description": "A repo-relative path."
+      }
+    }
+  }
+}
+```
+
+Source: [`packages/plugins/plugin-impacted-tests/src/index.ts`](../packages/plugins/plugin-impacted-tests/src/index.ts)
+
+run_impacted_tests selects test suites by walking the workspace import DAG in reverse from the changed files (the uncommitted working-tree changes when `files` is omitted) and runs strictly the selected suites. An empty change set, or a changed file no suite imports, runs nothing — that is the answer, not a failure.
+
+<a id="deepseek-aidsh-plugin-lsp-references"></a>
+
+## `@deepseek-ai/dsh-plugin-lsp-references`
+
+### `find_references`
+
+Find every reference to the TypeScript symbol under a cursor — callers, importers, and implementations — across the whole project file set, not just the file you name. Positions are 1-based line and 1-based UTF-16 character; the symbol's own declaration is included. Use it before changing a symbol, when a textual search would be ambiguous. An off-symbol position returns no references rather than failing.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "Path to a TypeScript file in the project, absolute or relative to the working directory."
+    },
+    "line": {
+      "type": "integer",
+      "description": "1-based line of the cursor."
+    },
+    "character": {
+      "type": "integer",
+      "description": "1-based UTF-16 column of the cursor."
+    }
+  },
+  "required": [
+    "path",
+    "line",
+    "character"
+  ]
+}
+```
+
+Source: [`packages/plugins/plugin-lsp-references/src/index.ts`](../packages/plugins/plugin-lsp-references/src/index.ts)
+
+### `get_definition`
+
+Resolve the TypeScript symbol under a cursor to its exact declaration anchor. Positions are 1-based line and 1-based UTF-16 character. An overloaded function or a merged interface reports one anchor per declaration; an off-symbol position returns none rather than failing.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "Path to a TypeScript file in the project, absolute or relative to the working directory."
+    },
+    "line": {
+      "type": "integer",
+      "description": "1-based line of the cursor."
+    },
+    "character": {
+      "type": "integer",
+      "description": "1-based UTF-16 column of the cursor."
+    }
+  },
+  "required": [
+    "path",
+    "line",
+    "character"
+  ]
+}
+```
+
+Source: [`packages/plugins/plugin-lsp-references/src/index.ts`](../packages/plugins/plugin-lsp-references/src/index.ts)
+
+find_references and get_definition answer from an in-process TypeScript language service over the transitive file set of the configured tsconfig (default tsconfig.host.json), so a reference in another package is found; the service is built on the first call and released with the fiber. Positions are 1-based line and 1-based UTF-16 character; an off-symbol position returns an empty result rather than an error, while a file outside the project file set is an error result.
+
+<a id="deepseek-aidsh-plugin-pinned-scratchpad"></a>
+
+## `@deepseek-ai/dsh-plugin-pinned-scratchpad`
+
+### `scratchpad_update`
+
+Pin a short, durable note to your own scratchpad, or remove one. The scratchpad is redrawn into your prompt before every turn and survives conversation compaction, so it is where you keep facts you must not lose: the task you were given, a decision you made and why, a path or identifier you will need later. Pass a string `value` to set or replace a key, or null to delete it. Keep entries short — the whole scratchpad is capped, and when it overflows your LEAST RECENTLY WRITTEN entries are dropped first. Re-writing a key refreshes it, so a note you keep updating is never the one evicted.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "key": {
+      "type": "string",
+      "description": "Short stable name for this note, e.g. \"task\" or \"build-command\". Re-using a key replaces its value."
+    },
+    "value": {
+      "oneOf": [
+        {
+          "type": "string",
+          "description": "The note text; replaces any current value for this key."
+        },
+        {
+          "type": "null",
+          "description": "Delete this key from the scratchpad."
+        }
+      ],
+      "description": "The note text, or null to delete the key."
+    }
+  },
+  "required": [
+    "key",
+    "value"
+  ]
+}
+```
+
+Source: [`packages/plugins/plugin-pinned-scratchpad/src/index.ts`](../packages/plugins/plugin-pinned-scratchpad/src/index.ts)
+
+scratchpad_update pins a short key/value note the model maintains itself; the pinned block is re-rendered into the system prompt by a section provider on every assembly (never into the message log), so it is unaffected by compaction. The whole block is capped at a token budget and the least recently written entries are dropped first behind a truncation marker.
 
 <a id="deepseek-aidsh-plugin-semantic-patcher"></a>
 
