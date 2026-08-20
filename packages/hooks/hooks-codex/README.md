@@ -20,9 +20,11 @@ A native cordis plugin could do everything this bridge does, more powerfully; th
 import type { Config } from '@deepseek-ai/dsh-hooks-codex'
 const config: Config = {
   configPath: '/path/to/.codex/hooks.json', // required
+  sessionConfigFile: '.codex/hooks.json',    // optional: per-session project-local discovery, resolved against each session's cwd
   model: 'deepseek-v4',                      // optional: stamped on every payload (Codex includes `model`)
   defaultTimeoutMs: 600_000,                 // optional: per-hook timeout when a hook sets none
   stderrSummaryMaxChars: 500,                // optional: char cap on the hook/result event's persisted stderr summary
+  maxConsecutiveStopBlocks: 8,                // optional: consecutive Stop-hook forced continuations allowed per turn before the block is overridden (borrows Claude Code's guard default; Codex documents no cap of its own)
 }
 ```
 
@@ -31,10 +33,11 @@ In a `cordis.yml`:
 ```yaml
 - dsh-hooks-codex:
     configPath: ./.codex/hooks.json
+    sessionConfigFile: .codex/hooks.json
     model: deepseek-v4
 ```
 
-The config is parsed **once** at load. `configPath` is **process-level** — a relative path resolves against the process launch cwd at load time, not per-session (`TODO(per-session-hook-config)`). A read/parse failure is contained (logs + registers nothing); an invalid regex matcher on an event that consumes matchers is one such failure and reports its pattern and event. Only sync `type: 'command'` hooks run — a non-command or `async: true` hook is parsed-and-skipped with a warning. A hook accepts `timeout` or the `timeoutSec` alias; one that sets neither runs under the protocol's reference default (`DEFAULT_HOOK_TIMEOUT_MS` from `dsh-hook-protocol`, 10 minutes). Events outside the five bridge-supported points are dropped at parse.
+The process-level `configPath` is parsed **once** at load — a relative path resolves against the process launch cwd at load time, so a single config applies to the whole process. An optional `sessionConfigFile` adds per-session project-local discovery — a path resolved against each agent session's workspace (`session/new.cwd`), read and parsed once per session at first hook use; its groups run *after* the process-level groups on each point, and a session workspace without the file simply has no session hooks. A `configPath` read/parse failure is contained; an invalid regex matcher on an event that consumes matchers is one such failure and reports its pattern and event. With no `sessionConfigFile` configured the failure logs and registers nothing; otherwise the bridge keeps running on session-local discovery alone, and a session-local file's own read/parse failure is contained the same way, scoped to that one session. Only sync `type: 'command'` hooks run — a non-command or `async: true` hook is parsed-and-skipped with a warning. A hook accepts `timeout` or the `timeoutSec` alias; one that sets neither runs under the protocol's reference default (`DEFAULT_HOOK_TIMEOUT_MS` from `dsh-hook-protocol`, 10 minutes). Events outside the five bridge-supported points are dropped at parse.
 
 The hooks themselves run in the agent's session workspace: for the agent-scoped points the bridge passes the session's `cwd` as the hook process's working directory, so a hook operates in the user's project tree, not the server launch dir.
 
@@ -42,11 +45,11 @@ The hooks themselves run in the agent's session workspace: for the agent-scoped 
 
 | Codex hook | Harness point | Mapping |
 |---|---|---|
-| `SessionStart` | `agent/session-start` (emit) | a plain-stdout hook's output → additionalContext → `agent.inject()` |
-| `UserPromptSubmit` | `agent/pre-step` (waterfall) | `block` (exit 2) → `PreStepDecision.reject`; additionalContext-only → delegate via `next()` then append a separately sourced message to a downstream `enter` decision |
-| `PreToolUse` | `tools/pre-execute` (waterfall) | `block` → `PreToolDecision.deny` (no `allow`/`ask`) |
-| `PostToolUse` | `tools/post-execute` (waterfall) | `block` → `block` with feedback; additionalContext-only → delegate via `next()` then prepend a separately sourced context to the downstream decision; Code Mode defers sub-call contexts until the outer `run_code` result |
-| `Stop` | `agent/turn-stopping` (serial) | a blocking Stop hook feeds its reason through `steer()`, forcing another step |
+| `SessionStart` | `agent/session-start` (emit) | a plain-stdout hook's output → additionalContext → claimed and awaited by the first `agent/pre-step` step, folded into its messages (bounded by the hook timeout); `agent.inject()` when no step claims it |
+| `UserPromptSubmit` | `agent/pre-step` (waterfall) | `block` (exit 2) → `PreStepDecision.reject`; `continue:false` → halts the run; additionalContext-only → delegate via `next()` then append a separately sourced message to a downstream `enter` decision |
+| `PreToolUse` | `tools/pre-execute` (waterfall) | `block` → `PreToolDecision.deny` (no `allow`/`ask`); `continue:false` → halts the run and denies the tool |
+| `PostToolUse` | `tools/post-execute` (waterfall) | `block` → `block` with feedback; `continue:false` → halts the run (after the tool ran); additionalContext-only → delegate via `next()` then prepend a separately sourced context to the downstream decision; Code Mode defers sub-call contexts until the outer `run_code` result |
+| `Stop` | `agent/turn-stopping` (serial) | a blocking Stop hook feeds its reason through `steer()`, forcing another step, up to `maxConsecutiveStopBlocks` consecutive times per turn; `continue:false` overrides a block and lets the turn close |
 
 A tool call's payload carries the real `tool_name` (the same value the matcher tests) and Codex's `tool_input: { command }` shape (the `command` arg when present, else `''`). The matcher subject is the tool name (`PreToolUse`/`PostToolUse`) or the session source (`SessionStart`); `UserPromptSubmit`/`Stop` ignore matchers.
 
@@ -91,10 +94,10 @@ A blocked prompt sends no request and invalidates nothing. Denial, feedback, and
 ## Known Limitations and Deferred Work
 
 - **Unsupported hook events (5 of Codex's current 10):** `PermissionRequest`, `PreCompact`, `PostCompact`, `SubagentStart`, and `SubagentStop`. Config for these events is silently dropped during parsing. The comparison baseline is Codex's [official hook reference](https://learn.chatgpt.com/docs/hooks).
-- **`SessionStart` is partial:** plain stdout and JSON `additionalContext` work, but the hook runs detached, so context can miss the first request (`TODO(session-start-gating)`).
-- **`UserPromptSubmit` is partial:** blocking plus plain-stdout or JSON context work, but the common `systemMessage` and `{"continue": false}` controls are not enforced.
-- **`PreToolUse` is partial:** blocking works, but `additionalContext`, `permissionDecision: "allow"`, and `updatedInput` are ignored. Every tool is represented as `tool_input: { command }`, so non-shell tool arguments are not faithfully exposed to the hook.
-- **`PostToolUse` is partial:** blocking feedback and JSON `additionalContext` work, but `{"continue": false}` is not enforced, non-shell tool arguments are reduced to `{ command }`, and structured tool output is flattened to text in `tool_response`.
-- **`Stop` is partial:** blocking forces another model turn, but `stop_hook_active` is always `false`, `last_assistant_message` is always `null`, and `{"continue": false}` is not enforced. An unconditionally blocking hook therefore force-continues every step unless it self-limits (`TODO(stop-loop-guard)`).
-- **Common payload and output fields are partial:** every mapped event reports the statically configured `model` and `permission_mode: "default"` instead of current Codex runtime values. `systemMessage` is logged + warned but not surfaced, and `{"continue": false}` is recorded but does not apply Codex's event-specific stop behavior (`TODO(hook-continue-false)`).
-- **Config loading and execution are partial:** one process-level `configPath` is parsed at load; Codex's active user, project, session, system/managed, and plugin layers, trust controls, and inline `config.toml` hook form are not implemented (`TODO(per-session-hook-config)`). Only synchronous `command` handlers run, current metadata such as `statusMessage` and `commandWindows` is ignored, and matching handlers run serially rather than with Codex's concurrent launch semantics.
+- **`SessionStart` is partial:** plain stdout and JSON `additionalContext` work. The hook runs detached; its resolved context is claimed by the first `agent/pre-step` and folded into that step's messages, so delivery is a bounded stall on the hook's timeout rather than a race against the first request — a step that never claims it falls back to `agent.inject`. Like the other emit points it fires with no open turn, so a `{"continue": false}` there is neither recorded nor honored.
+- **`UserPromptSubmit` is partial:** blocking plus plain-stdout or JSON context work, and `{"continue": false}` now halts the run; the common `systemMessage` control is still not enforced.
+- **`PreToolUse` is partial:** blocking (including `{"continue": false}`, which also halts the run) works, but `additionalContext`, `permissionDecision: "allow"`, and `updatedInput` are ignored. Every tool is represented as `tool_input: { command }`, so non-shell tool arguments are not faithfully exposed to the hook.
+- **`PostToolUse` is partial:** blocking feedback, JSON `additionalContext`, and `{"continue": false}` (which halts the run after the tool ran) work, but non-shell tool arguments are reduced to `{ command }` and structured tool output is flattened to text in `tool_response`.
+- **`Stop` is partial:** blocking forces another model turn (up to `maxConsecutiveStopBlocks` consecutive times per turn — default 8, borrowed from Claude Code's own guard since Codex documents no cap of its own — after which the block is overridden and the turn is allowed to stop), and `stop_hook_active` truthfully reports whether a Stop hook already forced continuation this turn. `last_assistant_message` is still always `null`.
+- **Common payload and output fields are partial:** every mapped event reports the statically configured `model` and `permission_mode: "default"` instead of current Codex runtime values. `systemMessage` is logged + warned but not surfaced. `{"continue": false}` halts the active run at `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, and `Stop` — mapped to an `AgentCancelCause` of kind `hook` that aborts the turn; `stopReason` becomes the cancel reason (falling back to a point-named reason when absent) rather than applying Codex's own event-specific stop behavior.
+- **Config loading and execution are partial:** one process-level `configPath` is parsed at load; an optional `sessionConfigFile` adds per-session project-local discovery on top (see Config, above). Codex's active user, project, session, system/managed, and plugin layers beyond that, trust controls, and inline `config.toml` hook form are not implemented. Only synchronous `command` handlers run, current metadata such as `statusMessage` and `commandWindows` is ignored, and matching handlers run serially rather than with Codex's concurrent launch semantics.

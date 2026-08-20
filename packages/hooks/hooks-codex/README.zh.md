@@ -20,9 +20,11 @@
 import type { Config } from '@deepseek-ai/dsh-hooks-codex'
 const config: Config = {
   configPath: '/path/to/.codex/hooks.json', // required
+  sessionConfigFile: '.codex/hooks.json',    // optional: per-session project-local discovery, resolved against each session's cwd
   model: 'deepseek-v4',                      // optional: stamped on every payload (Codex includes `model`)
   defaultTimeoutMs: 600_000,                 // optional: per-hook timeout when a hook sets none
   stderrSummaryMaxChars: 500,                // optional: char cap on the hook/result event's persisted stderr summary
+  maxConsecutiveStopBlocks: 8,                // optional: consecutive Stop-hook forced continuations allowed per turn before the block is overridden (borrows Claude Code's guard default; Codex documents no cap of its own)
 }
 ```
 
@@ -31,10 +33,11 @@ const config: Config = {
 ```yaml
 - dsh-hooks-codex:
     configPath: ./.codex/hooks.json
+    sessionConfigFile: .codex/hooks.json
     model: deepseek-v4
 ```
 
-配置只在加载时解析**一次**。`configPath` 是**进程级**配置：相对路径在加载时根据进程启动 cwd 解析，而非每会话解析（`TODO(per-session-hook-config)`）。读取／解析失败会被隔离处理（记录 + 不注册任何内容）；实际消费 matcher 的事件所带的无效 matcher 正则属于此类失败，并报告其 pattern 与事件。只运行同步 `type: 'command'` hook；非 command 或 `async: true` hook 会被解析并跳过，同时记录警告。hook 接受 `timeout` 或 `timeoutSec` alias；两者都未设置时，使用协议参考默认值 `DEFAULT_HOOK_TIMEOUT_MS`（来自 `dsh-hook-protocol`，10 分钟）。五个桥接支持点之外的事件会在解析时丢弃。
+进程级 `configPath` 只在加载时解析**一次**——相对路径在加载时根据进程启动 cwd 解析，因此一份配置应用于整个进程。可选的 `sessionConfigFile` 增加每会话项目本地发现——路径相对于每个 agent 会话的工作区（`session/new.cwd`）解析，在每个会话首次使用 hook 时解析并缓存一次；其分组会在每个点上**晚于**进程级分组运行，没有该文件的会话工作区则没有会话级 hook。`configPath` 的读取／解析失败会被隔离处理；实际消费 matcher 的事件所带的无效 matcher 正则属于此类失败，并报告其 pattern 与事件。未配置 `sessionConfigFile` 时，该失败会被记录且不注册任何内容；否则桥接会继续仅依靠会话级发现运行，会话级文件自身的读取／解析失败会以同样方式被隔离，且只影响该会话。只运行同步 `type: 'command'` hook；非 command 或 `async: true` hook 会被解析并跳过，同时记录警告。hook 接受 `timeout` 或 `timeoutSec` alias；两者都未设置时，使用协议参考默认值 `DEFAULT_HOOK_TIMEOUT_MS`（来自 `dsh-hook-protocol`，10 分钟）。五个桥接支持点之外的事件会在解析时丢弃。
 
 hook 本身会在 agent（智能体）的会话工作区中运行：对 agent scope 点，桥接会将会话 `cwd` 作为 hook 进程工作目录，因此 hook 作用于用户项目树，而非服务器启动目录。
 
@@ -42,11 +45,11 @@ hook 本身会在 agent（智能体）的会话工作区中运行：对 agent sc
 
 | Codex hook | Harness 点 | 映射 |
 |---|---|---|
-| `SessionStart` | `agent/session-start`（emit） | 纯 stdout hook 的输出 → additionalContext → `agent.inject()` |
-| `UserPromptSubmit` | `agent/pre-step`（waterfall，瀑布式事件） | `block`（退出码 2）→ `PreStepDecision.reject`；仅 additionalContext → 通过 `next()` 委托，再向下游 `enter` 决策追加一条单独标记来源的消息 |
-| `PreToolUse` | `tools/pre-execute`（waterfall） | `block` → `PreToolDecision.deny`（没有 `allow`／`ask`） |
-| `PostToolUse` | `tools/post-execute`（waterfall） | `block` → 带反馈的 `block`；仅 additionalContext → 通过 `next()` 委托，再将一个单独标记源的上下文前置到下游决策；Code Mode 将子调用上下文延迟到外层 `run_code` 结果 |
-| `Stop` | `agent/turn-stopping`（serial） | 阻塞 Stop hook 通过 `steer()` 送入其原因，强制再执行一步 |
+| `SessionStart` | `agent/session-start`（emit） | 纯 stdout hook 的输出 → additionalContext → 被第一个 `agent/pre-step` 步骤认领并等待，折叠进该步骤的消息中（受 hook 超时限制）；没有步骤认领时使用 `agent.inject()` |
+| `UserPromptSubmit` | `agent/pre-step`（waterfall，瀑布式事件） | `block`（退出码 2）→ `PreStepDecision.reject`；`continue:false` → 中止运行；仅 additionalContext → 通过 `next()` 委托，再向下游 `enter` 决策追加一条单独标记来源的消息 |
+| `PreToolUse` | `tools/pre-execute`（waterfall） | `block` → `PreToolDecision.deny`（没有 `allow`／`ask`）；`continue:false` → 中止运行并拒绝该工具 |
+| `PostToolUse` | `tools/post-execute`（waterfall） | `block` → 带反馈的 `block`；`continue:false` → 中止运行（在工具执行之后）；仅 additionalContext → 通过 `next()` 委托，再将一个单独标记源的上下文前置到下游决策；Code Mode 将子调用上下文延迟到外层 `run_code` 结果 |
+| `Stop` | `agent/turn-stopping`（serial） | 阻塞 Stop hook 通过 `steer()` 送入其原因，强制再执行一步，每轮次最多连续 `maxConsecutiveStopBlocks` 次；`continue:false` 会覆盖阻塞，让轮次结束 |
 
 工具调用的 payload 携带真实 `tool_name`（matcher 测试的相同值）与 Codex `tool_input: { command }` 形状（存在 `command` arg 时使用该值，否则使用 `''`）。matcher subject 是工具名称（`PreToolUse`／`PostToolUse`）或会话源（`SessionStart`）；`UserPromptSubmit`／`Stop` 忽略 matcher。
 
@@ -91,10 +94,10 @@ hook 不返回上下文时没有成本。Hook 文本取决于数据，会被记�
 ## 已知限制与暂缓事项
 
 - **不支持的 hook 事件（Codex 当前 10 项中的 5 项）：** `PermissionRequest`、`PreCompact`、`PostCompact`、`SubagentStart` 和 `SubagentStop`。这些事件的配置会在解析期间静默丢弃。比较基线是 Codex [官方 hook 参考](https://learn.chatgpt.com/docs/hooks)。
-- **`SessionStart` 只支持部分功能：** 支持纯 stdout 与 JSON `additionalContext`，但 hook 脱离运行，因此上下文可能错过第一个请求（`TODO(session-start-gating)`）。
-- **`UserPromptSubmit` 只支持部分功能：** 支持阻塞加纯 stdout 或 JSON 上下文，但不会强制执行通用 `systemMessage` 和 `{"continue": false}` 控制。
-- **`PreToolUse` 只支持部分功能：** 支持阻塞，但会忽略 `additionalContext`、`permissionDecision: "allow"` 和 `updatedInput`。每个工具都表示为 `tool_input: { command }`，因此非 shell 工具参数不会如实公开给 hook。
-- **`PostToolUse` 只支持部分功能：** 支持阻塞反馈与 JSON `additionalContext`，但不会强制执行 `{"continue": false}`，非 shell 工具参数会缩减为 `{ command }`，结构化工具输出会在 `tool_response` 中展平为文本。
-- **`Stop` 只支持部分功能：** 阻塞会强制另一个模型轮次，但 `stop_hook_active` 始终为 `false`，`last_assistant_message` 始终为 `null`，且不会强制执行 `{"continue": false}`。因此，无条件阻塞 hook 会在每个步骤中强制 continuation，除非它自我限制（`TODO(stop-loop-guard)`）。
-- **通用 payload 与输出字段只支持部分功能：** 每个已映射事件都报告静态配置的 `model` 与 `permission_mode: "default"`，而非当前 Codex 运行时值。`systemMessage` 会被记录并触发警告，但不呈现，`{"continue": false}` 会被记录但不会应用 Codex 事件特定停止行为（`TODO(hook-continue-false)`）。
-- **配置加载与执行只支持部分功能：** 一个进程级 `configPath` 会在加载时解析；尚未实现 Codex 的活动用户层、项目层、会话层、系统／托管层和插件层、信任控制与内联 `config.toml` hook 形式（`TODO(per-session-hook-config)`）。只运行同步 `command` handler，忽略 `statusMessage` 与 `commandWindows` 等当前元数据，匹配 handler 串行运行，而非使用 Codex 的并发启动语义。
+- **`SessionStart` 只支持部分功能：** 支持纯 stdout 与 JSON `additionalContext`。hook 脱离运行；其解析出的上下文会被第一个 `agent/pre-step` 认领并折叠进该步骤的消息中，因此送达是受 hook 超时限制的有界等待，而非与第一个请求赛跑——若没有步骤认领它，则回退为 `agent.inject`。与其它 emit 点一样，它在没有已开启轮次时触发，因此该处的 `{"continue": false}` 既不会被记录，也不会被执行。
+- **`UserPromptSubmit` 只支持部分功能：** 支持阻塞加纯 stdout 或 JSON 上下文，且 `{"continue": false}` 现在会中止运行；通用 `systemMessage` 控制仍不会被强制执行。
+- **`PreToolUse` 只支持部分功能：** 支持阻塞（包括同样会中止运行的 `{"continue": false}`），但会忽略 `additionalContext`、`permissionDecision: "allow"` 和 `updatedInput`。每个工具都表示为 `tool_input: { command }`，因此非 shell 工具参数不会如实公开给 hook。
+- **`PostToolUse` 只支持部分功能：** 支持阻塞反馈、JSON `additionalContext` 与 `{"continue": false}`（会在工具执行之后中止运行），但非 shell 工具参数会缩减为 `{ command }`，结构化工具输出会在 `tool_response` 中展平为文本。
+- **`Stop` 只支持部分功能：** 阻塞会强制另一个模型轮次（每轮次最多连续 `maxConsecutiveStopBlocks` 次——默认 8，借用 Claude Code 自身的守护默认值，因为 Codex 自身未记录上限——达到后阻塞会被覆盖，允许该轮次结束），`stop_hook_active` 现在会如实报告本轮次是否已有 Stop hook 强制过 continuation。`last_assistant_message` 仍始终为 `null`。
+- **通用 payload 与输出字段只支持部分功能：** 每个已映射事件都报告静态配置的 `model` 与 `permission_mode: "default"`，而非当前 Codex 运行时值。`systemMessage` 会被记录并触发警告，但不呈现。`{"continue": false}` 会在 `UserPromptSubmit`、`PreToolUse`、`PostToolUse` 和 `Stop` 处中止活动运行——映射为 `kind` 为 `hook` 的 `AgentCancelCause`，中止该轮次；`stopReason` 会成为取消原因（缺失时回退为按 hook 点命名的原因），而非应用 Codex 自身的事件特定停止行为。
+- **配置加载与执行只支持部分功能：** 一个进程级 `configPath` 会在加载时解析；可选的 `sessionConfigFile` 在此之上增加每会话项目本地发现（见上文「配置」一节）。尚未实现 Codex 在此之外的活动用户层、项目层、会话层、系统／托管层和插件层，信任控制，以及内联 `config.toml` hook 形式。只运行同步 `command` handler，忽略 `statusMessage` 与 `commandWindows` 等当前元数据，匹配 handler 串行运行，而非使用 Codex 的并发启动语义。
