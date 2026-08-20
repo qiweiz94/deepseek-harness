@@ -54,6 +54,7 @@ import * as ToolGoal from '@deepseek-ai/dsh-tool-goal'
 import * as ToolSchedule from '@deepseek-ai/dsh-schedule'
 import Lsp from '@deepseek-ai/dsh-lsp'
 import * as ToolAstContext from '@deepseek-ai/dsh-plugin-ast-context'
+import * as ToolDiagnosticSifter from '@deepseek-ai/dsh-plugin-diagnostic-sifter'
 import * as ToolSubagentRouter from '@deepseek-ai/dsh-plugin-subagent-router'
 import * as ToolWorktreeSandbox from '@deepseek-ai/dsh-plugin-worktree-sandbox'
 import * as ToolLsp from '@deepseek-ai/dsh-tool-lsp'
@@ -237,6 +238,19 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'get_file_outline reads a repo-relative source file and returns its top-level TypeScript symbols; a parse failure or missing file surfaces as an error result rather than a partial outline.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-plugin-diagnostic-sifter',
+    dir: 'plugin-diagnostic-sifter',
+    source: 'packages/plugins/plugin-diagnostic-sifter/src/index.ts',
+    requires: ['ctx.tools', 'ctx.subprocess'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(LocalSubprocessRuntime)
+      await ctx.plugin(ToolDiagnosticSifter, { cwd: root })
+    },
+    note:
+      'run_diagnostic_check runs the configured typecheck or test binary and returns at most a few root-cause diagnostics: cascading repeats of one defect collapse onto the diagnostic that caused them, passing-test output and out-of-project stack frames are dropped, and the result is bounded to a compact JSON budget.',
   },
   {
     pkg: '@deepseek-ai/dsh-plugin-subagent-router',

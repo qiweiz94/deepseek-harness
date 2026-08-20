@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-20-diagnostic-sifter-plugin.md
+2026-08-20-diagnostic-sifter-plugin.md: c9a4664938b57d593254a9b343944c24c8619a61
+2026-08-20-diagnostic-sifter-plugin.zh.md: aea3bab372671403b34d81516c98cd6a91b5bd5f
