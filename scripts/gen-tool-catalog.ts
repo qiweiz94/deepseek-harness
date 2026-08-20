@@ -180,6 +180,19 @@ export interface ToolPackage {
 }
 
 /**
+ * Audited hook/guard leaves of `packages/plugins/` that register NO
+ * model-facing tool. The group's glob cannot tell them apart from a tool
+ * plugin, and booting one would trip {@link assertToolsHarvested} — so each is
+ * listed here with the reason it contributes no schema. This is an EXEMPTION
+ * from the catalog, not from documentation: the package still owns a README.
+ * A tool plugin must never be added here; the completeness guard is what makes
+ * "a new tool cannot be silently undocumented" true.
+ */
+const NON_TOOL_PLUGINS: Readonly<Record<string, string>> = {
+  'plugin-budget-governor': 'Observe-only per-subagent budget hook; it subscribes to subagent/tool/session events and stops a breaching child through ctx.subagents, registering nothing on ctx.tools.',
+}
+
+/**
  * The boot manifest: every shipped tool package (a `tool-*` leaf under
  * `packages/`, plus every leaf of the `packages/plugins/` group, which holds
  * tool plugins under a `plugin-*` name). Ordered by package name (the render
@@ -615,7 +628,8 @@ export type ToolCatalog = CatalogPackage[]
 /**
  * Assert the boot manifest covers every shipped tool package on disk (a
  * `tool-*` leaf under `packages/`, plus every `packages/plugins/*` leaf —
- * the plugins group holds tool plugins under a `plugin-*` name).
+ * the plugins group holds tool plugins under a `plugin-*` name), except the
+ * audited hook-only leaves in {@link NON_TOOL_PLUGINS}.
  * Booting has no source declaration to enumerate, so this glob restores the
  * "a new tool cannot be silently undocumented" guarantee: an unlisted package
  * fails the generator (and the freshness gate) until it is added to
@@ -628,7 +642,7 @@ export function assertManifestComplete(packages: ToolPackage[] = TOOL_PACKAGES, 
     .filter(path => statSync(resolve(scanRoot, path)).isDirectory())
     .map(path => basename(path)).sort()
   const listed = new Set(packages.map(p => p.dir))
-  const missing = onDisk.filter(dir => !listed.has(dir))
+  const missing = onDisk.filter(dir => !listed.has(dir) && NON_TOOL_PLUGINS[dir] === undefined)
   if (missing.length > 0) {
     throw new Error(
       `gen-tool-catalog: ${missing.length} tool package(s) not in the boot manifest: ${missing.join(', ')}. `
