@@ -13,6 +13,7 @@
 // point; a cross-package facade for imports alone would add indirection.
 /* jscpd:ignore-start */
 import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
@@ -24,8 +25,12 @@ import type { PostToolDecision, PreToolDecision, ToolExecution, ToolExecutionRes
 import {
   appendHookInvoked,
   appendHookResult,
+  applyHaltRequest,
   createDetachedRuns,
+  createStartGate,
+  createStopLoopGuard,
   DEFAULT_HOOK_TIMEOUT_MS,
+  DEFAULT_MAX_CONSECUTIVE_STOP_BLOCKS,
   DEFAULT_STDERR_SUMMARY_MAX_CHARS,
   matchesMatcher,
   mergeHookOutputs,
@@ -44,24 +49,40 @@ export const inject = ['shell']
 export interface Config {
   /**
    * Path to a Codex `hooks.json`. Process-level: read once at load, a relative
-   * path resolves against the process launch cwd.
-   * TODO(per-session-hook-config): per-session project-local discovery from each
-   * `session/new.cwd`.
+   * path resolves against the process launch cwd. Combine with
+   * {@link sessionConfigFile} for per-session project-local discovery.
    */
   configPath: string
+  /**
+   * Per-session project-local hook config discovery: a path resolved against
+   * each agent session's workspace (the `session/new` cwd), e.g.
+   * `.codex/hooks.json`. Read and parsed once per session at first hook use;
+   * its groups run after the process-level groups on each point. Unset ⇒ no
+   * discovery. A workspace without the file has no session hooks; an unreadable
+   * or invalid file logs a warning and contributes nothing.
+   */
+  sessionConfigFile?: string
   /** The model name stamped on every payload (Codex includes `model` on each event). */
   model?: string
   /** Default per-hook timeout in ms when a hook sets none (Codex default: 600000). */
   defaultTimeoutMs?: number
   /** Character cap for the `hook/result` event's persisted stderr summary. */
   stderrSummaryMaxChars?: number
+  /**
+   * Consecutive Stop-hook forced continuations allowed per turn before the
+   * bridge overrides the block and lets the turn stop. Codex documents no cap
+   * of its own; the default borrows Claude Code's 8-consecutive-blocks guard.
+   */
+  maxConsecutiveStopBlocks?: number
 }
 
 export const Config: z<Config> = z.object({
   configPath: z.string().required(),
+  sessionConfigFile: z.string(),
   model: z.string().default(''),
   defaultTimeoutMs: z.number().default(DEFAULT_HOOK_TIMEOUT_MS),
   stderrSummaryMaxChars: z.number().default(DEFAULT_STDERR_SUMMARY_MAX_CHARS),
+  maxConsecutiveStopBlocks: z.number().default(DEFAULT_MAX_CONSECUTIVE_STOP_BLOCKS),
 })
 
 let handlerCounter = 0
@@ -82,18 +103,57 @@ export function apply(ctx: Context, config: Config): void {
   // Validate before config parsing so a bad value cannot be hidden by its early return.
   const stderrSummaryMaxChars = config.stderrSummaryMaxChars ?? DEFAULT_STDERR_SUMMARY_MAX_CHARS
   assertPositiveInteger('stderrSummaryMaxChars', stderrSummaryMaxChars)
+  const maxConsecutiveStopBlocks = config.maxConsecutiveStopBlocks ?? DEFAULT_MAX_CONSECUTIVE_STOP_BLOCKS
+  assertPositiveInteger('maxConsecutiveStopBlocks', maxConsecutiveStopBlocks)
   const defaultTimeoutMs = config.defaultTimeoutMs ?? DEFAULT_HOOK_TIMEOUT_MS
+  /** Warn about each parsed-and-skipped hook of one config source. */
+  function warnSkipped(skipped: { event: string; reason: string }[]): void {
+    for (const s of skipped) {
+      ctx.logger.warn(`hooks-codex: skipping ${s.reason} on ${s.event} (only sync command hooks run)`)
+    }
+  }
+  // Parse once at load. A read or parse failure logs and registers nothing —
+  // unless per-session discovery is configured, which stays functional.
   let parsed: CodexHookConfig = {}
   try {
     const raw: unknown = JSON.parse(readFileSync(config.configPath, 'utf8'))
     const result = parseCodexConfig(raw)
     parsed = result.config
-    for (const s of result.skipped) {
-      ctx.logger.warn(`hooks-codex: skipping ${s.reason} on ${s.event} (only sync command hooks run)`)
-    }
+    warnSkipped(result.skipped)
   } catch (error: unknown) {
-    ctx.logger.warn(`hooks-codex: could not load hook config "${config.configPath}": ${String(error)} — no hooks registered`)
-    return
+    if (config.sessionConfigFile === undefined) {
+      ctx.logger.warn(`hooks-codex: could not load hook config "${config.configPath}": ${String(error)} — no hooks registered`)
+      return
+    }
+    ctx.logger.warn(`hooks-codex: could not load hook config "${config.configPath}": ${String(error)} — continuing with per-session discovery only`)
+  }
+
+  // Per-session project-local discovery: read once per session at first hook
+  // use, keyed weakly so a disposed agent's entry is collectable. A workspace
+  // without the file simply has no session hooks (cached as empty).
+  const sessionConfigs = new WeakMap<Agent, CodexHookConfig>()
+  function sessionHookConfig(agent: Agent | undefined): CodexHookConfig {
+    const file = config.sessionConfigFile
+    if (agent === undefined || file === undefined) return {}
+    const cached = sessionConfigs.get(agent)
+    if (cached !== undefined) return cached
+    let discovered: CodexHookConfig = {}
+    const cwd = agent.session.header.cwd
+    if (cwd !== undefined) {
+      const path = resolve(cwd, file)
+      try {
+        const raw: unknown = JSON.parse(readFileSync(path, 'utf8'))
+        const result = parseCodexConfig(raw)
+        discovered = result.config
+        warnSkipped(result.skipped)
+      } catch (error: unknown) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+          ctx.logger.warn(`hooks-codex: could not load session hook config "${path}": ${String(error)} — no session hooks for ${agent.id}`)
+        }
+      }
+    }
+    sessionConfigs.set(agent, discovered)
+    return discovered
   }
 
   const model = config.model ?? ''
@@ -121,7 +181,7 @@ export function apply(ctx: Context, config: Config): void {
       plainStdoutAsContext?: boolean
     },
   ): Promise<MergedHookOutcome> {
-    const groups: MatcherGroup[] = parsed[point] ?? []
+    const groups: MatcherGroup[] = [...parsed[point] ?? [], ...sessionHookConfig(opts.agent)[point] ?? []]
     const outputs: HookOutput[] = []
     // Run hooks in the agent's session workspace so relative paths address the
     // user's project rather than the server launch directory.
@@ -169,8 +229,6 @@ export function apply(ctx: Context, config: Config): void {
     return mergeHookOutputs(outputs)
   }
 
-  // TODO(hook-continue-false): `merged.stop` is logged but needs a run-level halt mechanism.
-
   function contextFrom(merged: MergedHookOutcome): UserMessage | undefined {
     if (merged.additionalContext.length === 0) return undefined
     const content: ContentBlock[] = merged.additionalContext.map(text => ({ type: 'text', text }))
@@ -182,22 +240,36 @@ export function apply(ctx: Context, config: Config): void {
     return [ours, ...theirs ?? []]
   }
 
-  // SessionStart injects plain stdout when its detached hook resolves; a slow
-  // hook may miss the first request.
-  // TODO(session-start-gating): add a startup gate before promising first-turn delivery.
+  // SessionStart runs detached, but its resolved context is claimable: the
+  // pre-step gate below folds it into the first entering step, so first-turn
+  // delivery is promised rather than racing the hook. A run no step claims
+  // falls back to `agent.inject`.
+  const startGate = createStartGate<UserMessage>()
   ctx.on('agent/session-start', ({ agent, source }) => {
-    detached.track(runPoint('SessionStart', source, { ...base(ctx, agent, 'SessionStart', model), source }, { agent, plainStdoutAsContext: true, signal: detached.signal })
-      .then((merged) => {
-        const context = contextFrom(merged)
-        if (context) agent.inject(context)
-      })
+    const run = runPoint('SessionStart', source, { ...base(ctx, agent, 'SessionStart', model), source }, { agent, plainStdoutAsContext: true, signal: detached.signal })
+      .then(contextFrom)
+      .catch((error: unknown): undefined => { ctx.logger.warn(`hooks-codex: SessionStart hook failed: ${String(error)}`) })
+    detached.track(startGate.register(agent, run, context => agent.inject(context))
       .catch((error: unknown) => { ctx.logger.warn(`hooks-codex: SessionStart hook failed: ${String(error)}`) }))
     /* jscpd:ignore-end */
   })
 
-  // UserPromptSubmit → PreStepDecision. Codex supports reject, not rewrite or ask.
+  // UserPromptSubmit → PreStepDecision. Codex supports reject, not rewrite or
+  // ask. The step also gates on a pending SessionStart run so its context
+  // reaches the first request.
   ctx.on('agent/pre-step', async ({ agent, messages, turn, signal }, next): Promise<PreStepDecision> => {
-    if (messages.length === 0) return next()
+    const pendingStart = startGate.claim(agent)
+    const startContext = pendingStart === undefined ? undefined : await pendingStart
+    /** Fold the claimed SessionStart context into an enter decision; park it for the next wake when the step never enters. */
+    function withStartContext(decision: PreStepDecision): PreStepDecision {
+      if (startContext === undefined) return decision
+      if (decision.kind !== 'enter') {
+        agent.inject(startContext)
+        return decision
+      }
+      return { kind: 'enter', messages: [...decision.messages, startContext] }
+    }
+    if (messages.length === 0) return withStartContext(await next())
     const payload = {
       ...base(ctx, agent, 'UserPromptSubmit', model),
       turn_id: String(turn),
@@ -207,12 +279,18 @@ export function apply(ctx: Context, config: Config): void {
       agent, turn, plainStdoutAsContext: true, signal,
     })
     /* jscpd:ignore-start */
-    if (merged.decision === 'deny') {
+    if (merged.stop) {
+      // continue:false halts the whole run; the claimed start context is
+      // dropped with the rest of the cancelled pending work.
+      applyHaltRequest(merged, 'UserPromptSubmit', agent)
       return { kind: 'reject' }
+    }
+    if (merged.decision === 'deny') {
+      return withStartContext({ kind: 'reject' })
     }
     // Context alone is not a veto: DELEGATE so a later pre-step listener can
     // still reject/rewrite, then fold our context onto its decision.
-    const downstream = await next()
+    const downstream = withStartContext(await next())
     const ours = contextFrom(merged)
     if (!ours || downstream.kind !== 'enter') return downstream
     return {
@@ -226,6 +304,12 @@ export function apply(ctx: Context, config: Config): void {
     const turn = lastTurn(exec.agent)
     const merged = await runPoint('PreToolUse', exec.name, preToolPayload(ctx, exec, model), { ...exec.agent ? { agent: exec.agent } : {}, turn, signal: exec.signal })
     /* jscpd:ignore-end */
+    if (merged.stop) {
+      // continue:false halts the run before the tool runs; a no-agent direct
+      // execution has no run to halt but still gets the denial.
+      const reason = applyHaltRequest(merged, 'PreToolUse', exec.agent)
+      return { kind: 'deny', reason }
+    }
     if (merged.decision === 'deny') return { kind: 'deny', reason: merged.reason ?? 'blocked by PreToolUse hook' }
     return next()
   })
@@ -235,6 +319,9 @@ export function apply(ctx: Context, config: Config): void {
     const turn = lastTurn(exec.agent)
     /* jscpd:ignore-start */
     const merged = await runPoint('PostToolUse', exec.name, postToolPayload(ctx, exec, result, model), { ...exec.agent ? { agent: exec.agent } : {}, turn, signal: exec.signal })
+    // continue:false halts the run after the tool ran; the point-local decision
+    // below still maps so a downstream listener's bookkeeping stays intact.
+    if (merged.stop) applyHaltRequest(merged, 'PostToolUse', exec.agent)
     const context = contextFrom(merged)
     if (merged.decision === 'deny') {
       return { kind: 'block', feedback: [{ type: 'text', text: merged.reason ?? 'blocked by PostToolUse hook' }], ...context ? { additionalContexts: [context] } : {} }
@@ -253,20 +340,34 @@ export function apply(ctx: Context, config: Config): void {
   })
 
   // A blocking Stop hook steers at the stopping boundary, which makes the
-  // machine observe pending input and run another step.
-  // TODO(stop-loop-guard): Codex supplies `stop_hook_active` so a Stop hook can
-  // avoid continuing the same turn indefinitely. It is always false here, so an
-  // unconditionally blocking hook force-continues every step until it self-limits.
+  // machine observe pending input and run another step. The guard counts
+  // consecutive forced continuations per turn: the payload's `stop_hook_active`
+  // is true on a boundary a Stop hook already forced, and the cap overrides an
+  // unconditionally blocking hook so it cannot loop a turn forever.
+  const stopGuard = createStopLoopGuard(maxConsecutiveStopBlocks)
   ctx.on('agent/turn-stopping', async ({ agent, turn, signal }): Promise<void> => {
-    const merged = await runPoint('Stop', '', { ...turnBase(ctx, agent, 'Stop', model), stop_hook_active: false, last_assistant_message: null }, { agent, turn, signal })
+    const stopHookActive = stopGuard.stopHookActive(agent, turn)
+    const merged = await runPoint('Stop', '', { ...turnBase(ctx, agent, 'Stop', model), stop_hook_active: stopHookActive, last_assistant_message: null }, { agent, turn, signal })
     /* jscpd:ignore-end */
-    if (merged.decision === 'deny') {
-      // A blocking Stop hook forces continuation; a block with no reason (exit 2,
-      // empty stderr) still forces it — fall back to a generic steering line
-      // rather than letting the turn stop.
-      const text = merged.reason ?? 'continue: blocked by Stop hook'
-      agent.steer(createUserMessage({ content: [{ type: 'text', text }], source: PLUGIN_SOURCE }))
+    if (merged.stop) {
+      // continue:false overrides a blocking decision: the halt request is
+      // satisfied by letting the turn close.
+      stopGuard.clear(agent)
+      return
     }
+    if (merged.decision !== 'deny') {
+      stopGuard.clear(agent)
+      return
+    }
+    if (!stopGuard.tryForceContinue(agent, turn)) {
+      ctx.logger.warn(`hooks-codex: Stop hook blocked ${maxConsecutiveStopBlocks} consecutive times; overriding the block and letting the turn stop`)
+      return
+    }
+    // A blocking Stop hook forces continuation; a block with no reason (exit 2,
+    // empty stderr) still forces it — fall back to a generic steering line
+    // rather than letting the turn stop.
+    const text = merged.reason ?? 'continue: blocked by Stop hook'
+    agent.steer(createUserMessage({ content: [{ type: 'text', text }], source: PLUGIN_SOURCE }))
   })
 }
 

@@ -394,10 +394,7 @@ export function defineCoverageCases(groups: CoverageGroup | readonly CoverageGro
       expect(events(agent).some(e => e.type === 'hook/invoked')).toBe(false)
     })
 
-    it('a {"continue":false} hook is RECORDED as "stop" but does not halt the run (TODO(hook-continue-false))', async () => {
-    // Honoring `continue:false` is deferred — the extension points have no hard-halt
-    // primitive. Assert the LOG records the halt request AND that the run is not
-    // actually halted (the tool still runs, the turn completes).
+    it('a {"continue":false} PreToolUse hook halts the run: the tool never runs and the turn aborts with the hook\'s stopReason', async () => {
       const d = dir()
       hooks(d, { PreToolUse: [{ hooks: [{ type: 'command', command: sh(d, 's.sh', '#!/usr/bin/env bash\necho \'{"continue":false,"stopReason":"halt"}\'\n') }] }] })
       const adapter = new MockAdapter([toolCallResponse('c1', 'Bash', { command: 'x' }), textResponse('done')])
@@ -408,7 +405,9 @@ export function defineCoverageCases(groups: CoverageGroup | readonly CoverageGro
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } })); await waitForIdle(ctx, agent)
       const res = events(agent).find(e => e.type === 'hook/result')
       expect(res?.type === 'hook/result' && res.data.decision).toBe('stop') // recorded
-      expect(ran).toBe(true) // NOT honored: the tool still ran (halt is deferred)
+      expect(ran).toBe(false) // honored: the PreToolUse denial stops the tool from running
+      const turnEnd = events(agent).findLast(e => e.type === 'turn/end')
+      expect(turnEnd?.type === 'turn/end' && turnEnd.data.reason).toEqual({ kind: 'aborted', reason: { kind: 'hook', reason: 'halt' } })
     })
 
     it('PreToolUse deny with EMPTY stderr uses the default reason (?? right arm)', async () => {
