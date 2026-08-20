@@ -55,6 +55,7 @@ import * as ToolSchedule from '@deepseek-ai/dsh-schedule'
 import Lsp from '@deepseek-ai/dsh-lsp'
 import * as ToolAstContext from '@deepseek-ai/dsh-plugin-ast-context'
 import * as ToolDiagnosticSifter from '@deepseek-ai/dsh-plugin-diagnostic-sifter'
+import * as ToolImpactedTests from '@deepseek-ai/dsh-plugin-impacted-tests'
 import * as ToolLspReferences from '@deepseek-ai/dsh-plugin-lsp-references'
 import * as ToolPinnedScratchpad from '@deepseek-ai/dsh-plugin-pinned-scratchpad'
 import * as ToolSemanticPatcher from '@deepseek-ai/dsh-plugin-semantic-patcher'
@@ -267,6 +268,19 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'run_diagnostic_check runs the configured typecheck or test binary and returns at most a few root-cause diagnostics: cascading repeats of one defect collapse onto the diagnostic that caused them, passing-test output and out-of-project stack frames are dropped, and the result is bounded to a compact JSON budget.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-plugin-impacted-tests',
+    dir: 'plugin-impacted-tests',
+    source: 'packages/plugins/plugin-impacted-tests/src/index.ts',
+    requires: ['ctx.tools', 'ctx.subprocess'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(LocalSubprocessRuntime)
+      await ctx.plugin(ToolImpactedTests, { cwd: root })
+    },
+    note:
+      'run_impacted_tests selects test suites by walking the workspace import DAG in reverse from the changed files (the uncommitted working-tree changes when `files` is omitted) and runs strictly the selected suites. An empty change set, or a changed file no suite imports, runs nothing — that is the answer, not a failure.',
   },
   {
     pkg: '@deepseek-ai/dsh-plugin-lsp-references',
