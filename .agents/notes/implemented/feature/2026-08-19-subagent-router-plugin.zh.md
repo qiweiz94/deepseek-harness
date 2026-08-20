@@ -28,4 +28,4 @@
 
 ## 后果
 
-加载路由器的组合会暴露一个 `subagent` 动词，其后端由策略与能力决定。误配置（空的 `providers`、空的 `toolFilter`）会在加载时通过 z schema 大声失败；provider 集合不可达或不具备能力时，会在调用时以模型可见的原因大声失败。工具返回子代理的最终输出，并把非 `completed` 的终止原因映射为保留部分输出的错误。v1 仅前台；`run_in_background` 与可续会话委托仍由 `dsh-tool-subagent` 承担。工具是并发安全的，因此兄弟委托最多可重叠到循环的并行调用上限。
+加载路由器的组合会暴露一个 `subagent` 动词，其后端由策略与能力决定。误配置（空的 `providers`、空的 `toolFilter`、空的 `routes[].label`）会在加载时通过 z schema 大声失败；provider 集合不可达或不具备能力时，会在调用时以模型可见的原因大声失败。工具返回子代理的最终输出，并把非 `completed` 的终止原因映射为保留部分输出的错误。v1 仅前台；`run_in_background` 与可续会话委托仍由 `dsh-tool-subagent` 承担。工具是并发安全的，因此兄弟委托最多可重叠到循环的并行调用上限。
