@@ -84,6 +84,7 @@ async function runRetained(
   })
   const stdout = new TextRetainer({ kind: 'tail', maxBytes })
   const stderr = new TextRetainer({ kind: 'tail', maxBytes })
+  /* jscpd:ignore-start -- mirrors plugin-diagnostic-sifter's runDiagnostic; each plugin owns its one-shot spawn-and-drain independently. */
   const drain = async (reader: AsyncIterable<Buffer> | undefined, into: TextRetainer): Promise<void> => {
     /* v8 ignore next -- this spawn pipes both streams, so both readers exist. */
     if (reader === undefined) return
@@ -103,6 +104,7 @@ async function runRetained(
     stdout: { text: retainedOut.text, truncated: retainedOut.truncated },
     stderr: { text: retainedErr.text, truncated: retainedErr.truncated },
   }
+  /* jscpd:ignore-end */
 }
 
 /** Render the structured selection as model-facing text. */
@@ -194,6 +196,7 @@ export function apply(ctx: Context, config: Config): void {
             additionalProperties: false,
             properties: {
               executed: { type: 'boolean', required: true },
+              /* jscpd:ignore-start -- mirrors plugin-worktree-sandbox's result schema; both independently describe a process outcome. */
               exitCode: { required: true, oneOf: [{ type: 'integer' }, { type: 'null' }] },
               signal: { required: true, oneOf: [{ type: 'string' }, { type: 'null' }] },
               stdout: {
@@ -210,6 +213,7 @@ export function apply(ctx: Context, config: Config): void {
                   truncated: { type: 'boolean', required: true },
                 },
               },
+              /* jscpd:ignore-end */
             },
           },
         },

@@ -27,6 +27,20 @@ const LOCATION_SCHEMA = {
   },
 } as const satisfies ValueSchemaSpec
 
+/** Cursor-position input parameters, shared by both tools. */
+const CURSOR_PARAMS = {
+  path: { type: 'string', required: true, description: 'Path to a TypeScript file in the project, absolute or relative to the working directory.' },
+  line: { type: 'integer', required: true, description: '1-based line of the cursor.' },
+  character: { type: 'integer', required: true, description: '1-based UTF-16 column of the cursor.' },
+} as const
+
+/** Queried-position echo fields, shared by both output schemas. */
+const QUERIED_POSITION_PROPS = {
+  path: { type: 'string', required: true, description: 'The queried file path.' },
+  line: { type: 'integer', required: true, description: 'The queried 1-based line.' },
+  character: { type: 'integer', required: true, description: 'The queried 1-based UTF-16 column.' },
+} as const
+
 /** Configuration for the symbol-navigation tools. */
 export interface Config {
   /**
@@ -106,19 +120,13 @@ export function apply(ctx: Context, config: Config): void {
       + '1-based line and 1-based UTF-16 character; the symbol\'s own declaration is included. Use it '
       + 'before changing a symbol, when a textual search would be ambiguous. An off-symbol position '
       + 'returns no references rather than failing.',
-    parameters: {
-      path: { type: 'string', required: true, description: 'Path to a TypeScript file in the project, absolute or relative to the working directory.' },
-      line: { type: 'integer', required: true, description: '1-based line of the cursor.' },
-      character: { type: 'integer', required: true, description: '1-based UTF-16 column of the cursor.' },
-    },
+    parameters: CURSOR_PARAMS,
     output: {
       schema: {
         type: 'object',
         additionalProperties: false,
         properties: {
-          path: { type: 'string', required: true, description: 'The queried file path.' },
-          line: { type: 'integer', required: true, description: 'The queried 1-based line.' },
-          character: { type: 'integer', required: true, description: 'The queried 1-based UTF-16 column.' },
+          ...QUERIED_POSITION_PROPS,
           references: {
             type: 'array',
             required: true,
@@ -148,19 +156,13 @@ export function apply(ctx: Context, config: Config): void {
     description: 'Resolve the TypeScript symbol under a cursor to its exact declaration anchor. Positions are '
       + '1-based line and 1-based UTF-16 character. An overloaded function or a merged interface reports '
       + 'one anchor per declaration; an off-symbol position returns none rather than failing.',
-    parameters: {
-      path: { type: 'string', required: true, description: 'Path to a TypeScript file in the project, absolute or relative to the working directory.' },
-      line: { type: 'integer', required: true, description: '1-based line of the cursor.' },
-      character: { type: 'integer', required: true, description: '1-based UTF-16 column of the cursor.' },
-    },
+    parameters: CURSOR_PARAMS,
     output: {
       schema: {
         type: 'object',
         additionalProperties: false,
         properties: {
-          path: { type: 'string', required: true, description: 'The queried file path.' },
-          line: { type: 'integer', required: true, description: 'The queried 1-based line.' },
-          character: { type: 'integer', required: true, description: 'The queried 1-based UTF-16 column.' },
+          ...QUERIED_POSITION_PROPS,
           definitions: {
             type: 'array',
             required: true,

@@ -276,6 +276,7 @@ export async function runDiagnostic(ctx: Context, run: DiagnosticRun): Promise<D
   })
   const stdout = new TextRetainer({ kind: 'head', maxBytes: run.maxBytes })
   const stderr = new TextRetainer({ kind: 'head', maxBytes: run.maxBytes })
+  /* jscpd:ignore-start -- mirrors plugin-impacted-tests' runRetained; each plugin owns its one-shot spawn-and-drain independently. */
   const drain = async (reader: AsyncIterable<Buffer> | undefined, retainer: TextRetainer): Promise<void> => {
     /* v8 ignore next -- this spawn pipes both streams, so both readers exist; the guard answers the optional type. */
     if (reader === undefined) return
@@ -294,4 +295,5 @@ export async function runDiagnostic(ctx: Context, run: DiagnosticRun): Promise<D
     stdout: { text: retainedOut.text, truncated: retainedOut.truncated },
     stderr: { text: retainedErr.text, truncated: retainedErr.truncated },
   }
+  /* jscpd:ignore-end */
 }
