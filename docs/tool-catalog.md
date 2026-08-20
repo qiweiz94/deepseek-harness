@@ -21,6 +21,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-plugin-ast-context` | `get_directory_outline`, `get_file_outline` | `ctx.tools` | `tool/call`, `tool/result` | - | get_file_outline reads a repo-relative source file and returns its top-level TypeScript symbols; a parse failure or missing file surfaces as an error result rather than a partial outline. |
 | `@deepseek-ai/dsh-plugin-semantic-patcher` | `patch_symbol_body` | `ctx.tools` | `tool/call`, `tool/result`, `the patched source file, replaced by one atomic rename` | - | patch_symbol_body replaces one named symbol's body located in the parsed syntax tree rather than by text match; a name that matches no symbol or more than one fails with the candidate list, and a replacement that would not parse leaves the file byte-for-byte unchanged. |
 | `@deepseek-ai/dsh-plugin-subagent-router` | `subagent` | `ctx.tools`, `ctx.subagents` | `tool/call`, `tool/result`, `child session events through the chosen provider` | - | A single delegation entry routes a task to a capable subagent provider selected by config-owned policy; the model names only the task (description + prompt), never a provider or transport. |
+| `@deepseek-ai/dsh-plugin-telemetry-recorder` | `get_session_telemetry` | `ctx.tools`, `ctx.agents (call time, through the calling execution's agent)` | `tool/call`, `tool/result` | - | get_session_telemetry reads the calling session's own durable log and the subagent lifecycle pair; it takes no arguments, writes nothing, and omits any figure the log has not yet produced evidence for instead of reporting it as zero. |
 | `@deepseek-ai/dsh-plugin-worktree-sandbox` | `sandbox_exec` | `ctx.tools`, `ctx.subprocess` | `tool/call`, `tool/result`, `a disposable git worktree under .dsh/worktrees` | - | sandbox_exec runs a command in an isolated detached git worktree and returns the bounded structured diff and exit status; the worktree is removed after the call. |
 | `@deepseek-ai/dsh-tool-bash` | `bash` | `ctx.tools`, `ctx.shell`, `ctx.systemPrompt`, `ctx.shellEnv`, `ctx.jobs at call time for run_in_background` | `tool/call`, `tool/result` | - | The bash tool is the model-facing consumer of the bash executor seam. A `run_in_background` run registers with the generic `ctx.jobs` runtime and is collected/stopped through the `job_*` tools from `@deepseek-ai/dsh-tool-jobs`; the `enableRunInBackground` config (default true) removes the parameter entirely when disabled. |
 | `@deepseek-ai/dsh-tool-pwsh` | `pwsh` | `ctx.tools`, `ctx.shell`, `ctx.systemPrompt`, `ctx.shellEnv`, `ctx.jobs at call time for run_in_background` | `tool/call`, `tool/result` | - | The pwsh tool is the PowerShell-dialect consumer of the bash executor seam for Windows compositions (a PowerShell executor such as `@deepseek-ai/dsh-pwsh-local` backs `ctx.shell`); it mirrors the bash tool call-for-call minus sandbox controls — `run_in_background` runs register with the generic `ctx.jobs` runtime and are collected/stopped through the `job_*` tools, and the managed `DSH_*` environment comes from `@deepseek-ai/dsh-shell-env`. Each call runs in a fresh process (no persistent PTY session), with native `C:\...` paths and `$env:NAME` variables. |
@@ -298,6 +299,25 @@ Delegate a self-contained task to a subagent and wait for its result. The runtim
 Source: [`packages/plugins/plugin-subagent-router/src/index.ts`](../packages/plugins/plugin-subagent-router/src/index.ts)
 
 A single delegation entry routes a task to a capable subagent provider selected by config-owned policy; the model names only the task (description + prompt), never a provider or transport.
+
+<a id="deepseek-aidsh-plugin-telemetry-recorder"></a>
+
+## `@deepseek-ai/dsh-plugin-telemetry-recorder`
+
+### `get_session_telemetry`
+
+Report this conversation's own operating figures: mean tokens per turn and turn wall-clock latency over the most recent closed turns, the prompt-cache hit ratio, how much of the model's context window the latest request occupied, and how many subagent delegations this conversation started, settled, and still has running. Use it to decide whether to compact, shorten the context, or stop delegating. A figure the conversation has not produced evidence for is omitted rather than reported as zero.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/plugins/plugin-telemetry-recorder/src/index.ts`](../packages/plugins/plugin-telemetry-recorder/src/index.ts)
+
+get_session_telemetry reads the calling session's own durable log and the subagent lifecycle pair; it takes no arguments, writes nothing, and omits any figure the log has not yet produced evidence for instead of reporting it as zero.
 
 <a id="deepseek-aidsh-plugin-worktree-sandbox"></a>
 

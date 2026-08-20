@@ -286,6 +286,7 @@
     { "path": "./packages/plugins/plugin-pinned-scratchpad" },
     { "path": "./packages/plugins/plugin-semantic-patcher" },
     { "path": "./packages/plugins/plugin-subagent-router" },
+    { "path": "./packages/plugins/plugin-telemetry-recorder" },
     { "path": "./packages/plugins/plugin-worktree-sandbox" },
     { "path": "./packages/hooks/hook-protocol" },
     { "path": "./packages/hooks/hooks-claude-code" },
