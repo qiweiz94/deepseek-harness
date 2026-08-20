@@ -12,8 +12,6 @@
 // Each dialect bridge keeps its complete dependency list visible at the entry
 // point; a cross-package facade for imports alone would add indirection.
 /* jscpd:ignore-start */
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
@@ -26,14 +24,19 @@ import {
   appendHookInvoked,
   appendHookResult,
   applyHaltRequest,
+  bindStartContext,
+  combineHookGroups,
   createDetachedRuns,
+  createSessionHookConfigCache,
   createStartGate,
   createStopLoopGuard,
   DEFAULT_HOOK_TIMEOUT_MS,
   DEFAULT_MAX_CONSECUTIVE_STOP_BLOCKS,
   DEFAULT_STDERR_SUMMARY_MAX_CHARS,
+  loadProcessHookConfig,
   matchesMatcher,
   mergeHookOutputs,
+  resolveSharedHookLimits,
   runHook,
   type HookOutput,
   type MatcherGroup,
@@ -92,19 +95,9 @@ function nextHandlerId(point: string): string {
 
 const PLUGIN_SOURCE: MessageSource = { kind: 'plugin', plugin: 'hooks-codex' }
 
-/** The summary cap bounds a persisted event field — a positive integer or the slice misbehaves silently. */
-function assertPositiveInteger(name: string, value: number): void {
-  if (!Number.isInteger(value) || value < 1) {
-    throw new Error(`hooks-codex: ${name} must be a positive integer`)
-  }
-}
-
 export function apply(ctx: Context, config: Config): void {
   // Validate before config parsing so a bad value cannot be hidden by its early return.
-  const stderrSummaryMaxChars = config.stderrSummaryMaxChars ?? DEFAULT_STDERR_SUMMARY_MAX_CHARS
-  assertPositiveInteger('stderrSummaryMaxChars', stderrSummaryMaxChars)
-  const maxConsecutiveStopBlocks = config.maxConsecutiveStopBlocks ?? DEFAULT_MAX_CONSECUTIVE_STOP_BLOCKS
-  assertPositiveInteger('maxConsecutiveStopBlocks', maxConsecutiveStopBlocks)
+  const { stderrSummaryMaxChars, maxConsecutiveStopBlocks } = resolveSharedHookLimits('hooks-codex', config)
   const defaultTimeoutMs = config.defaultTimeoutMs ?? DEFAULT_HOOK_TIMEOUT_MS
   /** Warn about each parsed-and-skipped hook of one config source. */
   function warnSkipped(skipped: { event: string; reason: string }[]): void {
@@ -114,47 +107,30 @@ export function apply(ctx: Context, config: Config): void {
   }
   // Parse once at load. A read or parse failure logs and registers nothing —
   // unless per-session discovery is configured, which stays functional.
-  let parsed: CodexHookConfig = {}
-  try {
-    const raw: unknown = JSON.parse(readFileSync(config.configPath, 'utf8'))
-    const result = parseCodexConfig(raw)
-    parsed = result.config
-    warnSkipped(result.skipped)
-  } catch (error: unknown) {
-    if (config.sessionConfigFile === undefined) {
-      ctx.logger.warn(`hooks-codex: could not load hook config "${config.configPath}": ${String(error)} — no hooks registered`)
-      return
-    }
-    ctx.logger.warn(`hooks-codex: could not load hook config "${config.configPath}": ${String(error)} — continuing with per-session discovery only`)
-  }
+  const loadedConfig = loadProcessHookConfig({
+    configPath: config.configPath,
+    hasSessionFallback: config.sessionConfigFile !== undefined,
+    empty: {},
+    parse: raw => parseCodexConfig(raw),
+    warnSkipped,
+    warnFailure: (error, degraded) => {
+      const tail = degraded ? 'continuing with per-session discovery only' : 'no hooks registered'
+      ctx.logger.warn(`hooks-codex: could not load hook config "${config.configPath}": ${String(error)} — ${tail}`)
+    },
+  })
+  if (loadedConfig === undefined) return
+  const parsed: CodexHookConfig = loadedConfig
 
-  // Per-session project-local discovery: read once per session at first hook
-  // use, keyed weakly so a disposed agent's entry is collectable. A workspace
-  // without the file simply has no session hooks (cached as empty).
-  const sessionConfigs = new WeakMap<Agent, CodexHookConfig>()
-  function sessionHookConfig(agent: Agent | undefined): CodexHookConfig {
-    const file = config.sessionConfigFile
-    if (agent === undefined || file === undefined) return {}
-    const cached = sessionConfigs.get(agent)
-    if (cached !== undefined) return cached
-    let discovered: CodexHookConfig = {}
-    const cwd = agent.session.header.cwd
-    if (cwd !== undefined) {
-      const path = resolve(cwd, file)
-      try {
-        const raw: unknown = JSON.parse(readFileSync(path, 'utf8'))
-        const result = parseCodexConfig(raw)
-        discovered = result.config
-        warnSkipped(result.skipped)
-      } catch (error: unknown) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-          ctx.logger.warn(`hooks-codex: could not load session hook config "${path}": ${String(error)} — no session hooks for ${agent.id}`)
-        }
-      }
-    }
-    sessionConfigs.set(agent, discovered)
-    return discovered
-  }
+  // Per-session project-local discovery: read once per session at first hook use.
+  const sessionHookConfig = createSessionHookConfigCache({
+    sessionConfigFile: config.sessionConfigFile,
+    empty: {},
+    parse: (raw, _cwd) => parseCodexConfig(raw),
+    warnSkipped,
+    warnFailure: (path, agentId, error) => {
+      ctx.logger.warn(`hooks-codex: could not load session hook config "${path}": ${String(error)} — no session hooks for ${agentId}`)
+    },
+  })
 
   const model = config.model ?? ''
 
@@ -181,7 +157,7 @@ export function apply(ctx: Context, config: Config): void {
       plainStdoutAsContext?: boolean
     },
   ): Promise<MergedHookOutcome> {
-    const groups: MatcherGroup[] = [...parsed[point] ?? [], ...sessionHookConfig(opts.agent)[point] ?? []]
+    const groups: MatcherGroup[] = combineHookGroups(parsed[point], sessionHookConfig(opts.agent)[point])
     const outputs: HookOutput[] = []
     // Run hooks in the agent's session workspace so relative paths address the
     // user's project rather than the server launch directory.
@@ -245,31 +221,25 @@ export function apply(ctx: Context, config: Config): void {
   // delivery is promised rather than racing the hook. A run no step claims
   // falls back to `agent.inject`.
   const startGate = createStartGate<UserMessage>()
+  /** The one warning both a rejected run and a throwing `deliver` (agent.inject) share. */
+  function warnSessionStartFailed(error: unknown): void {
+    ctx.logger.warn(`hooks-codex: SessionStart hook failed: ${String(error)}`)
+  }
   ctx.on('agent/session-start', ({ agent, source }) => {
     const run = runPoint('SessionStart', source, { ...base(ctx, agent, 'SessionStart', model), source }, { agent, plainStdoutAsContext: true, signal: detached.signal })
       .then(contextFrom)
-      .catch((error: unknown): undefined => { ctx.logger.warn(`hooks-codex: SessionStart hook failed: ${String(error)}`) })
-    detached.track(startGate.register(agent, run, context => agent.inject(context))
-      .catch((error: unknown) => { ctx.logger.warn(`hooks-codex: SessionStart hook failed: ${String(error)}`) }))
-    /* jscpd:ignore-end */
+    detached.track(startGate.register(agent, run, (context) => { agent.inject(context) }, warnSessionStartFailed)
+      .catch(warnSessionStartFailed))
   })
 
   // UserPromptSubmit → PreStepDecision. Codex supports reject, not rewrite or
   // ask. The step also gates on a pending SessionStart run so its context
-  // reaches the first request.
+  // reaches the first request; the gating itself is shared bindStartContext
+  // plumbing, identical to Claude Code's, so it stays inside the ignored span.
   ctx.on('agent/pre-step', async ({ agent, messages, turn, signal }, next): Promise<PreStepDecision> => {
-    const pendingStart = startGate.claim(agent)
-    const startContext = pendingStart === undefined ? undefined : await pendingStart
-    /** Fold the claimed SessionStart context into an enter decision; park it for the next wake when the step never enters. */
-    function withStartContext(decision: PreStepDecision): PreStepDecision {
-      if (startContext === undefined) return decision
-      if (decision.kind !== 'enter') {
-        agent.inject(startContext)
-        return decision
-      }
-      return { kind: 'enter', messages: [...decision.messages, startContext] }
-    }
+    const withStartContext = await bindStartContext(startGate, agent, (m) => { agent.inject(m) })
     if (messages.length === 0) return withStartContext(await next())
+    /* jscpd:ignore-end */
     const payload = {
       ...base(ctx, agent, 'UserPromptSubmit', model),
       turn_id: String(turn),

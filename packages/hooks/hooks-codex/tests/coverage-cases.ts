@@ -27,7 +27,7 @@ function hooks(d: string, h: unknown): string {
   writeFileSync(join(d, 'hooks.json'), JSON.stringify({ hooks: h })); return join(d, 'hooks.json')
 }
 
-type HarnessOpts = { stderrSummaryMaxChars?: number; sessionRoot?: string }
+type HarnessOpts = { stderrSummaryMaxChars?: number; sessionRoot?: string; sessionConfigFile?: string; maxConsecutiveStopBlocks?: number }
 async function harness(configPath: string, adapter: MockAdapter, opts: HarnessOpts = {}): Promise<Context> {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
@@ -53,7 +53,7 @@ async function waitFor(predicate: () => boolean, timeout = 5000, interval = 10):
   }
 }
 
-export type CoverageGroup = 'prompt' | 'post-tool' | 'result-shape' | 'edge-paths' | 'payload'
+export type CoverageGroup = 'prompt' | 'post-tool' | 'result-shape' | 'edge-paths' | 'payload' | 'session-hooks'
 
 /** Register independently schedulable slices of the hooks-codex coverage matrix. */
 export function defineCoverageCases(groups: CoverageGroup | readonly CoverageGroup[]): void {
@@ -637,5 +637,148 @@ export function defineCoverageCases(groups: CoverageGroup | readonly CoverageGro
       expect(readFileSync(marker, 'utf8').trim().endsWith(sessionDir.split('/').pop()!)).toBe(true)
       await handle.dispose()
     })
+  })
+
+  if (selected.has('session-hooks')) describe('hooks-codex coverage — per-session hook config discovery', () => {
+    it('a process-config load failure WITH sessionConfigFile set degrades to session-only operation (not a hard failure)', async () => {
+      const d = dir()
+      const sessionDir = dir()
+      const marker = join(sessionDir, 'ran')
+      sh(sessionDir, 's.sh', `#!/usr/bin/env bash\ntouch "${marker}"\n`)
+      writeFileSync(join(sessionDir, '.codex-hooks.json'), JSON.stringify({ hooks: { PreToolUse: [{ hooks: [{ type: 'command', command: join(sessionDir, 's.sh') }] }] } }))
+      const warn = vi.fn()
+      const adapter = new MockAdapter([toolCallResponse('c1', 'Bash', { command: 'x' }), textResponse('done')])
+      // Build the context by hand so the warn spy is installed BEFORE the plugin
+      // mounts — the load-failure warning fires at mount time.
+      const ctx = new Context()
+      await mountAgentLoopTestDependencies(ctx)
+      ctx.logger.warn = warn as never
+      await ctx.plugin(AgentLoop, { agents: [] })
+      await ctx.plugin(LocalSubprocessRuntime)
+      await ctx.plugin(LocalBashExecutor, { timeoutMs: 10_000 })
+      await ctx.plugin(HooksCodex, { configPath: join(d, 'missing.json'), model: 'm', sessionConfigFile: '.codex-hooks.json' })
+      ctx.llm.registerAdapter(['mock'], adapter)
+      ctx.tools.register(defineContentToolFixture({ name: 'Bash', description: 'b', parameters: { command: { type: 'string' } }, async execute() { return [{ type: 'text', text: 'ok' }] } }))
+      const handle = await ctx.agents.create({ sessionId: SessionId('s1'), meta: { cwd: sessionDir }, agentOptions: { provider: 'mock', model: 'mock' } })
+      handle.agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+      await waitForIdle(ctx, handle.agent)
+      expect(existsSync(marker)).toBe(true) // the session-local hook still ran
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('continuing with per-session discovery only'))
+      await handle.dispose()
+    })
+
+    it('a discovered session hook config runs alongside the process-level config', async () => {
+      const d = dir()
+      const sessionDir = dir()
+      const marker = join(sessionDir, 'ran')
+      const s = sh(sessionDir, 's.sh', `#!/usr/bin/env bash\ntouch "${marker}"\n`)
+      writeFileSync(join(sessionDir, '.codex-hooks.json'), JSON.stringify({ hooks: { PreToolUse: [{ hooks: [{ type: 'command', command: s }] }] } }))
+      const processPath = hooks(d, {}) // an empty but valid process-level config
+      const adapter = new MockAdapter([toolCallResponse('c1', 'Bash', { command: 'x' }), textResponse('done')])
+      const ctx = await harness(processPath, adapter, { sessionConfigFile: '.codex-hooks.json' })
+      ctx.tools.register(defineContentToolFixture({ name: 'Bash', description: 'b', parameters: { command: { type: 'string' } }, async execute() { return [{ type: 'text', text: 'ok' }] } }))
+      const handle = await ctx.agents.create({ sessionId: SessionId('s2'), meta: { cwd: sessionDir }, agentOptions: { provider: 'mock', model: 'mock' } })
+      handle.agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+      await waitForIdle(ctx, handle.agent)
+      expect(existsSync(marker)).toBe(true) // the session-local hook ran
+      await handle.dispose()
+    })
+
+    it('an unparseable session hook config file warns (path + agent id) and contributes no session hooks', async () => {
+      const d = dir()
+      const sessionDir = dir()
+      writeFileSync(join(sessionDir, '.codex-hooks.json'), '{not json')
+      const processPath = hooks(d, {})
+      const warn = vi.fn()
+      const adapter = new MockAdapter([textResponse('ok')])
+      const ctx = await harness(processPath, adapter, { sessionConfigFile: '.codex-hooks.json' })
+      ctx.logger.warn = warn as never
+      const handle = await ctx.agents.create({ sessionId: SessionId('s3'), meta: { cwd: sessionDir }, agentOptions: { provider: 'mock', model: 'mock' } })
+      handle.agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+      await waitForIdle(ctx, handle.agent)
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('could not load session hook config'))
+      await handle.dispose()
+    })
+  })
+
+  if (selected.has('session-hooks')) describe('hooks-codex coverage — continue:false at every stop-scoped point + Stop loop cap', () => {
+    it('a UserPromptSubmit deny WITH a pending SessionStart context injects that context directly (the non-entering fold arm)', async () => {
+      const d = dir()
+      const startHook = sh(d, 'start.sh', '#!/usr/bin/env bash\necho \'{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"parked ctx"}}\'\n')
+      const denyHook = sh(d, 'deny.sh', '#!/usr/bin/env bash\nexit 2\n')
+      const path = hooks(d, {
+        SessionStart: [{ hooks: [{ type: 'command', command: startHook }] }],
+        UserPromptSubmit: [{ hooks: [{ type: 'command', command: denyHook }] }],
+      })
+      const adapter = new MockAdapter([textResponse('unreached')])
+      const ctx = await harness(path, adapter)
+      const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+      const injected: string[] = []
+      agent.inject = (message: { content: Array<{ type: string; text?: string }> }) => {
+        injected.push(message.content.map(b => b.text ?? '').join(''))
+      }
+      agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+      await waitForIdle(ctx, agent)
+      expect(adapter.requests).toHaveLength(0) // denied — no model request ran
+      expect(injected.some(text => text.includes('parked ctx'))).toBe(true)
+    })
+
+    it('a {"continue":false} UserPromptSubmit hook halts the run before the model request', async () => {
+      const d = dir()
+      const s = sh(d, 'stop.sh', '#!/usr/bin/env bash\necho \'{"continue":false,"stopReason":"prompt halt"}\'\n')
+      const path = hooks(d, { UserPromptSubmit: [{ hooks: [{ type: 'command', command: s }] }] })
+      const adapter = new MockAdapter([textResponse('unreached')])
+      const ctx = await harness(path, adapter)
+      const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+      agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+      await waitForIdle(ctx, agent)
+      expect(adapter.requests).toHaveLength(0)
+      const turnEnd = events(agent).findLast(e => e.type === 'turn/end')
+      expect(turnEnd?.type === 'turn/end' && turnEnd.data.reason).toEqual({ kind: 'aborted', reason: { kind: 'hook', reason: 'prompt halt' } })
+    })
+
+    it('a {"continue":false} PostToolUse hook halts the run after the tool ran', async () => {
+      const d = dir()
+      const s = sh(d, 'stop.sh', '#!/usr/bin/env bash\necho \'{"continue":false,"stopReason":"post halt"}\'\n')
+      const path = hooks(d, { PostToolUse: [{ hooks: [{ type: 'command', command: s }] }] })
+      const adapter = new MockAdapter([toolCallResponse('c1', 'Bash', { command: 'x' }), textResponse('unreached')])
+      const ctx = await harness(path, adapter)
+      let ran = false
+      ctx.tools.register(defineContentToolFixture({ name: 'Bash', description: 'b', parameters: { command: { type: 'string' } }, async execute() { ran = true; return [{ type: 'text', text: 'ok' }] } }))
+      const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+      agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+      await waitForIdle(ctx, agent)
+      expect(ran).toBe(true)
+      expect(adapter.requests).toHaveLength(1)
+      const turnEnd = events(agent).findLast(e => e.type === 'turn/end')
+      expect(turnEnd?.type === 'turn/end' && turnEnd.data.reason).toEqual({ kind: 'aborted', reason: { kind: 'hook', reason: 'post halt' } })
+    })
+
+    it('a {"continue":false} Stop hook overrides a blocking decision: the turn is allowed to close, not steered', async () => {
+      const d = dir()
+      const s = sh(d, 'stop.sh', '#!/usr/bin/env bash\necho \'{"decision":"block","continue":false,"stopReason":"stop halt"}\'\n')
+      const path = hooks(d, { Stop: [{ hooks: [{ type: 'command', command: s }] }] })
+      const adapter = new MockAdapter([textResponse('one')])
+      const ctx = await harness(path, adapter)
+      const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+      agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+      await waitForIdle(ctx, agent)
+      expect(adapter.requests).toHaveLength(1)
+    })
+
+    it('an unconditionally blocking Stop hook is overridden once maxConsecutiveStopBlocks is reached', async () => {
+      const d = dir()
+      const s = sh(d, 'stop.sh', '#!/usr/bin/env bash\nexit 2\n')
+      const path = hooks(d, { Stop: [{ hooks: [{ type: 'command', command: s }] }] })
+      const warn = vi.fn()
+      const adapter = new MockAdapter([textResponse('one'), textResponse('two')])
+      const ctx = await harness(path, adapter, { maxConsecutiveStopBlocks: 1 })
+      ctx.logger.warn = warn as never
+      const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+      agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+      await waitForIdle(ctx, agent)
+      expect(adapter.requests).toHaveLength(2)
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('overriding the block'))
+    }, 15_000)
   })
 }

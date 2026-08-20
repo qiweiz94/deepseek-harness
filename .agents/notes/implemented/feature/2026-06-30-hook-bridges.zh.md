@@ -49,19 +49,17 @@ Claude Code 始终导出 `CLAUDE_PROJECT_DIR`，常见的未修改钩子引用 `
 
 ### 隔离
 
-配置在加载时一次性解析；读取/解析失败时记录日志并不注册任何内容，而非导致启动崩溃（一个拼错的路径不应拖垮 agent）。CC 桥接只运行 shell 形式的 `type: 'command'` 钩子；`http`、`mcp_tool`、`prompt` 和 `agent` 处理器被解析后跳过。Codex 桥接只运行同步命令处理器，跳过 `async: true` 或非命令条目。emit 监听路径（`session-start`、`subagent/start`）以 detached 方式运行，其 `inject` 包裹在 `.catch` 中记录日志（抛异常的 inject 不得中断会话启动或循环）。
+配置在加载时一次性解析；读取/解析失败时记录日志并不注册任何内容，除非同时配置了 `sessionConfigFile`，此时桥接会继续仅依靠会话级发现运行。CC 桥接只运行 shell 形式的 `type: 'command'` 钩子；`http`、`mcp_tool`、`prompt` 和 `agent` 处理器被解析后跳过。Codex 桥接只运行同步命令处理器，跳过 `async: true` 或非命令条目。emit 监听路径（`session-start`、`subagent/start`）以 detached 方式运行；一个被拒绝的 `session-start` 运行会被 `createStartGate.register` 的 `onError` 回调隔离，而抛出异常的 `deliver`（`agent.inject`）由桥接自身的 `.catch` 捕获——两者都不得中断会话启动或循环。机制详见 [continue:false／session-start-gating／stop-loop-guard／per-session-hook-config Agent Note](2026-08-20-hook-bridge-parity.md)。
 
 ### 钩子在哪里运行，配置从哪里来
 
-钩子在 agent 的会话工作区中运行，因此相对路径指向用户的项目。`configPath` 相对于进程启动时的 cwd 解析一次，适用于所有会话。按会话的项目本地发现仍推迟在 `TODO(per-session-hook-config)` 下。
+钩子在 agent 的会话工作区中运行，因此相对路径指向用户的项目。`configPath` 相对于进程启动时的 cwd 解析一次，适用于所有会话。可选的 `sessionConfigFile` 在此之上增加按会话的项目本地发现，相对于每个会话的工作区解析，并在每个会话首次使用钩子时解析一次（[机制](2026-08-20-hook-bridge-parity.md)）。
 
 ## 推迟的兼容性缺口
 
 - **工具输入重写。** CC/Codex 的 `updatedInput` 被记录日志并发出警告，但不予执行——输入重写是一个推迟的一致性设计问题（见 [pre-tool-input-rewrite Agent Note](../../proposed/feature/2026-06-30-pre-tool-input-rewrite.md)），因为 pre-execution 参数被 `tool/call` 审计、`assistant/message` 历史和工具展示共同读取，诚实的重写是一个设计单元，而非一个字段。
-- **Stop 循环防护**（`TODO(stop-loop-guard)`）。Claude Code 提供 `stop_hook_active` 并在连续八次阻塞后覆盖钩子；Codex 提供 `stop_hook_active` 但未记录等效上限。两个桥接始终报告 `false`，因此一个无条件阻塞的 Stop 钩子会在每一步强制继续——在状态追踪落地之前，钩子作者必须自行限制。
-- **钩子 `continue:false`（硬停止）。** 钩子可以请求终止整个运行（CC/Codex `continue:false`）；共享合并将其折叠为 `MergedHookOutcome.stop`/`stopReason`，但没有桥接对其采取行动（`TODO(hook-continue-false)`）——拦截点尚无「硬停止 agent」原语（Decision 阻塞/引导的是单个点，而非整个运行）。与循环防护工作一同推迟；轮中请求会将停止请求记录在 `hook/result` 中，钩子在此期间保留其逐点效果（决策/上下文）。
-- **配置发现。** 路径在 `cordis.yml` 中显式指定且为进程级（见上文）；完整的多层 CC/Codex 优先级遍历、按会话的项目本地发现以及信任/hash 模型未被重新实现（`TODO(per-session-hook-config)`）。
-- **Session-start / subagent-start 上下文为尽力而为（`TODO(session-start-gating)`）。** 两个钩子以 detached 方式运行，不阻塞启动流程，因此其上下文在就绪时注入，但可能错过首个请求或短命的 subagent。要保证首请求送达，需要一个 awaited 的启动扩展点。
+
+Stop 循环防护、`continue:false` 运行级停止、按会话钩子配置发现，以及有界的 SessionStart 上下文送达均已上线——见 [hook-bridge-parity Agent Note](2026-08-20-hook-bridge-parity.md)。
 
 ## 曾考虑的替代方案
 

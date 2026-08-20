@@ -37,7 +37,14 @@ function hooks(d: string, h: unknown): string {
   writeFileSync(join(d, 'hooks.json'), JSON.stringify({ hooks: h })); return join(d, 'hooks.json')
 }
 
-type HarnessOpts = { pluginRoot?: string; projectDir?: string; stderrSummaryMaxChars?: number; sessionRoot?: string }
+type HarnessOpts = {
+  pluginRoot?: string
+  projectDir?: string
+  stderrSummaryMaxChars?: number
+  sessionRoot?: string
+  sessionConfigFile?: string
+  maxConsecutiveStopBlocks?: number
+}
 async function harness(configPath: string, adapter: MockAdapter, opts: HarnessOpts = {}): Promise<Context> {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
@@ -63,7 +70,7 @@ async function waitFor(predicate: () => boolean, timeout = 5000, interval = 10):
   }
 }
 
-export type CoverageGroup = 'config' | 'stop' | 'context' | 'edge-paths'
+export type CoverageGroup = 'config' | 'stop' | 'context' | 'edge-paths' | 'session-hooks'
 
 /** Register independently schedulable slices of the hooks-claude-code coverage matrix. */
 export function defineCoverageCases(group: CoverageGroup): void {
@@ -739,20 +746,198 @@ export function defineCoverageCases(group: CoverageGroup): void {
     })
   })
 
-  if (group === 'edge-paths') describe('hooks-claude-code coverage — SessionStart timing is best-effort (no-wait)', () => {
-    it('does NOT crash or block when the prompt is sent immediately (context is best-effort, may miss the first request)', async () => {
-    // Session-start injection is detached, so an immediate prompt need not observe it. Assert only
-    // the guaranteed behavior—no crash and a completed turn—without pre-waiting away the race.
+  if (group === 'edge-paths') describe('hooks-claude-code coverage — SessionStart delivery is a bounded stall, not a race', () => {
+    it('an immediately-sent prompt still WAITS for and receives the SessionStart context on its first request (the start gate, not best-effort)', async () => {
+    // Registration is synchronous inside agentLoop.create() (before followup() can run), and the
+    // first pre-step claims and AWAITS that pending run — so sending immediately no longer races
+    // the hook off the first request; it bounds the first request on the hook's own timeout instead.
       const d = dir()
       const s = sh(d, 'start.sh', '#!/usr/bin/env bash\necho \'{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"late ctx"}}\'\n')
       const path = hooks(d, { SessionStart: [{ hooks: [{ type: 'command', command: s }] }] })
       const adapter = new MockAdapter([textResponse('ok')])
       const ctx = await harness(path, adapter)
       const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
-      // Send immediately — do NOT wait for the session-start inject.
+      // Send immediately — no pre-wait for the SessionStart hook.
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
       await waitForIdle(ctx, agent)
-      expect(adapter.requests).toHaveLength(1) // the turn ran regardless of hook timing
+      expect(adapter.requests).toHaveLength(1)
+      expect(JSON.stringify(adapter.requests[0]!.messages)).toContain('late ctx')
     })
+  })
+
+  if (group === 'session-hooks') describe('hooks-claude-code coverage — per-session hook config discovery', () => {
+    it('a process-config load failure WITH sessionConfigFile set degrades to session-only operation (not a hard failure)', async () => {
+      const d = dir()
+      const sessionDir = dir()
+      const marker = join(sessionDir, 'ran')
+      sh(sessionDir, 's.sh', `#!/usr/bin/env bash\ntouch "${marker}"\n`)
+      writeFileSync(join(sessionDir, '.claude-hooks.json'), JSON.stringify({ hooks: { PreToolUse: [{ hooks: [{ type: 'command', command: join(sessionDir, 's.sh') }] }] } }))
+      const warn = vi.fn()
+      const adapter = new MockAdapter([toolCallResponse('c1', 'echo', {}), textResponse('done')])
+      // Build the context by hand (rather than via harness()) so the warn spy is
+      // installed BEFORE the plugin mounts — the load-failure warning fires at
+      // mount time, which harness()'s caller cannot observe after the fact.
+      const ctx = new Context()
+      await mountAgentLoopTestDependencies(ctx)
+      ctx.logger.warn = warn as never
+      await ctx.plugin(AgentLoop, { agents: [] })
+      await ctx.plugin(LocalSubprocessRuntime)
+      await ctx.plugin(LocalBashExecutor, { timeoutMs: 10_000 })
+      // The process configPath does not exist at all.
+      await ctx.plugin(HooksClaude, { configPath: join(d, 'missing.json'), sessionConfigFile: '.claude-hooks.json' })
+      ctx.llm.registerAdapter(['mock'], adapter)
+      ctx.tools.register(defineContentToolFixture({ name: 'echo', description: 'e', parameters: {}, async execute() { return [{ type: 'text', text: 'ok' }] } }))
+      const handle = await ctx.agents.create({ sessionId: SessionId('s1'), meta: { cwd: sessionDir }, agentOptions: { provider: 'mock', model: 'mock' } })
+      handle.agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+      await waitForIdle(ctx, handle.agent)
+      expect(existsSync(marker)).toBe(true) // the session-local hook still ran
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('continuing with per-session discovery only'))
+      await handle.dispose()
+    })
+
+    it('session discovery substitutes ${CLAUDE_PLUGIN_ROOT} (pluginRoot set) and defaults CLAUDE_PROJECT_DIR to the session cwd (projectDir unset)', async () => {
+      const d = dir()
+      const pluginDir = dir()
+      const sessionDir = dir()
+      const marker = join(sessionDir, 'ran')
+      const capture = join(sessionDir, 'projectDir')
+      sh(pluginDir, 's.sh', `#!/usr/bin/env bash\ntouch "${marker}"\necho -n "$CLAUDE_PROJECT_DIR" > "${capture}"\n`)
+      writeFileSync(join(sessionDir, '.claude-hooks.json'), JSON.stringify({ hooks: { PreToolUse: [{ hooks: [{ type: 'command', command: '${CLAUDE_PLUGIN_ROOT}/s.sh' }] }] } }))
+      const processPath = hooks(d, {}) // an empty process-level config (still parses fine)
+      const adapter = new MockAdapter([toolCallResponse('c1', 'echo', {}), textResponse('done')])
+      const ctx = await harness(processPath, adapter, { pluginRoot: pluginDir, sessionConfigFile: '.claude-hooks.json' })
+      ctx.tools.register(defineContentToolFixture({ name: 'echo', description: 'e', parameters: {}, async execute() { return [{ type: 'text', text: 'ok' }] } }))
+      const handle = await ctx.agents.create({ sessionId: SessionId('s2'), meta: { cwd: sessionDir }, agentOptions: { provider: 'mock', model: 'mock' } })
+      handle.agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+      await waitForIdle(ctx, handle.agent)
+      expect(existsSync(marker)).toBe(true) // ${CLAUDE_PLUGIN_ROOT} substitution reached the session hook
+      expect(readFileSync(capture, 'utf8')).toBe(sessionDir) // projectDir defaulted to the session cwd
+      await handle.dispose()
+    })
+
+    it('session discovery honors an explicit projectDir (pluginRoot unset) instead of defaulting to the session cwd', async () => {
+      const d = dir()
+      const sessionDir = dir()
+      const explicitProjectDir = dir()
+      const capture = join(sessionDir, 'projectDir')
+      const s = sh(sessionDir, 's.sh', `#!/usr/bin/env bash\necho -n "$CLAUDE_PROJECT_DIR" > "${capture}"\n`)
+      writeFileSync(join(sessionDir, '.claude-hooks.json'), JSON.stringify({ hooks: { PreToolUse: [{ hooks: [{ type: 'command', command: s }] }] } }))
+      const processPath = hooks(d, {})
+      const adapter = new MockAdapter([toolCallResponse('c1', 'echo', {}), textResponse('done')])
+      const ctx = await harness(processPath, adapter, { projectDir: explicitProjectDir, sessionConfigFile: '.claude-hooks.json' })
+      ctx.tools.register(defineContentToolFixture({ name: 'echo', description: 'e', parameters: {}, async execute() { return [{ type: 'text', text: 'ok' }] } }))
+      const handle = await ctx.agents.create({ sessionId: SessionId('s3'), meta: { cwd: sessionDir }, agentOptions: { provider: 'mock', model: 'mock' } })
+      handle.agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+      await waitForIdle(ctx, handle.agent)
+      expect(readFileSync(capture, 'utf8')).toBe(explicitProjectDir) // NOT the session cwd
+      await handle.dispose()
+    })
+
+    it('an unparseable session hook config file warns (path + agent id) and contributes no session hooks', async () => {
+      const d = dir()
+      const sessionDir = dir()
+      // A DIRECTORY where the session config file is expected → a non-ENOENT read failure.
+      writeFileSync(join(sessionDir, '.claude-hooks.json'), '{not json')
+      const processPath = hooks(d, {})
+      const warn = vi.fn()
+      const adapter = new MockAdapter([textResponse('ok')])
+      const ctx = await harness(processPath, adapter, { sessionConfigFile: '.claude-hooks.json' })
+      ctx.logger.warn = warn as never
+      const handle = await ctx.agents.create({ sessionId: SessionId('s4'), meta: { cwd: sessionDir }, agentOptions: { provider: 'mock', model: 'mock' } })
+      handle.agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+      await waitForIdle(ctx, handle.agent)
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('could not load session hook config'))
+      await handle.dispose()
+    })
+  })
+
+  if (group === 'session-hooks') describe('hooks-claude-code coverage — continue:false at every stop-scoped point + Stop loop cap', () => {
+    it('a UserPromptSubmit deny WITH a pending SessionStart context injects that context directly (the non-entering fold arm)', async () => {
+      // The SessionStart hook resolves a real context; the UserPromptSubmit hook denies
+      // (not continue:false) — the pre-step's `withStartContext({ kind: 'reject' })` call
+      // hits foldStartContext's non-entering branch, so the claimed context is injected
+      // directly rather than appended to entering messages.
+      const d = dir()
+      const startHook = sh(d, 'start.sh', '#!/usr/bin/env bash\necho \'{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"parked ctx"}}\'\n')
+      const denyHook = sh(d, 'deny.sh', '#!/usr/bin/env bash\necho \'{"decision":"block","reason":"no prompt"}\'\n')
+      const path = hooks(d, {
+        SessionStart: [{ hooks: [{ type: 'command', command: startHook }] }],
+        UserPromptSubmit: [{ hooks: [{ type: 'command', command: denyHook }] }],
+      })
+      const adapter = new MockAdapter([textResponse('unreached')])
+      const ctx = await harness(path, adapter)
+      const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+      // Record what the bridge injects directly, sidestepping the inbox/turn
+      // semantics of an un-consumed 'next-step' park — this test is only about
+      // the bridge choosing the inject arm, not full delivery timing.
+      const injected: string[] = []
+      agent.inject = (message: { content: Array<{ type: string; text?: string }> }) => {
+        injected.push(message.content.map(b => b.text ?? '').join(''))
+      }
+      agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+      await waitForIdle(ctx, agent)
+      expect(adapter.requests).toHaveLength(0) // denied — no model request ran
+      expect(injected.some(text => text.includes('parked ctx'))).toBe(true)
+    })
+
+    it('a {"continue":false} UserPromptSubmit hook halts the run before the model request', async () => {
+      const d = dir()
+      const s = sh(d, 'stop.sh', '#!/usr/bin/env bash\necho \'{"continue":false,"stopReason":"prompt halt"}\'\n')
+      const path = hooks(d, { UserPromptSubmit: [{ hooks: [{ type: 'command', command: s }] }] })
+      const adapter = new MockAdapter([textResponse('unreached')])
+      const ctx = await harness(path, adapter)
+      const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+      agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+      await waitForIdle(ctx, agent)
+      expect(adapter.requests).toHaveLength(0) // the model request never ran
+      const turnEnd = events(agent).findLast(e => e.type === 'turn/end')
+      expect(turnEnd?.type === 'turn/end' && turnEnd.data.reason).toEqual({ kind: 'aborted', reason: { kind: 'hook', reason: 'prompt halt' } })
+    })
+
+    it('a {"continue":false} PostToolUse hook halts the run after the tool ran', async () => {
+      const d = dir()
+      const s = sh(d, 'stop.sh', '#!/usr/bin/env bash\necho \'{"continue":false,"stopReason":"post halt"}\'\n')
+      const path = hooks(d, { PostToolUse: [{ hooks: [{ type: 'command', command: s }] }] })
+      const adapter = new MockAdapter([toolCallResponse('c1', 'echo', {}), textResponse('unreached')])
+      const ctx = await harness(path, adapter)
+      let ran = false
+      ctx.tools.register(defineContentToolFixture({ name: 'echo', description: 'e', parameters: {}, async execute() { ran = true; return [{ type: 'text', text: 'ok' }] } }))
+      const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+      agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+      await waitForIdle(ctx, agent)
+      expect(ran).toBe(true) // the tool DID run — PostToolUse fires after it
+      expect(adapter.requests).toHaveLength(1) // but the second (post-tool) model request never ran
+      const turnEnd = events(agent).findLast(e => e.type === 'turn/end')
+      expect(turnEnd?.type === 'turn/end' && turnEnd.data.reason).toEqual({ kind: 'aborted', reason: { kind: 'hook', reason: 'post halt' } })
+    })
+
+    it('a {"continue":false} Stop hook overrides a blocking decision: the turn is allowed to close, not steered', async () => {
+      const d = dir()
+      const s = sh(d, 'stop.sh', '#!/usr/bin/env bash\necho \'{"decision":"block","continue":false,"stopReason":"stop halt"}\'\n')
+      const path = hooks(d, { Stop: [{ hooks: [{ type: 'command', command: s }] }] })
+      const adapter = new MockAdapter([textResponse('one')])
+      const ctx = await harness(path, adapter)
+      const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+      agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+      await waitForIdle(ctx, agent)
+      expect(adapter.requests).toHaveLength(1) // NOT steered into a second request
+    })
+
+    it('an unconditionally blocking Stop hook is overridden once maxConsecutiveStopBlocks is reached', async () => {
+      const d = dir()
+      const s = sh(d, 'stop.sh', '#!/usr/bin/env bash\nexit 2\n') // blocks every single time, no self-limit
+      const path = hooks(d, { Stop: [{ hooks: [{ type: 'command', command: s }] }] })
+      const warn = vi.fn()
+      const adapter = new MockAdapter([textResponse('one'), textResponse('two')])
+      const ctx = await harness(path, adapter, { maxConsecutiveStopBlocks: 1 })
+      ctx.logger.warn = warn as never
+      const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+      agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+      await waitForIdle(ctx, agent)
+      // Cap of 1: the first block forces one continuation (2 model requests), the
+      // second consecutive block on the SAME turn is overridden — the turn stops.
+      expect(adapter.requests).toHaveLength(2)
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('overriding the block'))
+    }, 15_000)
   })
 }

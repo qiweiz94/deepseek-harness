@@ -1,10 +1,10 @@
 /**
  * Shared, non-plugin hook protocol library: matching, command execution and
  * decoding, restrictive outcome merging, durable event helpers, detached run
- * quiescence, run-level halt mapping, Stop-loop accounting, and the
- * session-start first-step gate. Claude Code and Codex bridges own their
- * distinct payloads, environment rules, matcher mode, and typed
- * extension-point mappings.
+ * quiescence, run-level halt mapping, Stop-loop accounting, the session-start
+ * first-step gate, and process-level/per-session hook config loading. Claude
+ * Code and Codex bridges own their distinct payloads, environment rules,
+ * matcher mode, and typed extension-point mappings.
  * @module @deepseek-ai/dsh-hook-protocol
  */
 
@@ -29,5 +29,8 @@ export { applyHaltRequest } from './halt.ts'
 export type { HaltTarget } from './halt.ts'
 export { createStopLoopGuard, DEFAULT_MAX_CONSECUTIVE_STOP_BLOCKS } from './stop-guard.ts'
 export type { StopLoopGuard } from './stop-guard.ts'
-export { createStartGate } from './start-gate.ts'
-export type { StartGate } from './start-gate.ts'
+export { bindStartContext, createStartGate, foldStartContext } from './start-gate.ts'
+export type { PreStepGateDecision, StartGate } from './start-gate.ts'
+export { combineHookGroups, createSessionHookConfigCache, loadProcessHookConfig } from './session-config.ts'
+export type { SessionWorkspace } from './session-config.ts'
+export { assertPositiveInteger, resolveSharedHookLimits } from './config-limits.ts'

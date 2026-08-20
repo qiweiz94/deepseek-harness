@@ -9,8 +9,6 @@
  * @module @deepseek-ai/dsh-hooks-claude-code
  */
 
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
@@ -23,14 +21,19 @@ import {
   appendHookInvoked,
   appendHookResult,
   applyHaltRequest,
+  bindStartContext,
+  combineHookGroups,
   createDetachedRuns,
+  createSessionHookConfigCache,
   createStartGate,
   createStopLoopGuard,
   DEFAULT_HOOK_TIMEOUT_MS,
   DEFAULT_MAX_CONSECUTIVE_STOP_BLOCKS,
   DEFAULT_STDERR_SUMMARY_MAX_CHARS,
+  loadProcessHookConfig,
   matchesMatcher,
   mergeHookOutputs,
+  resolveSharedHookLimits,
   runHook,
   type HookOutput,
   type MatcherGroup,
@@ -107,19 +110,9 @@ function nextHandlerId(point: string): string {
 /** The `{kind:'plugin'}` source stamped on every context this bridge injects. */
 const PLUGIN_SOURCE: MessageSource = { kind: 'plugin', plugin: 'hooks-claude-code' }
 
-/** The summary cap bounds a persisted event field — a positive integer or the slice misbehaves silently. */
-function assertPositiveInteger(name: string, value: number): void {
-  if (!Number.isInteger(value) || value < 1) {
-    throw new Error(`hooks-claude-code: ${name} must be a positive integer`)
-  }
-}
-
 export function apply(ctx: Context, config: Config): void {
   // Validate before config parsing so a bad value cannot be hidden by its early return.
-  const stderrSummaryMaxChars = config.stderrSummaryMaxChars ?? DEFAULT_STDERR_SUMMARY_MAX_CHARS
-  assertPositiveInteger('stderrSummaryMaxChars', stderrSummaryMaxChars)
-  const maxConsecutiveStopBlocks = config.maxConsecutiveStopBlocks ?? DEFAULT_MAX_CONSECUTIVE_STOP_BLOCKS
-  assertPositiveInteger('maxConsecutiveStopBlocks', maxConsecutiveStopBlocks)
+  const { stderrSummaryMaxChars, maxConsecutiveStopBlocks } = resolveSharedHookLimits('hooks-claude-code', config)
   const defaultTimeoutMs = config.defaultTimeoutMs ?? DEFAULT_HOOK_TIMEOUT_MS
   /** Warn about each parsed-and-skipped non-command hook of one config source. */
   function warnSkipped(skipped: { event: string; type: string }[]): void {
@@ -129,55 +122,38 @@ export function apply(ctx: Context, config: Config): void {
   }
   // Parse once at load. A read or parse failure logs and registers nothing —
   // unless per-session discovery is configured, which stays functional.
-  let parsed: ClaudeCodeHookConfig = {}
-  try {
-    const raw: unknown = JSON.parse(readFileSync(config.configPath, 'utf8'))
-    const result = parseClaudeCodeConfig(raw, {
+  const loadedConfig = loadProcessHookConfig({
+    configPath: config.configPath,
+    hasSessionFallback: config.sessionConfigFile !== undefined,
+    empty: {},
+    parse: raw => parseClaudeCodeConfig(raw, {
       ...config.pluginRoot !== undefined ? { pluginRoot: config.pluginRoot } : {},
       ...config.projectDir !== undefined ? { projectDir: config.projectDir } : {},
-    })
-    parsed = result.config
-    warnSkipped(result.skipped)
-  } catch (error: unknown) {
-    if (config.sessionConfigFile === undefined) {
-      ctx.logger.warn(`hooks-claude-code: could not load hook config "${config.configPath}": ${String(error)} — no hooks registered`)
-      return
-    }
-    ctx.logger.warn(`hooks-claude-code: could not load hook config "${config.configPath}": ${String(error)} — continuing with per-session discovery only`)
-  }
+    }),
+    warnSkipped,
+    warnFailure: (error, degraded) => {
+      const tail = degraded ? 'continuing with per-session discovery only' : 'no hooks registered'
+      ctx.logger.warn(`hooks-claude-code: could not load hook config "${config.configPath}": ${String(error)} — ${tail}`)
+    },
+  })
+  if (loadedConfig === undefined) return
+  const parsed: ClaudeCodeHookConfig = loadedConfig
 
   // Per-session project-local discovery: read once per session at first hook
-  // use, keyed weakly so a disposed agent's entry is collectable. A workspace
-  // without the file simply has no session hooks (cached as empty).
-  const sessionConfigs = new WeakMap<Agent, ClaudeCodeHookConfig>()
-  function sessionHookConfig(agent: Agent | undefined): ClaudeCodeHookConfig {
-    const file = config.sessionConfigFile
-    if (agent === undefined || file === undefined) return {}
-    const cached = sessionConfigs.get(agent)
-    if (cached !== undefined) return cached
-    let discovered: ClaudeCodeHookConfig = {}
-    const cwd = agent.session.header.cwd
-    if (cwd !== undefined) {
-      const path = resolve(cwd, file)
-      try {
-        const raw: unknown = JSON.parse(readFileSync(path, 'utf8'))
-        // `${CLAUDE_PROJECT_DIR}` substitutes to the session workspace unless
-        // an explicit projectDir is configured — the same default the env var uses.
-        const result = parseClaudeCodeConfig(raw, {
-          ...config.pluginRoot !== undefined ? { pluginRoot: config.pluginRoot } : {},
-          projectDir: config.projectDir ?? cwd,
-        })
-        discovered = result.config
-        warnSkipped(result.skipped)
-      } catch (error: unknown) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-          ctx.logger.warn(`hooks-claude-code: could not load session hook config "${path}": ${String(error)} — no session hooks for ${agent.id}`)
-        }
-      }
-    }
-    sessionConfigs.set(agent, discovered)
-    return discovered
-  }
+  // use. `${CLAUDE_PROJECT_DIR}` substitutes to the session workspace unless
+  // an explicit projectDir is configured — the same default the env var uses.
+  const sessionHookConfig = createSessionHookConfigCache({
+    sessionConfigFile: config.sessionConfigFile,
+    empty: {},
+    parse: (raw, cwd) => parseClaudeCodeConfig(raw, {
+      ...config.pluginRoot !== undefined ? { pluginRoot: config.pluginRoot } : {},
+      projectDir: config.projectDir ?? cwd,
+    }),
+    warnSkipped,
+    warnFailure: (path, agentId, error) => {
+      ctx.logger.warn(`hooks-claude-code: could not load session hook config "${path}": ${String(error)} — no session hooks for ${agentId}`)
+    },
+  })
 
   // Emit-shaped points run detached, so track their chains; disposal aborts
   // active hooks and drains continuations before resolving.
@@ -204,7 +180,7 @@ export function apply(ctx: Context, config: Config): void {
     payload: unknown,
     opts: { agent?: Agent; turn?: number; readonly signal: AbortSignal },
   ): Promise<MergedHookOutcome> {
-    const groups: MatcherGroup[] = [...parsed[point] ?? [], ...sessionHookConfig(opts.agent)[point] ?? []]
+    const groups: MatcherGroup[] = combineHookGroups(parsed[point], sessionHookConfig(opts.agent)[point])
     const outputs: HookOutput[] = []
     // Run the hook in the agent's session workspace (the `session/new` cwd on the session
     // header), not the executor or entry-point process's launch dir.
@@ -267,33 +243,22 @@ export function apply(ctx: Context, config: Config): void {
   // delivery is promised rather than racing the hook. A run no step claims
   // falls back to `agent.inject`.
   const startGate = createStartGate<UserMessage>()
+  /** The one warning both a rejected run and a throwing `deliver` (agent.inject) share. */
+  function warnSessionStartFailed(error: unknown): void {
+    ctx.logger.warn(`hooks-claude-code: SessionStart hook failed: ${String(error)}`)
+  }
   ctx.on('agent/session-start', ({ agent, source }) => {
     const run = runPoint('SessionStart', source, sessionStartPayload(ctx, agent, source), { agent, signal: detached.signal })
       .then(contextFrom)
-      .catch((error: unknown): undefined => {
-        ctx.logger.warn(`hooks-claude-code: SessionStart hook failed: ${String(error)}`)
-      })
-    detached.track(startGate.register(agent, run, context => agent.inject(context))
-      .catch((error: unknown) => {
-        ctx.logger.warn(`hooks-claude-code: SessionStart hook failed: ${String(error)}`)
-      }))
+    detached.track(startGate.register(agent, run, (context) => { agent.inject(context) }, warnSessionStartFailed)
+      .catch(warnSessionStartFailed))
   })
 
   // --- UserPromptSubmit → PreStepDecision. The prompt text is the payload; no
   // matcher subject (CC ignores matchers for this event). The step also gates
   // on a pending SessionStart run so its context reaches the first request. ---
   ctx.on('agent/pre-step', async ({ agent, messages, turn, signal }, next): Promise<PreStepDecision> => {
-    const pendingStart = startGate.claim(agent)
-    const startContext = pendingStart === undefined ? undefined : await pendingStart
-    /** Fold the claimed SessionStart context into an enter decision; park it for the next wake when the step never enters. */
-    function withStartContext(decision: PreStepDecision): PreStepDecision {
-      if (startContext === undefined) return decision
-      if (decision.kind !== 'enter') {
-        agent.inject(startContext)
-        return decision
-      }
-      return { kind: 'enter', messages: [...decision.messages, startContext] }
-    }
+    const withStartContext = await bindStartContext(startGate, agent, (m) => { agent.inject(m) })
     if (messages.length === 0) return withStartContext(await next())
     const content = messages.flatMap(message => message.content)
     const merged = await runPoint('UserPromptSubmit', '', promptPayload(ctx, agent, content), { agent, turn, signal })
