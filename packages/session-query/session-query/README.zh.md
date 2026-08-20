@@ -52,5 +52,5 @@
 
 ## 已知限制与暂缓事项
 
-- **无调用方授权**：这是上下文范围内的可信基础设施；未来的模型工具或 UI 必须限制调用方可检查的会话。
+- **受信任调用方边界**：`ctx.sessionQuery` 自身不做任何按调用方的授权；它是一个同进程、上下文范围内的读取/搜索原语，任何把它（或其结果）暴露到自身进程之外的消费方，都要在各自的边界上先做好访问授权。[`dsh-tool-session-query`](../tool-session-query/README.md) 的面向模型工具通过要求调用方会话 `cwd` 与目标完全相等来做授权；[`dsh-host-apiproxy`](../../host/apiproxy/README.md) 的 `session.search` RPC 在返回提供方命中结果之前，会先按 Host 会话列表的可见性过滤；[`dsh-session-reference`](../../context/session-reference/README.md) 则声明它假设宿主已经获得授权，可以读取它能通过该服务触达的每一个会话。未来若有消费方跨越线路、模型或多租户边界，同样需要自行承担这一授权步骤。
 - **无注册表或面向模型工具**：尚未提供提取器和搜索提供方注册表、递归遍历所引用的源事件的能力，以及面向模型的工具。[跟踪决策](../../../.agents/notes/implemented/feature/2026-07-13-session-query-tracing.md) 负责关系语义；SQLite 归属和 tokenizer 决策位于[已实现搜索记录](../../../.agents/notes/implemented/feature/2026-07-10-sqlite-session-query-provider.md)。
