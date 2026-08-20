@@ -2751,7 +2751,7 @@ export interface Config {
 
 依赖：[`AgentOptions`](subsystems/core.md)
 
-来源：[`packages/subagent/tool-subagent/src/index.ts:29`](../packages/subagent/tool-subagent/src/index.ts)
+来源：[`packages/subagent/tool-subagent/src/index.ts:28`](../packages/subagent/tool-subagent/src/index.ts)
 
 <a id="deepseek-aidsh-tool-subagent-report"></a>
 
