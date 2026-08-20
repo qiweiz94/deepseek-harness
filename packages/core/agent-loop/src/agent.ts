@@ -419,11 +419,15 @@ export class ReactLoopAgent implements Agent {
     const persistedHeader = session.requestHeader()
     const persistedConfig = persistedHeader?.config
     const route = { provider: this.options.provider ?? '', model: this.options.model ?? '' }
-    const reasoningEffort = persistedConfig?.provider === route.provider
+    const persistedReasoningEffort = persistedConfig?.provider === route.provider
       && persistedConfig.model === route.model
       && persistedHeader?.adapterDefaults?.reasoningEffort !== true
       ? persistedConfig.reasoningEffort
       : undefined
+    // A route-matched persisted effort (an earlier explicit request on this
+    // exact model) always wins; AgentOptions.reasoningEffort seeds only the
+    // requests that would otherwise carry none, same as maxTokens below.
+    const reasoningEffort = persistedReasoningEffort ?? this.options.reasoningEffort
     const maxTokens = this.options.maxTokens
     const seedConfig = deepFreeze(structuredClone(
       this.requestHeaderLogged

@@ -16,6 +16,8 @@ Agent 接口、注册表、进程本地发起方作用域，以及 `agent/*` 事
 
 `AgentOptions` 提供初始的提供方／模型路由，以及可选的正数 `maxTokens` 输出上限。具体循环会解析确切模型的适配器默认值，把生效上限记录到请求 header，并应用到每次对话模型请求；显式 Agent 选项优先，省略时由适配器或提供方路由默认值控制。
 
+`AgentOptions.reasoningEffort` 以同样的方式播种，但只作用于原本不带任何 effort 的请求：与当前提供方／模型路由匹配的后续请求／header 值（显式的逐轮 effort 切换，或一次在线的 `installModelSelection` 选择）会优先于它，与它原本要从中播种的适配器自有默认值一样。
+
 - `ctx.agents.register(agent: Agent): () => void`：记录一个 **已经构造完成** 的 agent。随调用 fiber dispose。
 - 高级有序生命周期：`enter(agent, owner): () => void` 强制 `agent.id === agent.session.id`，执行权威 ID 冲突检查，并在不通知的情况下插入；`owner` 显式记录实时创建方 agent 关系（根 agent 为 `undefined`），与持久会话谱系无关。`announce(agent)` 恰好发出一次 `agent/created`。创建监听器同步请求的 detach 会延后到该次分发结束；每次 detach 都会检查捕获的条目对象，因此陈旧能力无法删除后续使用同一 ID 的替代项。异步工厂使用这一拆分；普通插件使用 `register()`。
 - `ctx.agents.get(id: SessionId): Agent | undefined`
