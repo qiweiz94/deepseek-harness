@@ -31,12 +31,18 @@ vi.mock('node:fs/promises', async (importOriginal) => {
         state.failDocumentCreate = false
         throw Object.assign(new Error('ENOSPC: injected document create failure'), { code: 'ENOSPC' })
       }
+      return (actual.writeFile as (path: unknown, ...args: never[]) => Promise<void>)(path, ...rest)
+    }) as typeof actual.writeFile,
+    // writeFileAtomic opens its temp sibling directly (for the content fsync
+    // before rename) instead of calling writeFile, so the injected temp-write
+    // failure intercepts open() rather than writeFile() above.
+    open: (async (path: unknown, ...rest: never[]) => {
       if (state.failTempWrite && String(path).endsWith('.tmp')) {
         state.failTempWrite = false
         throw Object.assign(new Error('ENOSPC: injected writeFile failure'), { code: 'ENOSPC' })
       }
-      return (actual.writeFile as (path: unknown, ...args: never[]) => Promise<void>)(path, ...rest)
-    }) as typeof actual.writeFile,
+      return (actual.open as (path: unknown, ...args: never[]) => ReturnType<typeof actual.open>)(path, ...rest)
+    }) as typeof actual.open,
   }
 })
 

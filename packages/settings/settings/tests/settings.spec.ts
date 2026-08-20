@@ -778,7 +778,7 @@ describe('property-safe JSON keys', () => {
 
   /** Own-data descriptor of `key`, or undefined when the key is not own data. */
   function ownData(target: unknown, key: string): unknown {
-    const descriptor = Object.getOwnPropertyDescriptor(target as object, key)
+    const descriptor = Object.getOwnPropertyDescriptor(target, key)
     return descriptor === undefined ? undefined : descriptor.value
   }
 
@@ -888,6 +888,27 @@ describe('installSettingsSection', () => {
     await vi.waitFor(() => {
       expect(changes).toBe(3)
     })
+    expect(current()).toEqual({ theme: 'entry' })
+  })
+
+  it('forwards a validate hook to the underlying registration', async () => {
+    const { ctx } = await boot()
+    const entry = { theme: 'entry' }
+    let current: () => { theme: string } = () => entry
+    installSettingsSection(ctx, settingsNamespace('helper-ns'), HelperSchema, entry, {
+      setSource: (source) => {
+        current = source
+      },
+      onChange: () => {},
+      validate: (value) => {
+        if (value.theme === 'forbidden') throw new Error('forbidden theme')
+      },
+    })
+    await vi.waitFor(() => {
+      expect(current()).toEqual({ theme: 'entry' })
+    })
+
+    await expect(ctx.settings.update(settingsNamespace('helper-ns'), { theme: 'forbidden' })).rejects.toThrow(/forbidden theme/)
     expect(current()).toEqual({ theme: 'entry' })
   })
 

@@ -64,7 +64,11 @@ export interface SettingsRegisterOptions<T> {
 /** One registered namespace as surfaced to configuration UIs. */
 export interface SettingsDescriptor {
   // TODO(settings-namespace-vocabulary): Rename `ns` to `namespace` across the
-  // public API, provider contract, implementations, tests, and consumers.
+  // public API, provider contract, implementations, tests, and consumers. The
+  // field is wire-visible (RPC `SettingsNamespaceView`/write-request payloads
+  // in dsh-host-apiproxy) and read by six-plus dsh-client-* packages plus the
+  // generated `gen-cordis-api` catalog, so the rename needs its own change
+  // spanning those packages together with this one, not a package-local edit.
   /** The registered namespace. */
   ns: SettingsNamespace
   /** Serialized schemastery schema (`schema.toJSON()`). */

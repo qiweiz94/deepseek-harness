@@ -104,6 +104,17 @@ describe('redactSecrets', () => {
     expect(() => redactSecrets(schema as z<never>, undefined)).toThrow(/unsupported/)
   })
 
+  it('names the node "untyped" when a schema node reachable only through it declares no type', () => {
+    // The walker's structural view of a schema node (see its doc comment) only
+    // requires the relations it reads; a node with no `type` at all — outside
+    // what any current schemastery construct produces, but not excluded by the
+    // structural contract — must still fail closed and name itself, not throw
+    // `undefined` into the error message.
+    const untypedWithSecret = { list: [{ meta: { role: 'secret' } }] } as unknown as z<never>
+    expect(() => redactSecrets(untypedWithSecret, { anything: 'sk-live' }))
+      .toThrow(/\$ is reachable only through an unsupported "untyped" schema node/)
+  })
+
   it('still walks a secret-free union verbatim', () => {
     const Mixed = z.object({
       mode: z.union(['fast', 'slow']),
