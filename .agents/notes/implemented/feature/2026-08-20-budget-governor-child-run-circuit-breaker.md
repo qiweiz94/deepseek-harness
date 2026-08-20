@@ -12,7 +12,7 @@ The originating request sketched a `subagent/turn-end` event and a `ctx.subagent
 
 ## Decision
 
-`@deepseek-ai/dsh-plugin-budget-governor` is a function plugin (no tool, no service) that watches child runs and terminates a run that crosses a configured ceiling. It never governs the root agent: it tracks exactly the sessions announced by the subagent lifecycle events, and a root session is never announced there.
+`@deepseek-ai/dsh-budget-governor` is a function plugin (no tool, no service) that watches child runs and terminates a run that crosses a configured ceiling. It never governs the root agent: it tracks exactly the sessions announced by the subagent lifecycle events, and a root session is never announced there.
 
 ### Spec intent → real seams
 

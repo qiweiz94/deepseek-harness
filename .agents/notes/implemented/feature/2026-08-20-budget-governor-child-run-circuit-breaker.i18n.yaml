@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-20-budget-governor-child-run-circuit-breaker.md
-2026-08-20-budget-governor-child-run-circuit-breaker.md: 7027294e9953815046ff12124f646901ad5a92a8
-2026-08-20-budget-governor-child-run-circuit-breaker.zh.md: 9e192631fd0c2f3c384c79624771228c7f7bff29
+2026-08-20-budget-governor-child-run-circuit-breaker.md: 0ad793bbdaf9e6643d400a0d97fa85da14976d18
+2026-08-20-budget-governor-child-run-circuit-breaker.zh.md: 944d546d0dee7601507c6d0d601f715fba8d4e73
