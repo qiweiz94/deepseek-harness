@@ -18,6 +18,7 @@
 | 工具包 | 模型可见名称 | 依赖 | 写入／影响 | 随产品发布的别名 | 部署说明 |
 | --- | --- | --- | --- | --- | --- |
 | `@deepseek-ai/dsh-plugin-ast-context` | `get_directory_outline`, `get_file_outline` | `ctx.tools` | `tool/call`、`tool/result` | - | get_file_outline 读取仓库相对路径的源文件并返回其顶层 TypeScript 符号；解析失败或文件缺失以错误结果呈现，而不是部分大纲。 |
+| `@deepseek-ai/dsh-plugin-semantic-patcher` | `patch_symbol_body` | `ctx.tools` | `tool/call`、`tool/result`、`由一次原子重命名替换的被打补丁源文件` | - | patch_symbol_body 替换单个具名符号的函数体，目标在解析出的语法树中定位而非依赖文本匹配；名称匹配不到符号或匹配到多个时，调用失败并给出候选列表；若替换结果无法解析，文件保持与原始字节完全一致。 |
 | `@deepseek-ai/dsh-plugin-subagent-router` | `subagent` | `ctx.tools`、`ctx.subagents` | `tool/call`、`tool/result`、`child session events through the chosen provider` | - | 单个委托入口把任务路由到由配置所拥有的策略选出的具备能力的子代理 provider；模型只描述任务（description + prompt），从不指名 provider 或传输方式。 |
 | `@deepseek-ai/dsh-plugin-worktree-sandbox` | `sandbox_exec` | `ctx.tools`、`ctx.subprocess` | `tool/call`、`tool/result`、`.dsh/worktrees` 下的一次性 git worktree | - | sandbox_exec 在隔离的 detached git worktree 中运行命令，并返回有界的结构化 diff 与退出状态；调用后移除该 worktree。 |
 | `@deepseek-ai/dsh-tool-ask-user` | `ask_user_question` | `ctx.tools`、`ctx.userQuestions` | `tool/call`、`tool/result after a UI/provider answers the question` | - | ask_user_question 会暂停工具调用，直到当前 UI 提供方返回人类答案。 |
@@ -230,6 +231,43 @@ Source: [`packages/plugins/plugin-ast-context/src/index.ts`](../packages/plugins
 来源：[`packages/plugins/plugin-ast-context/src/index.ts`](../packages/plugins/plugin-ast-context/src/index.ts)
 
 get_file_outline 读取仓库相对路径的源文件并返回其顶层 TypeScript 符号；解析失败或文件缺失以错误结果呈现，而不是部分大纲。
+
+<a id="deepseek-aidsh-plugin-semantic-patcher"></a>
+
+## `@deepseek-ai/dsh-plugin-semantic-patcher`
+
+### `patch_symbol_body`
+
+替换本地 TypeScript（.ts 或 .tsx）文件中单个具名符号的函数体。该符号在解析出的语法树中定位，而非通过文本匹配，因此编辑会准确落在你指名的那个声明上。支持顶层函数、值为函数的绑定（箭头函数）以及类成员；可用 Class.method 的形式指名成员以消除歧义。若名称匹配不到符号或匹配到多个，调用会失败并列出候选项，而不是擅自猜测。替换内容在写入任何内容之前先行解析：若结果无法解析，文件将保持与原始字节完全一致。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "Repo-relative path to a TypeScript (.ts or .tsx) file inside the repository root."
+    },
+    "symbol": {
+      "type": "string",
+      "description": "The symbol whose body to replace: a top-level name, or Class.method for a class member."
+    },
+    "newBody": {
+      "type": "string",
+      "description": "The replacement body source. Include the surrounding braces for a block body (for example \"{ return 1 }\"); for a concise arrow body, pass the expression alone."
+    }
+  },
+  "required": [
+    "path",
+    "symbol",
+    "newBody"
+  ]
+}
+```
+
+来源：[`packages/plugins/plugin-semantic-patcher/src/index.ts`](../packages/plugins/plugin-semantic-patcher/src/index.ts)
+
+patch_symbol_body 替换单个具名符号的函数体，目标在解析出的语法树中定位而非依赖文本匹配；名称匹配不到符号或匹配到多个时，调用失败并给出候选列表；若替换结果无法解析，文件保持与原始字节完全一致。
 
 <a id="deepseek-aidsh-plugin-subagent-router"></a>
 

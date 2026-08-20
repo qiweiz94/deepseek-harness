@@ -1396,6 +1396,24 @@ export interface Config {
 
 Source: [`packages/plugins/plugin-ast-context/src/index.ts:51`](../packages/plugins/plugin-ast-context/src/index.ts)
 
+<a id="deepseek-aidsh-plugin-semantic-patcher"></a>
+
+## `@deepseek-ai/dsh-plugin-semantic-patcher`
+
+Requires: `tools`
+
+```ts config-catalog
+/** Configuration for the semantic patch tool. */
+export interface Config {
+  /** Repository root; a path resolving outside it is refused (default `process.cwd()`). */
+  cwd?: string
+  /** Refuse files larger than this many bytes (default 2 MiB). */
+  maxBytes?: number
+}
+```
+
+Source: [`packages/plugins/plugin-semantic-patcher/src/index.ts:22`](../packages/plugins/plugin-semantic-patcher/src/index.ts)
+
 <a id="deepseek-aidsh-plugin-subagent-router"></a>
 
 ## `@deepseek-ai/dsh-plugin-subagent-router`

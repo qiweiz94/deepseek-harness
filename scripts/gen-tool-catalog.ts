@@ -54,6 +54,7 @@ import * as ToolGoal from '@deepseek-ai/dsh-tool-goal'
 import * as ToolSchedule from '@deepseek-ai/dsh-schedule'
 import Lsp from '@deepseek-ai/dsh-lsp'
 import * as ToolAstContext from '@deepseek-ai/dsh-plugin-ast-context'
+import * as ToolSemanticPatcher from '@deepseek-ai/dsh-plugin-semantic-patcher'
 import * as ToolSubagentRouter from '@deepseek-ai/dsh-plugin-subagent-router'
 import * as ToolWorktreeSandbox from '@deepseek-ai/dsh-plugin-worktree-sandbox'
 import * as ToolLsp from '@deepseek-ai/dsh-tool-lsp'
@@ -237,6 +238,18 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'get_file_outline reads a repo-relative source file and returns its top-level TypeScript symbols; a parse failure or missing file surfaces as an error result rather than a partial outline.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-plugin-semantic-patcher',
+    dir: 'plugin-semantic-patcher',
+    source: 'packages/plugins/plugin-semantic-patcher/src/index.ts',
+    requires: ['ctx.tools'],
+    writes: ['tool/call', 'tool/result', 'the patched source file, replaced by one atomic rename'],
+    async mount(ctx) {
+      await ctx.plugin(ToolSemanticPatcher, { cwd: root })
+    },
+    note:
+      'patch_symbol_body replaces one named symbol\'s body located in the parsed syntax tree rather than by text match; a name that matches no symbol or more than one fails with the candidate list, and a replacement that would not parse leaves the file byte-for-byte unchanged.',
   },
   {
     pkg: '@deepseek-ai/dsh-plugin-subagent-router',
