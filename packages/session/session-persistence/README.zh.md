@@ -80,6 +80,6 @@
 
 ## 已知限制与暂缓事项
 
-- **无删除或保留接口**：剪枝已存储会话是带外后端维护。
+- **单会话删除已可用，但不是自动保留策略**：`PersistenceCoordinator` 会为实现了可选 `planStored`/`deleteStored` hook 的后端注册一个 [`dsh-session-retention`](../session-retention) 参与者；基于时间或配额剪枝已存储会话，仍是带外的、叠加在该 seam 之上、被推迟的策略。
 - **`list()` 无分页且无过滤**：它返回每个已存储会话的 header；适合本地存储，大规模时无索引。
 - **修复时合成 closer 是唯一崩溃方案**：后端必须在 load 时合成 `tool/result`/`step/end`/`turn/end` closer；没有继续中断轮次而不先关闭它的部分轮次恢复。

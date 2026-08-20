@@ -16,6 +16,7 @@ import {
   snapshotSessionEvent,
 } from '@deepseek-ai/dsh-session'
 import type { Session, SessionEvent, SessionId, SessionHeader } from '@deepseek-ai/dsh-session'
+import type { RetentionTarget } from '@deepseek-ai/dsh-session-retention'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import type { SessionInspection, SessionLocation } from './index.ts'
 import type { SessionPersistenceRevision } from './revision.ts'
@@ -197,6 +198,27 @@ export interface PersistenceBackend<TornMarker = unknown> {
    * @param signal - optional cancellation for backend listing work.
    */
   list(signal?: AbortSignal): Promise<SessionHeader[]>
+
+  /**
+   * Enumerate the durable artifacts deleting one stored session would remove,
+   * without mutating storage. Returns `undefined` when no stored artifact
+   * exists. Optional: a backend that omits it (and {@link deleteStored})
+   * registers no retention participant, so compositions built on it are
+   * unaffected by the retention seam.
+   * @param id - persisted session id to enumerate.
+   * @param signal - optional cancellation for backend read work.
+   */
+  planStored?(id: SessionId, signal?: AbortSignal): Promise<RetentionTarget[] | undefined>
+
+  /**
+   * Permanently delete one stored session's durable artifacts. Returns the
+   * removed targets, or `undefined` when no stored artifact existed. The
+   * coordinator calls it on the per-id serialization chain, never concurrently
+   * with an append or repair for the same id. Optional: see {@link planStored}.
+   * @param id - persisted session id to delete.
+   * @param signal - optional cancellation checked before irreversible work begins.
+   */
+  deleteStored?(id: SessionId, signal?: AbortSignal): Promise<RetentionTarget[] | undefined>
 
   /**
    * Optional side-effect-free artifact locator, used to point refusal
@@ -622,6 +644,32 @@ export class PersistenceCoordinator<TornMarker = unknown> {
     this.writeBatchMaxDelayMs = options.writeBatchMaxDelayMs
     this.preparations = new SessionPreparations(options.preparedSessionCacheSize)
     this.installWritePath()
+    this.installRetention()
+  }
+
+  /**
+   * Register this backend's retention participant when the session retention
+   * seam is composed AND the backend implements {@link PersistenceBackend.planStored}
+   * and {@link PersistenceBackend.deleteStored}; compositions without either
+   * are unaffected. The participant maps the coordinator's target lists onto
+   * the seam vocabulary: an absent artifact plans to empty targets and
+   * deletes to `absent`.
+   */
+  private installRetention(): void {
+    if (this.backend.planStored === undefined || this.backend.deleteStored === undefined) return
+    this.ctx.inject(['sessionRetention'], (ctx) => {
+      ctx.sessionRetention.register({
+        store: this.backend.name,
+        plan: async (id, signal) => {
+          const targets = await this.planDeletion(id, signal)
+          return { kind: 'targets', targets: targets ?? [] }
+        },
+        deleteSession: async (id, signal) => {
+          const targets = await this.delete(id, signal)
+          return targets === undefined ? { kind: 'absent' } : { kind: 'deleted', targets }
+        },
+      })
+    })
   }
 
   // --- Public API (the backend's service methods delegate here) ---
@@ -867,6 +915,62 @@ export class PersistenceCoordinator<TornMarker = unknown> {
     const whole = await this.readStoredPrefix(id, signal)
     // Sequential fallback: contiguous seqs from 0 make the suffix an index slice.
     return { meta: whole.meta, events: whole.events.slice(fromSeq) }
+  }
+
+  /**
+   * Enumerate the durable artifacts deleting one session would remove, without
+   * mutating storage or coordinator state (the read behind the retention
+   * participant's `plan`).
+   * @param id - persisted session to enumerate.
+   * @param signal - optional cancellation for queued and backend read work.
+   * @returns the backend's targets, or `undefined` when nothing is stored.
+   */
+  planDeletion(id: SessionId, signal?: AbortSignal): Promise<RetentionTarget[] | undefined> {
+    return this.waitForRetirement(id, signal)
+      .then(() => this.serialize(id, () => {
+        if (this.backend.planStored === undefined) {
+          throw new Error(`backend "${this.backend.name}" does not support retention deletion`)
+        }
+        return this.backend.planStored(id, signal)
+      }, signal))
+  }
+
+  /**
+   * Permanently delete one session's durable data (the executor behind the
+   * retention participant's `deleteSession`). Runs on the per-id chain after
+   * any retiring drain; refuses a live session and a preparation reserved for
+   * resume. Coordinator caches are dropped before the physical delete: the
+   * durable store is authoritative, so a failed backend delete re-derives
+   * state from disk on the next read.
+   * @param id - persisted session to delete.
+   * @param signal - optional cancellation checked before irreversible work begins.
+   * @returns the removed targets, or `undefined` when nothing durable existed.
+   */
+  delete(id: SessionId, signal?: AbortSignal): Promise<RetentionTarget[] | undefined> {
+    return this.waitForRetirement(id, signal)
+      .then(() => this.serialize(id, () => this.deleteCore(id, signal), signal))
+  }
+
+  private async deleteCore(id: SessionId, signal?: AbortSignal): Promise<RetentionTarget[] | undefined> {
+    signal?.throwIfAborted()
+    if (this.ctx.sessions.get(id) !== undefined) {
+      throw new Error(`cannot delete session "${id}" while it is live`)
+    }
+    if (this.preparations.isReserved(id)) {
+      throw new Error(`cannot delete session "${id}" while its persisted preparation is reserved for resume`)
+    }
+    this.preparations.invalidate(id)
+    const state = this.states.get(id)
+    this.states.delete(id)
+    if (state !== undefined && !state.materialized) {
+      // Created but never appended: nothing durable exists, so dropping the
+      // recorded creation intent IS the deletion.
+      return undefined
+    }
+    if (this.backend.deleteStored === undefined) {
+      throw new Error(`backend "${this.backend.name}" does not support retention deletion`)
+    }
+    return this.backend.deleteStored(id, signal)
   }
 
   /** Read one detached physical prefix without logical recovery or caching. */

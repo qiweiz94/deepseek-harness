@@ -30,5 +30,5 @@ No direct invalidation; the named consumer owns any request-prefix changes.
 
 ## Known Limitations and Deferred Work
 
-- **Local spill files persist until external cleanup** — the backend has no session-lifecycle deletion or age-based retention policy, because persisted, resumed, and forked sessions may still reference a path.
+- **Single-session deletion is available, not automatic retention** — this backend registers a [`dsh-session-retention`](../../session/session-retention) participant that removes the deleted session's own spill directory. It is not lineage-aware: a forked or resumed session may still reference a path under a deleted parent's directory, and no age- or quota-based retention policy is wired.
 - **Locators require a co-located filesystem consumer** — a remote or virtual deployment needs another `SpillStore` backend whose locator and retrieval hint are meaningful there.

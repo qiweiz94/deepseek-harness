@@ -13,10 +13,16 @@ import { resolve } from 'node:path'
 import z from '@deepseek-ai/schemastery'
 import { SpillLocator, SpillStore } from '@deepseek-ai/dsh-spill'
 import type { SaveTextSpill, SpillRef } from '@deepseek-ai/dsh-spill'
-import { privateRoot, saveTextFile } from './store.ts'
+import type { RetentionTarget } from '@deepseek-ai/dsh-session-retention'
+import { listSpillDir, privateRoot, removeSpillDir, saveTextFile } from './store.ts'
 
-export { encodeSegment, privateRoot, saveTextFile, sessionDir } from './store.ts'
-export type { SavedText, SaveTextOptions } from './store.ts'
+export { encodeSegment, listSpillDir, privateRoot, removeSpillDir, saveTextFile, sessionDir } from './store.ts'
+export type { SavedText, SaveTextOptions, SpillDirListing } from './store.ts'
+
+/** Map one observed spill directory onto the retention seam's target vocabulary. */
+function spillTargets(listing: { dir: string; entries: number }): RetentionTarget[] {
+  return [{ kind: 'directory', location: listing.dir, count: listing.entries }]
+}
 
 /** Plugin config (all optional — `static Config` supplies the defaults). */
 export interface Config {
@@ -45,6 +51,23 @@ export class LocalSpillStore extends SpillStore {
   constructor(ctx: Context, config: Config) {
     super(ctx)
     this.root = config.root !== undefined ? resolve(config.root) : privateRoot()
+    // Retention is an optional sibling: compositions without the seam keep the
+    // documented persist-until-external-cleanup behavior.
+    ctx.inject(['sessionRetention'], (child) => {
+      child.sessionRetention.register({
+        store: 'spill-local',
+        plan: async (id) => {
+          const listing = await listSpillDir(this.root, id)
+          return { kind: 'targets', targets: listing === undefined ? [] : spillTargets(listing) }
+        },
+        deleteSession: async (id) => {
+          const removed = await removeSpillDir(this.root, id)
+          return removed === undefined
+            ? { kind: 'absent' }
+            : { kind: 'deleted', targets: spillTargets(removed) }
+        },
+      })
+    })
   }
 
   async saveText(input: SaveTextSpill): Promise<SpillRef> {

@@ -171,6 +171,15 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Backends persist the same SessionEvent vocabulary; apps choose a backend at composition time.',
   },
   {
+    key: 'sessionRetention',
+    pkg: 'session-retention',
+    title: 'Cross-store session retention seam',
+    mode: 'seam',
+    implementations: ['session-persistence', 'spill-local', 'attachment-local'],
+    consumers: [],
+    note: 'Stores register RetentionParticipants; one call plans or deletes a session\'s durable data across every registered store with per-store outcomes. The workspace surface is the intended first consumer.',
+  },
+  {
     key: 'settings',
     pkg: 'settings',
     title: 'User-settings seam',

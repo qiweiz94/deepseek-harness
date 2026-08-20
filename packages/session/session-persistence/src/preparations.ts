@@ -209,10 +209,19 @@ export class SessionPreparations<Source extends PreparedSource, CommitState> {
    * @param id - session identity to check.
    */
   assertWritable(id: SessionId): void {
-    const phase = this.entries.get(id)?.phase
-    if (phase === 'committing' || phase === 'reserved') {
+    if (this.isReserved(id)) {
       throw new Error(`cannot append session "${id}" while its persisted preparation is reserved`)
     }
+  }
+
+  /**
+   * Whether an unpublished Session exclusively reserves the id right now.
+   * @param id - session identity to check.
+   * @returns true while a preparation is reserved or committing.
+   */
+  isReserved(id: SessionId): boolean {
+    const phase = this.entries.get(id)?.phase
+    return phase === 'committing' || phase === 'reserved'
   }
 
   /**

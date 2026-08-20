@@ -21,6 +21,7 @@ import {
   type StoredPrefix, type StoredSuffix,
 } from '@deepseek-ai/dsh-session-persistence'
 import type { SessionEvent, SurfaceEventType, SessionId, SessionHeader, SessionPreparation } from '@deepseek-ai/dsh-session'
+import type { RetentionTarget } from '@deepseek-ai/dsh-session-retention'
 import {
   type JournalMode, openDatabase, rowToMeta, scanRows, type EventRow, type SessionRow,
 } from './schema.ts'
@@ -215,6 +216,48 @@ export class SqliteSessionPersistence extends SessionPersistence implements Pers
     signal?.throwIfAborted()
     const row = this.rowFor(id)
     return row === undefined ? undefined : sqliteRevision(this.storeIdentity, row)
+  }
+
+  /** Enumerate the rows a deletion would remove: this session's row plus its event rows. */
+  async planStored(id: SessionId, signal?: AbortSignal): Promise<RetentionTarget[] | undefined> {
+    signal?.throwIfAborted()
+    await this.ready
+    signal?.throwIfAborted()
+    if (this.rowFor(id) === undefined) return undefined
+    return this.rowTargets(id)
+  }
+
+  /**
+   * Delete the session's `sessions` row in one transaction; `ON DELETE
+   * CASCADE` removes its event rows with it, so after COMMIT no row carries
+   * the id.
+   */
+  async deleteStored(id: SessionId, signal?: AbortSignal): Promise<RetentionTarget[] | undefined> {
+    signal?.throwIfAborted()
+    await this.ready
+    signal?.throwIfAborted()
+    this.db.exec('BEGIN')
+    let targets: RetentionTarget[] | undefined
+    try {
+      targets = this.rowFor(id) === undefined ? undefined : this.rowTargets(id)
+      if (targets !== undefined) this.db.prepare('DELETE FROM sessions WHERE id = ?').run(id)
+      this.db.exec('COMMIT')
+    } catch (error: unknown) {
+      /* v8 ignore start -- synchronous delete failures only need transaction cleanup before propagation. */
+      this.db.exec('ROLLBACK')
+      throw error
+      /* v8 ignore stop */
+    }
+    return targets
+  }
+
+  /** Count one session's stored rows as retention targets (callers hold the read within their transaction). */
+  private rowTargets(id: SessionId): RetentionTarget[] {
+    const row = this.db.prepare('SELECT COUNT(*) AS n FROM events WHERE session_id = ?').get(id) as unknown as { n: number }
+    return [
+      { kind: 'records', location: 'sessions', count: 1 },
+      { kind: 'records', location: 'events', count: row.n },
+    ]
   }
 
   /**

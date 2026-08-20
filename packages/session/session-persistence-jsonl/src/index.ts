@@ -22,6 +22,7 @@ import {
   type StoredPrefix,
 } from '@deepseek-ai/dsh-session-persistence'
 import type { SessionEvent, SessionId, SessionHeader, SessionPreparation } from '@deepseek-ai/dsh-session'
+import type { RetentionTarget } from '@deepseek-ai/dsh-session-retention'
 import {
   encodeSegment, eventLines, logPath, logSuffix, parseHeaderMeta, projectDir, scanLog, sessionDir,
   SessionLogScanner, toHeaderLine,
@@ -234,6 +235,36 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
       if (isENOENT(error)) return undefined
       throw error
     }
+  }
+
+  /** Enumerate the session-owned directory a deletion would remove. */
+  async planStored(id: SessionId, signal?: AbortSignal): Promise<RetentionTarget[] | undefined> {
+    signal?.throwIfAborted()
+    await this.ensureRootEncoding()
+    signal?.throwIfAborted()
+    const path = await this.findLog(id, signal)
+    if (path === undefined) return undefined
+    return [{ kind: 'directory', location: dirname(path) }]
+  }
+
+  /**
+   * Delete the session-owned directory: the transcript plus any session-owned
+   * artifacts beside it. The parent project directory is kept — other sessions
+   * may share it — and the removed entry is fsync'd on POSIX so the deletion
+   * survives a crash.
+   */
+  async deleteStored(id: SessionId, signal?: AbortSignal): Promise<RetentionTarget[] | undefined> {
+    signal?.throwIfAborted()
+    await this.ensureRootEncoding()
+    signal?.throwIfAborted()
+    const path = await this.findLog(id, signal)
+    if (path === undefined) return undefined
+    signal?.throwIfAborted()
+    const dir = dirname(path)
+    await rm(dir, { recursive: true, force: true })
+    /* v8 ignore next -- Windows write-through namespace operations own entry durability; POSIX coverage exercises the fsync. */
+    if (process.platform !== 'win32') await this.syncDirPosix(dirname(dir))
+    return [{ kind: 'directory', location: dir }]
   }
 
   /**
