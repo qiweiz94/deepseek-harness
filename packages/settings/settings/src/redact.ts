@@ -20,6 +20,8 @@ interface SchemaNode {
   dict?: Record<string, SchemaNode>
   /** `dict`/`array` element schema. */
   inner?: SchemaNode
+  /** `union`/`intersect`/`tuple` member schemas. */
+  list?: SchemaNode[]
 }
 
 /** One schema-declared secret position inside a redacted value. */
@@ -56,6 +58,28 @@ function setOwn(target: Record<string, unknown>, key: string, value: unknown): v
   Object.defineProperty(target, key, { value, writable: true, enumerable: true, configurable: true })
 }
 
+/** Whether a schema subtree declares `role('secret')` anywhere. */
+function declaresSecret(node: SchemaNode | undefined): boolean {
+  if (node === undefined) return false
+  if (node.meta?.role === 'secret') return true
+  if (declaresSecret(node.inner)) return true
+  if ((node.list ?? []).some(declaresSecret)) return true
+  return Object.values(node.dict ?? {}).some(declaresSecret)
+}
+
+/**
+ * Fail-closed guard for a present value the node's declared container shape
+ * cannot be applied to: with a secret anywhere in the subtree the value is
+ * stripped and the container position recorded — the walker cannot locate the
+ * secret inside a mismatched value, so nothing of it may cross the wire — while
+ * a secret-free subtree passes the value through untouched.
+ */
+function guardMismatch(node: SchemaNode, value: unknown, path: string[], secrets: RedactedSecret[]): unknown {
+  if (value === undefined || !declaresSecret(node)) return value
+  secrets.push({ path, set: true })
+  return undefined
+}
+
 function walk(node: SchemaNode | undefined, value: unknown, path: string[], secrets: RedactedSecret[]): unknown {
   if (node === undefined) return value
   if (node.meta?.role === 'secret') {
@@ -64,6 +88,7 @@ function walk(node: SchemaNode | undefined, value: unknown, path: string[], secr
   }
   switch (node.type) {
     case 'object': {
+      if (value !== undefined && !isRecord(value)) return guardMismatch(node, value, path, secrets)
       const properties = node.dict ?? {}
       const source = isRecord(value) ? value : undefined
       const rebuilt: Record<string, unknown> = {}
@@ -81,7 +106,7 @@ function walk(node: SchemaNode | undefined, value: unknown, path: string[], secr
       return source === undefined && Object.keys(rebuilt).length === 0 ? value : rebuilt
     }
     case 'dict': {
-      if (!isRecord(value)) return value
+      if (!isRecord(value)) return guardMismatch(node, value, path, secrets)
       const rebuilt: Record<string, unknown> = {}
       for (const [key, entry] of Object.entries(value)) {
         const stripped = walk(node.inner, entry, [...path, key], secrets)
@@ -90,23 +115,28 @@ function walk(node: SchemaNode | undefined, value: unknown, path: string[], secr
       return rebuilt
     }
     case 'array': {
-      if (!Array.isArray(value)) return value
+      if (!Array.isArray(value)) return guardMismatch(node, value, path, secrets)
       return value.map((entry, index) => walk(node.inner, entry, [...path, String(index)], secrets))
     }
     default:
-      // TODO(settings-wire-redaction): Fail closed instead — a secret reachable
-      // only through a union, intersection, or transform is returned verbatim
-      // here, with nothing recording that it was missed.
+      // Fail closed: the walker cannot locate secret positions inside a node
+      // it does not traverse (union, intersect, transform, tuple, …), so a
+      // secret-declaring subtree here refuses the redaction loudly instead of
+      // returning the value verbatim with nothing recording the miss.
+      if (declaresSecret(node)) {
+        throw new Error(`settings redaction: a role('secret') field under ${['$', ...path].join('.')} is reachable only through an unsupported "${node.type ?? 'untyped'}" schema node; declare secrets directly on fields inside object/dict/array containers`)
+      }
       return value
   }
 }
 
 /**
  * Remove every `role('secret')` field a schema declares from a value. The
- * walker follows `object`, `dict`, and `array` containers; a secret must be
- * declared directly on a field reachable through those containers (a secret
- * buried inside a union branch or transform is not reachable and must not be
- * modeled that way). The input is never mutated.
+ * walker follows `object`, `dict`, and `array` containers and fails closed
+ * everywhere else: a secret declared under a node the walker cannot traverse
+ * (union, intersect, transform, tuple, …) throws instead of leaking, and a
+ * present value a secret-declaring container shape cannot be applied to is
+ * stripped with its container position recorded. The input is never mutated.
  * @param schema - live schemastery schema describing the value.
  * @param value - the value to strip; `undefined` yields an empty record with
  *   object-property secret slots still enumerated.
