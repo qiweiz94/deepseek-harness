@@ -1729,6 +1729,60 @@ describe('workspace context request injection', () => {
     }
   })
 
+  it('recognizes a pending update split across text blocks by its rendered-text digest', async () => {
+    const root = await tempRepo()
+    const home = await tempRepo()
+    try {
+      await mkdir(join(root, '.git'), { recursive: true })
+      await write(join(root, 'AGENTS.md'), 'repo rule')
+      await write(join(root, 'file.txt'), 'hello')
+      const ctx = new Context()
+      await mountFileToolsAndWorkspaceContext(ctx, { dshHome: home, maxBytes: 65536 })
+      const agent = stubAgent(root)
+      await composeBaselinePrefix(ctx, agent)
+
+      await write(join(root, 'AGENTS.md'), 'updated repo rule')
+      await ctx.tools.execute({
+        signal: testToolSignal,
+        callId: CallId('read-before-split'),
+        name: 'read',
+        arguments: { file_path: 'file.txt' },
+        agent,
+      })
+      const update = await syncedWorkspaceContext(ctx, agent)
+      expect((update.source as { contentDigest?: string }).contentDigest).toBeUndefined()
+
+      // A twin of the pending update whose identical rendered text arrives
+      // split across two text blocks: whole-payload equality fails, so the
+      // reuse check must recognize it by rendered-text digest alone.
+      const text = update.content
+        .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
+        .map(block => block.text)
+        .join('')
+      agent.inbox.remove(update.id)
+      agent.inbox.append('next-step', createUserMessage({
+        content: [
+          { type: 'text', text: text.slice(0, 12) },
+          { type: 'text', text: text.slice(12) },
+        ],
+        source: update.source,
+      }))
+
+      const entered = await composeBaselinePrefix(ctx, agent)
+      // The split twin itself was reused: exactly one update render enters,
+      // and it still carries the twin's two text blocks. Had the digest
+      // comparison failed, a fresh single-block render would replace it.
+      const updates = entered.filter(message =>
+        'source' in message && (message as UserMessage).source.kind === 'agent-instructions'
+        && blocksText((message as UserMessage).content).includes('Updated instructions from'))
+      expect(updates).toHaveLength(1)
+      expect((updates[0] as UserMessage).content).toHaveLength(2)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
   it('retains a visible baseline after a plugin remount', async () => {
     const root = await tempRepo()
     const home = await tempRepo()

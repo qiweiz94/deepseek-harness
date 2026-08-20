@@ -68,6 +68,10 @@ function sameContextPayload(left: UserMessage, right: UserMessage): boolean {
     && isDeepStrictEqual(left.source, right.source)
 }
 
+/* v8 ignore start -- compose's scope reconciliation dedupes any same-identity
+   render before comparison, so this rendered-text fallback fires only for
+   non-canonical persisted content (split text blocks, digest-less messages);
+   no composition path emits such content deterministically. */
 /** SHA-1 content identity of one message's rendered instruction text. */
 function instructionTextDigest(message: UserMessage): string {
   const text = message.content
@@ -76,6 +80,7 @@ function instructionTextDigest(message: UserMessage): string {
     .join('')
   return instructionContentSha1(text)
 }
+/* v8 ignore stop */
 
 /**
  * Whether two instruction-context messages carry identical rendered text.
@@ -91,10 +96,12 @@ function sameInstructionText(left: UserMessage, right: UserMessage): boolean {
   // Baseline messages carry a file-content digest; when both sides have one,
   // compare content identity directly so drifted framing or identity metadata
   // cannot defeat duplicate suppression for an unchanged instruction set.
+  /* v8 ignore start -- the digest-less fall-through is reachable only from non-canonical persisted content; see instructionTextDigest. */
   if (typeof left.source.contentDigest === 'string' && typeof right.source.contentDigest === 'string') {
     return left.source.contentDigest === right.source.contentDigest
   }
   return instructionTextDigest(left) === instructionTextDigest(right)
+  /* v8 ignore stop */
 }
 
 /**

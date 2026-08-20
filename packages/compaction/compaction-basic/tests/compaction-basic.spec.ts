@@ -2031,3 +2031,122 @@ describe('automatic listener and loader composition', () => {
     expect(await recover(ctx, agent(session, MODEL), overflow())).toBe(false)
   })
 })
+
+describe('turn-end pressure wiring', () => {
+  const turnEnd = { type: 'turn/end', seq: 999, time: 999, data: { turn: 9, reason: { kind: 'completed' } } } as unknown as Parameters<Session['append']>[1]
+
+  function emitTurnEnd(ctx: Context, session: Session): void {
+    ctx.emit('session/event', session, { type: 'turn/end', seq: 999, time: 999, data: { turn: 9, reason: { kind: 'completed' } } } as never)
+  }
+
+  function registryWith(ctx: Context, ...agents: Agent[]): Map<string, Agent> {
+    const bySession = new Map(agents.map(entry => [String(entry.session.id), entry]))
+    ctx.provide('agents', { get: (id: string) => bySession.get(id) } as never)
+    return bySession
+  }
+
+  it('skips the pressure check when no agent registry is mounted, and idles without a pending flag', () => {
+    const ctx = createContext()
+    const engine = new BasicCompactionEngine(ctx, { auto: true })
+    const warn = vi.spyOn(ctx.logger, 'warn')
+    const session = conversation(2)
+    emitTurnEnd(ctx, session)
+    // Idle with nothing pending must not start a maintenance compaction.
+    ctx.emit('agent/status', { agent: agent(session, MODEL), status: 'idle' } as never)
+    expect(warn).not.toHaveBeenCalled()
+    expect(engine.config.auto).toBe(true)
+    expect(turnEnd).toBeDefined()
+  })
+
+  it('skips sessions with no routed target and sessions with no durable context window', () => {
+    const ctx = createContext()
+    void new BasicCompactionEngine(ctx, { auto: true })
+    const warn = vi.spyOn(ctx.logger, 'warn')
+    const unrouted = Session.create(SessionId('turn-end-unrouted'))
+    const routedNoContext = conversation(2)
+    registryWith(ctx, agent(unrouted, MODEL), agent(routedNoContext, MODEL))
+    emitTurnEnd(ctx, unrouted)
+    emitTurnEnd(ctx, routedNoContext)
+    expect(warn).not.toHaveBeenCalled()
+  })
+
+  it('warns once per target on a stable misconfiguration and separately for other pressure errors', () => {
+    const ctx = createContext()
+    void new BasicCompactionEngine(ctx, { auto: true })
+    const warn = vi.spyOn(ctx.logger, 'warn')
+    const broken = conversation(2)
+    // An explicit zero context window is a stable deployment misconfiguration.
+    broken.append('request/context', { provider: MODEL, model: MODEL, contextWindow: 0 })
+    const registry = registryWith(ctx, agent(broken, MODEL))
+    emitTurnEnd(ctx, broken)
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn.mock.calls[0]?.[0]).toContain('turn-end compaction pressure check skipped')
+    // The same target warns only once.
+    emitTurnEnd(ctx, broken)
+    expect(warn).toHaveBeenCalledTimes(1)
+
+    // A non-config failure warns every time, with Error and non-Error detail.
+    const healthy = conversation(3)
+    healthy.append('request/context', { provider: MODEL, model: MODEL, contextWindow: 1_000 })
+    registry.set(String(healthy.id), agent(healthy, MODEL))
+    const measure = vi.spyOn(ctx.tokenMeter, 'measure')
+    measure.mockImplementationOnce(() => { throw new Error('meter broke') })
+    emitTurnEnd(ctx, healthy)
+    expect(warn).toHaveBeenCalledTimes(2)
+    expect(warn.mock.calls[1]?.[0]).toContain('meter broke')
+    measure.mockImplementationOnce(() => { throw 'meter string broke' })
+    emitTurnEnd(ctx, healthy)
+    expect(warn).toHaveBeenCalledTimes(3)
+    expect(warn.mock.calls[2]?.[0]).toContain('meter string broke')
+  })
+
+  it('re-checks the session inside maintenance before compacting and reports maintenance failures', async () => {
+    const ctx = createContext()
+    const engine = new BasicCompactionEngine(ctx, { auto: false, triggerTokens: 900, retainTokens: 1 })
+    const warn = vi.spyOn(ctx.logger, 'warn')
+    const invoke = (engine as unknown as { compactTurnEndPending(subject: Agent): Promise<void> })
+      .compactTurnEndPending.bind(engine)
+    const maintenance = (session: Session): Agent => ({
+      session,
+      options: {},
+      runMaintenance: async (fn: (signal: AbortSignal) => Promise<void>) => fn(SIGNAL),
+    } as unknown as Agent)
+
+    // No routed target: the flag may outlive the facts that armed it.
+    await invoke(maintenance(Session.create(SessionId('maintenance-unrouted'))))
+    // Routed but no durable context window.
+    await invoke(maintenance(conversation(2)))
+    // Below the trigger at maintenance time: pressure resolved before idle.
+    const light = conversation(2)
+    light.append('request/context', { provider: MODEL, model: MODEL, contextWindow: 10_000 })
+    await invoke(maintenance(light))
+    expect(light.events.some(event => event.type === 'compaction/start')).toBe(false)
+    expect(warn).not.toHaveBeenCalled()
+
+    // A maintenance failure is reported, never thrown to the idle listener.
+    const failing = {
+      session: light,
+      options: {},
+      runMaintenance: () => Promise.reject(new Error('maintenance denied')),
+    } as unknown as Agent
+    await invoke(failing)
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn.mock.calls[0]?.[0]).toContain('turn-end compaction failed: maintenance denied')
+  })
+
+  it('applies per-target triggerTokens and targetResidualTokens overrides', () => {
+    const config = resolveConfig({
+      modelPolicies: [{
+        provider: MODEL,
+        model: MODEL,
+        triggerTokens: 500,
+        targetResidualTokens: 100,
+      }],
+    })
+    const policy = resolveTargetPolicy(config, { provider: MODEL, model: MODEL })
+    expect(resolveCompactSpec(policy, 1_000)).toMatchObject({
+      thresholdTokens: 500,
+      retainTokens: 100,
+    })
+  })
+})
