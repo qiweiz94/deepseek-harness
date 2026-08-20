@@ -672,6 +672,51 @@ describe('third review regressions', () => {
   })
 })
 
+describe('registration quiescence', () => {
+  it('waits for an in-flight watch invocation when the registrant fiber disposes', async () => {
+    const { ctx, provider } = await boot()
+    let release: (() => void) | undefined
+    let finished = false
+    const fiber = ctx.plugin({
+      inject: ['settings'],
+      apply: (child: Context) => {
+        const scope = child.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+        scope.watch(async () => {
+          await new Promise<void>((resolve) => { release = resolve })
+          finished = true
+        })
+      },
+    })
+    await fiber
+    provider.pushExternal({ 'ui-theme': { theme: 'light' } })
+    await vi.waitFor(() => { expect(release).toBeDefined() })
+    let disposed = false
+    const disposal = fiber.dispose().then(() => { disposed = true })
+    await new Promise(resolve => setTimeout(resolve, 15))
+    // The callback has not settled: the registrant fiber must still be tearing down.
+    expect(disposed).toBe(false)
+    release!()
+    await disposal
+    expect(finished).toBe(true)
+  })
+
+  it('starts no further invocation once the registrant fiber disposed', async () => {
+    const { ctx, provider } = await boot()
+    const watcher = vi.fn()
+    const fiber = ctx.plugin({
+      inject: ['settings'],
+      apply: (child: Context) => {
+        child.settings.register(settingsNamespace('ui-theme'), ThemeSchema).watch(watcher)
+      },
+    })
+    await fiber
+    await fiber.dispose()
+    provider.pushExternal({ 'ui-theme': { theme: 'light' } })
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(watcher).not.toHaveBeenCalled()
+  })
+})
+
 describe('property-safe JSON keys', () => {
   const AnySchema: z<{ value: unknown }> = z.object({ value: z.any() })
 

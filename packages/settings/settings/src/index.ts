@@ -108,7 +108,8 @@ export interface SettingsScope<T> {
    * of one callback run asynchronously, one at a time, in commit order; a
    * rejection is contained and logged like a sync throw. After the disposer
    * returns, no further invocation starts — one already queued is skipped;
-   * one already started still settles, and service disposal waits for it.
+   * one already started still settles, and service disposal and the
+   * registrant fiber's disposal each wait for it.
    * @param callback - invoked after each commit with the next and previous values.
    * @returns the disposer removing this observer.
    */
@@ -440,7 +441,9 @@ export abstract class SettingsProvider extends Service {
   /**
    * Register a namespace schema and receive its owner scope. The registration
    * is an effect on the calling plugin's fiber: disposing that fiber removes
-   * the namespace and its observers. An invalid stored section fails the
+   * the namespace and its observers, and waits until every started watcher
+   * invocation settled so no callback outlives the fiber. An invalid stored
+   * section fails the
    * registration itself — the earliest point where the schema can judge it.
    * @param ns - unique namespace; duplicate registration fails loud.
    * @param schema - schemastery schema resolving this namespace's value.
@@ -465,9 +468,19 @@ export abstract class SettingsProvider extends Service {
     }
     this.ctx.effect(() => {
       this.registrations.set(ns, registration)
-      // TODO(settings-registration-quiescence): Deactivate every watcher and await
-      // its tail on disposal so callbacks cannot outlive the registrant fiber.
-      return () => this.registrations.delete(ns)
+      return async () => {
+        this.registrations.delete(ns)
+        // Deactivate every watcher, then await the started invocations so no
+        // callback outlives the registrant fiber: an invocation not yet
+        // started skips via the activity check, one already running settles
+        // before this disposer (and with it the fiber's disposal) completes.
+        const tails = [...registration.watchers].map((watcher) => {
+          watcher.active = false
+          return watcher.tail
+        })
+        registration.watchers.clear()
+        await Promise.allSettled(tails)
+      }
     }, `settings.register(${JSON.stringify(String(ns))})`)
     return {
       get: () => registration.resolved as T,
