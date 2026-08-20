@@ -1,0 +1,149 @@
+# Fork-hosted CI: the standard-hosted substitute for ci.yml on personal forks.
+# ci.yml resolves its Linux lanes through enterprise runner pools and
+# self-hosted labels that only the upstream repository provides, so on a fork
+# every ci.yml run dies at startup with zero jobs. This workflow runs the same
+# gate aggregates (scripts/run-gates.ts) on standard hosted runners. Every job
+# is guarded to fork owners so the file stays inert if it rides a pull request
+# into upstream. Rationale and gate accounting:
+# .agents/notes/implemented/process/2026-08-19-fork-hosted-ci-workflow.md
+name: Fork CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+# Same push exemption as ci.yml: a superseded pull-request run is waste, but a
+# master push run is the only post-merge evidence and must reach a verdict.
+concurrency:
+  group: fork-ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
+
+permissions:
+  contents: read
+
+env:
+  PRIMARY_NODE_VERSION: '24'
+  # CI runs must never report to the production telemetry endpoint baked
+  # into apps/cli/cordis.yml (AppCLIEntry disables the row when set).
+  DSH_TELEMETRY_DISABLED: '1'
+
+jobs:
+
+  static:
+    if: github.repository_owner != 'deepseek-ai'
+    runs-on: ubuntu-latest
+    name: fork / static + doc-sync
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # The archive gate inside check:ci:static diffs against the pull
+          # request base, which a shallow clone does not carry.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install (immutable)
+        run: pnpm install --frozen-lockfile
+
+      - name: Run static gates
+        env:
+          DSH_ARCHIVE_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: pnpm run check:ci:static
+
+      # typecheck lives only in ci-primary and verify-third-party-notices in
+      # no aggregate at all; both belong to the fork's full local gate set.
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Third-party notices
+        run: pnpm run verify-third-party-notices
+
+  coverage:
+    if: github.repository_owner != 'deepseek-ai'
+    runs-on: ubuntu-latest
+    name: fork / coverage
+    timeout-minutes: 120
+    env:
+      # ci-coverage splits DSH_COVERAGE_MAX_WORKERS between the instrumented
+      # suite and the coverage-exempt heavy suite; 4 is the hosted core count.
+      DSH_COVERAGE_MAX_WORKERS: '4'
+      DSH_GATE_CONCURRENCY: '2'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install (immutable)
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare bubblewrap
+        run: bash scripts/prepare-ci-bubblewrap.sh
+
+      - name: Run coverage gates
+        run: pnpm run check:ci:coverage
+
+  consumers:
+    if: github.repository_owner != 'deepseek-ai'
+    runs-on: ubuntu-latest
+    name: fork / build, snapshots, artifacts
+    timeout-minutes: 90
+    env:
+      # ci-consumers defaults its gate concurrency to the gate count (~11),
+      # which thrashes a 4-core hosted runner.
+      DSH_GATE_CONCURRENCY: '4'
+      # node-compat's typecheck duplicates this workflow's static lane.
+      DSH_NODE_COMPAT_SKIP_TYPECHECK: '1'
+      DSH_OXLINT_THREADS: '4'
+      DSH_PUBLINT_CONCURRENCY: '4'
+      DSH_SNAPSHOT_MAX_CONCURRENCY: '4'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install (immutable)
+        run: pnpm install --frozen-lockfile
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Prepare bubblewrap
+        run: bash scripts/prepare-ci-bubblewrap.sh
+
+      - name: Install Playwright Chromium
+        run: pnpm --filter @deepseek-ai/dsh-web-frontend exec playwright install --with-deps chromium
+
+      - name: Run consumer gates
+        run: pnpm run check:ci:consumers
