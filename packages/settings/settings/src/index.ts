@@ -661,15 +661,31 @@ export abstract class SettingsProvider extends Service {
       const next = deepFreeze(this.resolve(registration.schema, registration.base, section, registration.validate))
       await this.persist(ns, section)
       // The write reached storage either way; the cache must say so. Commit
-      // only when this registration is still the namespace owner — a fiber
-      // disposed (or replaced) mid-persist must not receive the notification.
+      // only to the namespace's live owner — a fiber disposed mid-persist
+      // must not receive the notification.
       this.document[ns] = section
-      // TODO(settings-replacement-resync): Re-resolve any replacement registration
-      // from this persisted section so an old in-flight write cannot leave it stale.
-      if (this.registrations.get(ns) === registration && !this.isStopped()) {
+      if (this.isStopped()) return
+      const live = this.registrations.get(ns)
+      if (live === registration) {
         this.bumpRevision(registration, current, section)
         this.commit(registration, next, 'update')
+        return
       }
+      if (live === undefined) return
+      // A replacement registration mounted while this write persisted: it
+      // resolved from the pre-write document, so re-resolve it from what
+      // storage now holds. A section its schema or validate rejects keeps the
+      // replacement's last good value and warns, exactly as publish does.
+      let resynced: unknown
+      try {
+        resynced = deepFreeze(this.resolve(live.schema, live.base, section, live.validate))
+      } catch (error) {
+        this.ctx.logger.warn('settings: keeping last good "%s" after invalid stored section', ns)
+        this.ctx.logger.warn(error)
+        return
+      }
+      this.bumpRevision(live, current, section)
+      this.commit(live, resynced, 'update')
     })
     this.writeQueues.set(ns, run)
     return run

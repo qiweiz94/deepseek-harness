@@ -672,6 +672,62 @@ describe('third review regressions', () => {
   })
 })
 
+describe('replacement resync', () => {
+  it('re-resolves a replacement registration from a write persisted mid-replacement', async () => {
+    const { ctx, provider } = await boot({ persistDelayMs: 30 })
+    let scope: SettingsScope<ThemeConfig> | undefined
+    const fiber = ctx.plugin({
+      inject: ['settings'],
+      apply: (child: Context) => {
+        scope = child.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+      },
+    })
+    await fiber
+    const pending = scope!.update({ theme: 'light' })
+    await new Promise(resolve => setTimeout(resolve, 5))
+    await fiber.dispose()
+    const replacement = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+    const watcher = vi.fn()
+    replacement.watch(watcher)
+    // The replacement resolved from the pre-write document…
+    expect(replacement.get()).toEqual({ theme: 'dark', fontSize: 14 })
+    await pending
+    // …and the in-flight write re-resolves it instead of leaving it stale.
+    expect(replacement.get()).toEqual({ theme: 'light', fontSize: 14 })
+    await vi.waitFor(() => {
+      expect(watcher).toHaveBeenCalledWith(
+        { theme: 'light', fontSize: 14 },
+        { theme: 'dark', fontSize: 14 },
+      )
+    })
+    expect(provider.doc['ui-theme']).toEqual({ theme: 'light' })
+    // The raw section moved, so an editor holding the pre-write revision is stale.
+    expect(ctx.settings.describe()[0]!.revision).toBe(1)
+  })
+
+  it('keeps a replacement on its last good value when the persisted section fails its validate', async () => {
+    const { ctx } = await boot({ persistDelayMs: 30 })
+    let scope: SettingsScope<ThemeConfig> | undefined
+    const fiber = ctx.plugin({
+      inject: ['settings'],
+      apply: (child: Context) => {
+        scope = child.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+      },
+    })
+    await fiber
+    const pending = scope!.update({ fontSize: 4 })
+    await new Promise(resolve => setTimeout(resolve, 5))
+    await fiber.dispose()
+    const replacement = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema, {
+      validate: (value) => {
+        if (value.fontSize < 10) throw new Error(`font size ${String(value.fontSize)} is unreadable`)
+      },
+    })
+    await pending
+    expect(replacement.get()).toEqual({ theme: 'dark', fontSize: 14 })
+  })
+})
+
 describe('registration quiescence', () => {
   it('waits for an in-flight watch invocation when the registrant fiber disposes', async () => {
     const { ctx, provider } = await boot()
