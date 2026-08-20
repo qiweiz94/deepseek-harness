@@ -57,6 +57,7 @@ import * as ToolAstContext from '@deepseek-ai/dsh-plugin-ast-context'
 import * as ToolDiagnosticSifter from '@deepseek-ai/dsh-plugin-diagnostic-sifter'
 import * as ToolLspReferences from '@deepseek-ai/dsh-plugin-lsp-references'
 import * as ToolPinnedScratchpad from '@deepseek-ai/dsh-plugin-pinned-scratchpad'
+import * as ToolSemanticPatcher from '@deepseek-ai/dsh-plugin-semantic-patcher'
 import * as ToolSubagentRouter from '@deepseek-ai/dsh-plugin-subagent-router'
 import * as ToolWorktreeSandbox from '@deepseek-ai/dsh-plugin-worktree-sandbox'
 import * as ToolLsp from '@deepseek-ai/dsh-tool-lsp'
@@ -290,6 +291,18 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'scratchpad_update pins a short key/value note the model maintains itself; the pinned block is re-rendered into the system prompt by a section provider on every assembly (never into the message log), so it is unaffected by compaction. The whole block is capped at a token budget and the least recently written entries are dropped first behind a truncation marker.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-plugin-semantic-patcher',
+    dir: 'plugin-semantic-patcher',
+    source: 'packages/plugins/plugin-semantic-patcher/src/index.ts',
+    requires: ['ctx.tools'],
+    writes: ['tool/call', 'tool/result', 'the patched source file, replaced by one atomic rename'],
+    async mount(ctx) {
+      await ctx.plugin(ToolSemanticPatcher, { cwd: root })
+    },
+    note:
+      'patch_symbol_body replaces one named symbol\'s body located in the parsed syntax tree rather than by text match; a name that matches no symbol or more than one fails with the candidate list, and a replacement that would not parse leaves the file byte-for-byte unchanged.',
   },
   {
     pkg: '@deepseek-ai/dsh-plugin-subagent-router',

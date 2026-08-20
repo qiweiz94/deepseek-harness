@@ -281,6 +281,7 @@
     { "path": "./packages/plugins/plugin-diagnostic-sifter" },
     { "path": "./packages/plugins/plugin-lsp-references" },
     { "path": "./packages/plugins/plugin-pinned-scratchpad" },
+    { "path": "./packages/plugins/plugin-semantic-patcher" },
     { "path": "./packages/plugins/plugin-subagent-router" },
     { "path": "./packages/plugins/plugin-worktree-sandbox" },
     { "path": "./packages/hooks/hook-protocol" },
