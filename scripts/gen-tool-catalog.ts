@@ -56,6 +56,7 @@ import Lsp from '@deepseek-ai/dsh-lsp'
 import * as ToolAstContext from '@deepseek-ai/dsh-plugin-ast-context'
 import * as ToolDiagnosticSifter from '@deepseek-ai/dsh-plugin-diagnostic-sifter'
 import * as ToolLspReferences from '@deepseek-ai/dsh-plugin-lsp-references'
+import * as ToolPinnedScratchpad from '@deepseek-ai/dsh-plugin-pinned-scratchpad'
 import * as ToolSubagentRouter from '@deepseek-ai/dsh-plugin-subagent-router'
 import * as ToolWorktreeSandbox from '@deepseek-ai/dsh-plugin-worktree-sandbox'
 import * as ToolLsp from '@deepseek-ai/dsh-tool-lsp'
@@ -264,6 +265,18 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'find_references and get_definition answer from an in-process TypeScript language service over the transitive file set of the configured tsconfig (default tsconfig.host.json), so a reference in another package is found; the service is built on the first call and released with the fiber. Positions are 1-based line and 1-based UTF-16 character; an off-symbol position returns an empty result rather than an error, while a file outside the project file set is an error result.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-plugin-pinned-scratchpad',
+    dir: 'plugin-pinned-scratchpad',
+    source: 'packages/plugins/plugin-pinned-scratchpad/src/index.ts',
+    requires: ['ctx.tools', 'ctx.systemPrompt'],
+    writes: ['tool/call', 'tool/result', 'the pinned <agent_scratchpad> prompt section on every assembly'],
+    async mount(ctx) {
+      await ctx.plugin(ToolPinnedScratchpad)
+    },
+    note:
+      'scratchpad_update pins a short key/value note the model maintains itself; the pinned block is re-rendered into the system prompt by a section provider on every assembly (never into the message log), so it is unaffected by compaction. The whole block is capped at a token budget and the least recently written entries are dropped first behind a truncation marker.',
   },
   {
     pkg: '@deepseek-ai/dsh-plugin-subagent-router',
