@@ -30,7 +30,7 @@ The originating request sketched a `subagent/turn-end` event and a `ctx.subagent
 
 ### The parent report channel
 
-On termination the governor injects one structured notice into the parent agent (`parent.inject(...)`, source `{ kind: 'plugin', plugin: 'plugin-budget-governor', form: 'notice' }`). The parent is resolved from the child session's durable lineage (`child.session.header.parentSession` → `ctx.agents.get(...)`). Injection is the right channel because:
+On termination the governor injects one structured notice into the parent agent (`parent.inject(...)`, source `{ kind: 'plugin', plugin: 'budget-governor', form: 'notice' }`). The parent is resolved from the child session's durable lineage (`child.session.header.parentSession` → `ctx.agents.get(...)`). Injection is the right channel because:
 
 - **Model-visible ⟺ logged holds for free**: `inject` lands as a `user/message` session event in the parent log, so the report is reconstructable from the log with no new session event type.
 - **Timing**: the parent's driver claims injected context at its next pre-step — immediately after the aborted delegation's `isError` tool result, so the model reads the reason next to the failure it explains.

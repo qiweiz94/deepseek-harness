@@ -30,7 +30,7 @@
 
 ### 父级报告通道
 
-终止发生时，治理器会向父代理注入一条结构化通知（`parent.inject(...)`，来源为 `{ kind: 'plugin', plugin: 'plugin-budget-governor', form: 'notice' }`）。父代理是通过子会话持久化的血缘关系解析得到的（`child.session.header.parentSession` → `ctx.agents.get(...)`）。选择注入作为通道的原因：
+终止发生时，治理器会向父代理注入一条结构化通知（`parent.inject(...)`，来源为 `{ kind: 'plugin', plugin: 'budget-governor', form: 'notice' }`）。父代理是通过子会话持久化的血缘关系解析得到的（`child.session.header.parentSession` → `ctx.agents.get(...)`）。选择注入作为通道的原因：
 
 - **“模型可见 ⟺ 已记录” 天然成立**：`inject` 会作为一条 `user/message` 会话事件落入父级日志，因此报告可以完全从日志重建，无需新增会话事件类型。
 - **时机**：父代理的驱动器会在其下一次预备步骤 —— 也就是紧跟在被中止委托的 `isError` 工具结果之后 —— 读取被注入的内容，因此模型能在读到失败信息的同时看到其原因。
