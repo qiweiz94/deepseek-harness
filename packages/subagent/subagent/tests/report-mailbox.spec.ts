@@ -201,6 +201,9 @@ describe('redeliverSubagentReports', () => {
     ['a message with the wrong role', { ...mailboxRecord('wakeup', message), message: { ...message, role: 'assistant' } }],
     ['a message whose content is not an array', { ...mailboxRecord('wakeup', message), message: { ...message, content: 'not-an-array' } }],
     ['a message whose source is not an object', { ...mailboxRecord('wakeup', message), message: { ...message, source: 'not-an-object' } }],
+    ['a message whose source is null', { ...mailboxRecord('wakeup', message), message: { ...message, source: null } }],
+    ['a message whose source is an array', { ...mailboxRecord('wakeup', message), message: { ...message, source: [] } }],
+    ['a message whose source lacks a kind', { ...mailboxRecord('wakeup', message), message: { ...message, source: {} } }],
   ]
 
   it.each(malformed)('reports and skips a record with %s instead of redelivering', (_label, record) => {
