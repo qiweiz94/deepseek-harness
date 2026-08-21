@@ -10,7 +10,7 @@ import {
   captureStableAria, compareOrRefreshGolden, launchWebScaffold, seedBlankSession,
   watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { newEnglishPage, saveFailureShot } from './support.ts'
+import { newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/cold-blank-session', import.meta.url))
 const SIDEBAR_EXPECTED = join(SNAPSHOT_DIR, 'sidebar.expected.md')
@@ -40,8 +40,8 @@ describe('web e2e: cold blank Session visibility', () => {
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
-  }, 120_000)
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
+  }, scaledTimeout(120_000))
 
   afterAll(async () => {
     await browser?.close()
@@ -51,7 +51,7 @@ describe('web e2e: cold blank Session visibility', () => {
   it('keeps the verified cold blank Session out of the sidebar', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-cold-blank-session'))
     const tree = page.getByRole('tree', { name: 'Sessions' })
-    await tree.waitFor({ timeout: 30_000 })
+    await tree.waitFor({ timeout: scaledTimeout(30_000) })
     expect(await tree.getByText(WORKSPACE_NAME, { exact: true }).count()).toBe(0)
     const sidebar = await captureStableAria(page, '[role="tree"][aria-label="Sessions"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(SIDEBAR_EXPECTED, sidebar, MODE)

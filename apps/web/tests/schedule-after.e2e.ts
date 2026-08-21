@@ -25,7 +25,7 @@ import {
   webSnapshotMode,
   type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, conversationContextKey, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, conversationContextKey, saveFailureShot, scaledTimeout } from './support.ts'
 
 const MODE = webSnapshotMode()
 const OVERLAY = fileURLToPath(new URL('../../../examples/web-schedule/cordis.yml', import.meta.url))
@@ -236,7 +236,7 @@ describe.skipIf(MODE === 'record')('web e2e: conversational reminders', () => {
     await page.addInitScript(() => { localStorage.setItem('dsh.locale', 'en') })
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
     expect(await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone))
       .toBe(AT_BROWSER_ZONE)
@@ -257,7 +257,7 @@ describe.skipIf(MODE === 'record')('web e2e: conversational reminders', () => {
     })
     await workspace.attachSession(afterHandle.agent.id)
     const afterCreated = await scaffold.ctx.tools.execute({
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(scaledTimeout(10_000)),
       callId: CallId('schedule-after-create'),
       name: 'schedule_create',
       arguments: { prompt: AFTER_PROMPT, after_seconds: 1 },
@@ -274,7 +274,7 @@ describe.skipIf(MODE === 'record')('web e2e: conversational reminders', () => {
       state: 'scheduled',
       deliveryMode: 'session-local',
     })
-    afterAssistantReply = await waitForReply(afterHandle, AFTER_REPLY, 15_000)
+    afterAssistantReply = await waitForReply(afterHandle, AFTER_REPLY, scaledTimeout(15_000))
     await afterHandle.agent.whenIdle()
     await expect(scaffold.ctx.sessions.flush(afterHandle.agent.session)).resolves.toBe(true)
 
@@ -313,14 +313,14 @@ describe.skipIf(MODE === 'record')('web e2e: conversational reminders', () => {
     await expect(scaffold.ctx.sessions.flush(everyHandle.agent.session)).resolves.toBe(true)
     await workspace.attachSession(everyHandle.agent.id)
     const everyListed = await scaffold.ctx.tools.execute({
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(scaledTimeout(10_000)),
       callId: CallId('schedule-every-list'),
       name: 'schedule_list',
       arguments: {},
       agent: everyHandle.agent,
     })
     expect(everyListed.isError).toBe(false)
-    everyAssistantReply = await waitForReply(everyHandle, EVERY_REPLY, 15_000)
+    everyAssistantReply = await waitForReply(everyHandle, EVERY_REPLY, scaledTimeout(15_000))
     await everyHandle.agent.whenIdle()
     await expect(scaffold.ctx.sessions.flush(everyHandle.agent.session)).resolves.toBe(true)
 
@@ -343,9 +343,9 @@ describe.skipIf(MODE === 'record')('web e2e: conversational reminders', () => {
     await expect(scaffold.ctx.sessions.flush(atHandle.agent.session)).resolves.toBe(true)
     await workspace.attachSession(atHandle.agent.id)
     await page.reload({ waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     const workspaceItem = page.locator('[role="treeitem"]').first()
-    await workspaceItem.waitFor({ timeout: 15_000 })
+    await workspaceItem.waitFor({ timeout: scaledTimeout(15_000) })
     const expansionDeadline = Date.now() + 5_000
     while (await workspaceItem.getAttribute('aria-expanded') !== 'true') {
       if (Date.now() >= expansionDeadline) throw new Error('workspace item did not expand')
@@ -355,18 +355,18 @@ describe.skipIf(MODE === 'record')('web e2e: conversational reminders', () => {
       await new Promise<void>(resolve => setTimeout(resolve, 50))
     }
     const atSession = page.getByRole('treeitem', { name: /Explicit local-time reminder/ })
-    await atSession.waitFor({ timeout: 15_000 })
+    await atSession.waitFor({ timeout: scaledTimeout(15_000) })
     await atSession.click()
     const composer = page.locator('textarea:enabled').last()
     await composer.fill(AT_USER_PROMPT)
     const settled = scaffold.whenTurnSettled(60_000)
     await page.getByRole('button', { name: 'Send message', exact: true }).click()
     expect(await settled).toBe(atHandle.agent.id)
-    await page.getByText(AT_ACK, { exact: true }).waitFor({ timeout: 15_000 })
-    atAssistantReply = await waitForReply(atHandle, AT_REPLY, 20_000)
+    await page.getByText(AT_ACK, { exact: true }).waitFor({ timeout: scaledTimeout(15_000) })
+    atAssistantReply = await waitForReply(atHandle, AT_REPLY, scaledTimeout(20_000))
     await atHandle.agent.whenIdle()
     await expect(scaffold.ctx.sessions.flush(atHandle.agent.session)).resolves.toBe(true)
-  }, 120_000)
+  }, scaledTimeout(120_000))
 
   afterAll(async () => {
     const failures: unknown[] = []
@@ -389,7 +389,7 @@ describe.skipIf(MODE === 'record')('web e2e: conversational reminders', () => {
     if (afterAssistantReply === undefined) throw new Error('After assistant reply was not captured')
     const selector = `[data-chat-anchor-key="${assistantKey(afterAssistantReply)}"]`
     const row = page.locator(selector)
-    await row.waitFor({ timeout: 15_000 })
+    await row.waitFor({ timeout: scaledTimeout(15_000) })
     expect(await row.getAttribute('data-chat-flow-kind')).toBe('assistant-step')
     expect(await row.textContent()).toContain(AFTER_REPLY)
     await compareOrRefreshGolden(
@@ -398,7 +398,7 @@ describe.skipIf(MODE === 'record')('web e2e: conversational reminders', () => {
       MODE,
     )
     expect(await page.locator('[data-schedule-reminder]').count()).toBe(0)
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('batches one latest occurrence per overdue Every record into an ordinary follow-up', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-schedule-every'))
@@ -450,7 +450,7 @@ describe.skipIf(MODE === 'record')('web e2e: conversational reminders', () => {
     if (everyAssistantReply === undefined) throw new Error('Every assistant reply was not captured')
     const selector = `[data-chat-anchor-key="${assistantKey(everyAssistantReply)}"]`
     const row = page.locator(selector)
-    await row.waitFor({ timeout: 15_000 })
+    await row.waitFor({ timeout: scaledTimeout(15_000) })
     expect(await row.getAttribute('data-chat-flow-kind')).toBe('assistant-step')
     expect(await row.textContent()).toContain(EVERY_REPLY)
     await compareOrRefreshGolden(
@@ -459,7 +459,7 @@ describe.skipIf(MODE === 'record')('web e2e: conversational reminders', () => {
       MODE,
     )
     expect(await page.locator('[data-schedule-reminder]').count()).toBe(0)
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('uses request-local browser context to create an explicit local At reminder', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-schedule-at'))
@@ -522,7 +522,7 @@ describe.skipIf(MODE === 'record')('web e2e: conversational reminders', () => {
     if (atAssistantReply === undefined) throw new Error('At assistant reply was not captured')
     const selector = `[data-chat-anchor-key="${assistantKey(atAssistantReply)}"]`
     const row = page.locator(selector)
-    await row.waitFor({ timeout: 15_000 })
+    await row.waitFor({ timeout: scaledTimeout(15_000) })
     expect(await row.getAttribute('data-chat-flow-kind')).toBe('assistant-step')
     expect(await row.textContent()).toContain(AT_REPLY)
     await compareOrRefreshGolden(
@@ -533,7 +533,7 @@ describe.skipIf(MODE === 'record')('web e2e: conversational reminders', () => {
     expect(await page.locator('[data-schedule-reminder]').count()).toBe(0)
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('keeps the fixture inventory closed', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, [

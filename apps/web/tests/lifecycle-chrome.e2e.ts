@@ -21,7 +21,7 @@ import {
   acknowledgeReloadConnectionLoss, assertFixtureInventory, captureStableAria, compareOrRefreshGolden, fixtureUserPrompts,
   launchWebScaffold, recordFixture, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/lifecycle-chrome', import.meta.url))
 const FIXTURE = join(SNAPSHOT_DIR, 'session.jsonl')
@@ -51,10 +51,10 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     // Fresh world: connect a Workspace so the composer scenarios start live.
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
-  }, 120_000)
+  }, scaledTimeout(120_000))
 
   afterAll(async () => {
     await browser?.close()
@@ -66,7 +66,7 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
     const launcher = page.getByRole('button', { name: 'Commands' })
     await launcher.click()
     const menu = page.getByRole('listbox', { name: 'Trigger suggestions' })
-    await menu.waitFor({ timeout: 10_000 })
+    await menu.waitFor({ timeout: scaledTimeout(10_000) })
     const snapshot = await captureStableAria(page, '[role="listbox"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(COMMAND_MENU_EXPECTED, snapshot, MODE)
     expect(snapshot).toContain('text: Commands')
@@ -77,7 +77,7 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
     await expect.poll(() => menu.count()).toBe(0)
     const input = page.locator('textarea').first()
     await input.fill('/')
-    await menu.waitFor({ timeout: 10_000 })
+    await menu.waitFor({ timeout: scaledTimeout(10_000) })
     const typedBox = await menu.boundingBox()
     expect(launchedBox).not.toBeNull()
     expect(typedBox).not.toBeNull()
@@ -101,21 +101,21 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
     const activeTripwire = watchConsole(activePage)
     try {
       await activePage.goto(activeScaffold.baseUrl, { waitUntil: 'load' })
-      await activePage.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+      await activePage.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
       await connectFreshWorkspace(activePage, activeScaffold.workspaceCwd)
       const input = activePage.locator('textarea').first()
       await activePage.getByRole('button', { name: 'Commands' }).click()
       const menu = activePage.getByRole('listbox', { name: 'Trigger suggestions' })
-      await menu.waitFor({ timeout: 10_000 })
+      await menu.waitFor({ timeout: scaledTimeout(10_000) })
       await menu.getByRole('option', { name: 'plan Enter or leave plan mode' }).click()
       await expect.poll(() => input.inputValue()).toBe('/plan ')
       await input.press('Enter')
       const planButton = activePage.getByRole('button', { name: 'Plan mode on, press to turn off' })
-      await planButton.waitFor({ timeout: 10_000 })
+      await planButton.waitFor({ timeout: scaledTimeout(10_000) })
       // The golden encodes an empty composer, and the button arriving does not
       // mean the submitted text is gone yet: under load the capture can catch
       // a textbox still holding `/plan`.
-      await expect.poll(() => input.inputValue(), { timeout: 10_000 }).toBe('')
+      await expect.poll(() => input.inputValue(), { timeout: scaledTimeout(10_000) }).toBe('')
       const planSnapshot = await captureStableAria(activePage, '[class*="frame"]', activeScaffold.workspaceCwd)
       await compareOrRefreshGolden(PLAN_ACTIVE_EXPECTED, planSnapshot, MODE)
       const planStyle = await planButton.evaluate((element) => {
@@ -160,9 +160,9 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
     }
     // The blank frame renders the hero, not the resident composer: the
     // headline plus the guidance placeholder are the empty state's anchors.
-    await expect.poll(() => page.getByText('Into the Unknown', { exact: false }).count(), { timeout: 15_000 }).toBe(1)
+    await expect.poll(() => page.getByText('Into the Unknown', { exact: false }).count(), { timeout: scaledTimeout(15_000) }).toBe(1)
     const input = page.locator('textarea').first()
-    await input.waitFor({ timeout: 10_000 })
+    await input.waitFor({ timeout: scaledTimeout(10_000) })
     if (MODE !== 'record') {
       // Golden of the hero's stable waiting state (captured before any send;
       // the conversation-region goldens belong to the other scenarios).
@@ -181,7 +181,7 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
           await expect.poll(async () => await liveTail.evaluate(element => (
             element.scrollWidth > element.clientWidth
               && element.scrollLeft >= element.scrollWidth - element.clientWidth - 1
-          )), { timeout: 10_000, interval: 10 }).toBe(true)
+          )), { timeout: scaledTimeout(10_000), interval: 10 }).toBe(true)
         }
         return await settled
       } finally {
@@ -192,7 +192,7 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
     if (MODE === 'record') {
       await recordFixture(scaffold, sessionId, FIXTURE)
     }
-  }, 200_000)
+  }, scaledTimeout(200_000))
 
   it.skipIf(MODE === 'record')('materialized a real Workspace and Session over the wire', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-lifecycle-materialize'))
@@ -202,10 +202,10 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
     // the barrier.
     await expect.poll(
       () => page.locator('[role="treeitem"][aria-expanded]').filter({ hasText: 'workspace' }).count(),
-      { timeout: 15_000 },
+      { timeout: scaledTimeout(15_000) },
     ).toBeGreaterThanOrEqual(1)
-    await expect.poll(() => page.locator('[role="treeitem"][aria-selected="true"]').count(), { timeout: 10_000 }).toBe(1)
-    await expect.poll(() => page.getByText('LIGHTHOUSE', { exact: true }).count(), { timeout: 15_000 }).toBeGreaterThanOrEqual(1)
+    await expect.poll(() => page.locator('[role="treeitem"][aria-selected="true"]').count(), { timeout: scaledTimeout(10_000) }).toBe(1)
+    await expect.poll(() => page.getByText('LIGHTHOUSE', { exact: true }).count(), { timeout: scaledTimeout(15_000) }).toBeGreaterThanOrEqual(1)
     // Host: the session's durable header cwd is the folder the workspace
     // flow created and adopted (<workspaceCwd>/workspace) — the proof the
     // send went through workspace materialization rather than a bare
@@ -215,26 +215,26 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
     const turnEnds = sessionEvents.filter(e => e.type === 'turn/end')
     expect(turnEnds).toHaveLength(1)
     expect((turnEnds[0] as SessionEvent & { data: { reason: { kind: string } } }).data.reason.kind).toBe('completed')
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it.skipIf(MODE === 'record')('recovers the whole surface across a reload from the log alone', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-lifecycle-reload'))
     const warningStart = tripwire.warnings.length
     await page.reload({ waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     acknowledgeReloadConnectionLoss(tripwire, warningStart)
     // Selection persisted (dsh.sessions.current) and history replayed: the
     // recorded turn re-renders from session.history with zero model calls —
     // the replay cursor was fully consumed before the reload, so any stray
     // request would fail the scenario loudly at close().
-    await expect.poll(() => page.getByText('LIGHTHOUSE', { exact: true }).count(), { timeout: 15_000 }).toBeGreaterThanOrEqual(1)
-    await expect.poll(() => page.locator('[role="treeitem"][aria-selected="true"]').count(), { timeout: 10_000 }).toBe(1)
+    await expect.poll(() => page.getByText('LIGHTHOUSE', { exact: true }).count(), { timeout: scaledTimeout(15_000) }).toBeGreaterThanOrEqual(1)
+    await expect.poll(() => page.locator('[role="treeitem"][aria-selected="true"]').count(), { timeout: scaledTimeout(10_000) }).toBe(1)
     // Golden of the recovered conversation region: rebuilt from the log, it
     // must render the same settled transcript the live turn produced.
     const snapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(RELOADED_EXPECTED, snapshot, MODE)
     expect(tripwire.pageErrors).toEqual([])
-  }, 90_000)
+  }, scaledTimeout(90_000))
 
   it.skipIf(MODE === 'record')('cascades the dark theme from the body attribute to painted surfaces', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-lifecycle-dark'))
@@ -266,7 +266,7 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
     const restored = await sample()
     expect(restored).toEqual(light)
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it.skipIf(MODE === 'record')('keeps the fixture inventory closed', async () => {
     expect(tripwire.warnings).toEqual([])

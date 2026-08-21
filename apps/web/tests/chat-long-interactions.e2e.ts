@@ -19,7 +19,7 @@ import {
   webSnapshotMode,
   type WebScaffold,
 } from './scaffold.ts'
-import { conversationContextKey, newEnglishPage, saveFailureShot } from './support.ts'
+import { conversationContextKey, newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const MODE = webSnapshotMode()
 const SESSION_ID = 'chat-long-interactions-e2e'
@@ -79,20 +79,20 @@ async function nextPaint(page: Page): Promise<void> {
 async function openSeed(page: Page): Promise<void> {
   // The compact layout dropped group session counts; the seeded baseline is
   // the Ungrouped bucket once cold summaries load.
-  await page.getByText('Ungrouped', { exact: true }).waitFor({ timeout: 30_000 })
+  await page.getByText('Ungrouped', { exact: true }).waitFor({ timeout: scaledTimeout(30_000) })
   // Search collapsed into a header action; expand it before filling.
   const searchButton = page.getByRole('button', { name: 'Search sessions' })
   if (await searchButton.getAttribute('aria-expanded') !== 'true') await searchButton.click()
   const search = page.getByRole('textbox', { name: 'Search sessions...', exact: true })
   await search.fill(FIXTURE.markers.user(1))
   const results = page.getByRole('tree', { name: 'Search results' }).getByRole('treeitem')
-  await results.first().waitFor({ timeout: 60_000 })
+  await results.first().waitFor({ timeout: scaledTimeout(60_000) })
   const resultCount = await results.count()
   if (resultCount !== 1) throw new Error(`expected one seeded search result, received ${String(resultCount)}`)
   await results.click()
   await results.click()
   await page.getByText(FIXTURE.markers.assistant(FIXTURE.turns), { exact: false })
-    .last().waitFor({ timeout: 30_000 })
+    .last().waitFor({ timeout: scaledTimeout(30_000) })
   await nextPaint(page)
 }
 
@@ -156,9 +156,9 @@ describe('web e2e: long Chat interaction contract', () => {
     page = await newEnglishPage(browser, 900)
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     await openSeed(page)
-  }, 120_000)
+  }, scaledTimeout(120_000))
 
   afterAll(async () => {
     const failures: unknown[] = []
@@ -201,8 +201,8 @@ describe('web e2e: long Chat interaction contract', () => {
     const call1 = page.locator(`[data-chat-call-id="${TARGET_CALL_1}"]`)
     const call2 = page.locator(`[data-chat-call-id="${TARGET_CALL_2}"]`)
 
-    await expect.poll(() => toolUserRow.count(), { timeout: 10_000 }).toBe(1)
-    await expect.poll(() => toolAssistantRow.count(), { timeout: 10_000 }).toBe(1)
+    await expect.poll(() => toolUserRow.count(), { timeout: scaledTimeout(10_000) }).toBe(1)
+    await expect.poll(() => toolAssistantRow.count(), { timeout: scaledTimeout(10_000) }).toBe(1)
     expect(await call1.count()).toBe(1)
     expect(await call2.count()).toBe(1)
     expect(await toolUserRow.getAttribute('data-chat-flow-kind')).toBe('user')
@@ -234,9 +234,9 @@ describe('web e2e: long Chat interaction contract', () => {
     expect(await summary2.getAttribute('aria-expanded')).toBe('false')
     await summary2.focus()
     await summary2.press('Enter')
-    await expect.poll(() => summary2.getAttribute('aria-expanded'), { timeout: 10_000 }).toBe('true')
+    await expect.poll(() => summary2.getAttribute('aria-expanded'), { timeout: scaledTimeout(10_000) }).toBe('true')
     expect(await summary1.getAttribute('aria-expanded')).toBe('false')
-    await call2.getByText(`${toolMarker2} output line 12`, { exact: true }).waitFor({ timeout: 10_000 })
+    await call2.getByText(`${toolMarker2} output line 12`, { exact: true }).waitFor({ timeout: scaledTimeout(10_000) })
 
     const branchUserKey = messageKey(branchUserEvent)
     const branchAssistantKey = assistantKey(branchAssistantEvent)
@@ -249,14 +249,14 @@ describe('web e2e: long Chat interaction contract', () => {
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
     await userRow.hover()
     await userRow.getByRole('button', { name: 'Copy', exact: true }).click()
-    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText()), { timeout: 5_000 })
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText()), { timeout: scaledTimeout(5_000) })
       .toBe(expectedUserText)
 
     await turnTailRow.hover()
     await turnTailRow.getByRole('button', { name: 'Branch into a new conversation', exact: true }).click()
     await expect.poll(
       () => scaffold.ctx.agents.list().find(agent => agent.session.header.parentSession === SessionId(SESSION_ID)),
-      { timeout: 15_000 },
+      { timeout: scaledTimeout(15_000) },
     ).toBeDefined()
     const child = scaffold.ctx.agents.list()
       .find(agent => agent.session.header.parentSession === SessionId(SESSION_ID))
@@ -268,17 +268,17 @@ describe('web e2e: long Chat interaction contract', () => {
 
     const currentCrumb = page.getByRole('navigation', { name: 'Session hierarchy' })
       .getByRole('button').last()
-    await expect.poll(() => currentCrumb.textContent(), { timeout: 15_000 })
+    await expect.poll(() => currentCrumb.textContent(), { timeout: scaledTimeout(15_000) })
       .toBe(`${FIXTURE.title} (1)`)
-    await page.getByText(branchAssistantMarker, { exact: false }).last().waitFor({ timeout: 15_000 })
+    await page.getByText(branchAssistantMarker, { exact: false }).last().waitFor({ timeout: scaledTimeout(15_000) })
     const settled = scaffold.whenTurnSettled(60_000)
     const composer = page.locator('textarea:enabled').last()
     await composer.fill(CONTINUE_PROMPT)
     await page.getByRole('button', { name: 'Send message', exact: true }).click()
-    await expect.poll(() => page.getByText(CONTINUE_PROMPT, { exact: true }).count(), { timeout: 15_000 }).toBe(1)
+    await expect.poll(() => page.getByText(CONTINUE_PROMPT, { exact: true }).count(), { timeout: scaledTimeout(15_000) }).toBe(1)
     expect(await settled).toBe(child.session.id)
-    await page.getByText(CONTINUE_DONE, { exact: false }).last().waitFor({ timeout: 15_000 })
-    await expect.poll(() => page.locator('[data-streaming="true"]').count(), { timeout: 15_000 }).toBe(0)
+    await page.getByText(CONTINUE_DONE, { exact: false }).last().waitFor({ timeout: scaledTimeout(15_000) })
+    await expect.poll(() => page.locator('[data-streaming="true"]').count(), { timeout: scaledTimeout(15_000) }).toBe(0)
     expect(await composer.inputValue()).toBe('')
     expect(await composer.isEnabled()).toBe(true)
     expect(source.session.events.some(event => carries(event, CONTINUE_PROMPT))).toBe(false)
@@ -291,5 +291,5 @@ describe('web e2e: long Chat interaction contract', () => {
     expect(lastTurnEnd?.data.reason).toEqual({ kind: 'completed' })
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
-  }, 180_000)
+  }, scaledTimeout(180_000))
 })

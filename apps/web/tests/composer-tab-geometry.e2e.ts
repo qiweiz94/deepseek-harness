@@ -52,7 +52,7 @@ import {
   assertFixtureInventory, compareOrRefreshGolden, launchWebScaffold, seedSession, watchConsole,
   webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { newEnglishPage, saveFailureShot } from './support.ts'
+import { newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/composer-tab-geometry', import.meta.url))
 /**
@@ -96,7 +96,7 @@ async function setMeasuredViewport(
   await page.setViewportSize(viewport)
   await page.locator('[data-sidebar-collapsed="true"]').waitFor({
     state: sidebarCollapsed ? 'attached' : 'detached',
-    timeout: 10_000,
+    timeout: scaledTimeout(10_000),
   })
   await page.locator('[data-conversation-scroll]').evaluate(async (host) => {
     const deadline = performance.now() + 5_000
@@ -191,8 +191,8 @@ function measureTab(page: Page): Promise<TabMetrics> {
  */
 async function showTab(page: Page, tab: 'Chat' | 'Trajectory'): Promise<void> {
   await page.getByRole('tab', { name: tab, exact: true }).click()
-  if (tab === 'Trajectory') await page.getByLabel('Trajectory timeline').waitFor({ timeout: 30_000 })
-  else await page.locator('[data-conversation-scroll] [data-chat-anchor-key]').first().waitFor({ timeout: 30_000 })
+  if (tab === 'Trajectory') await page.getByLabel('Trajectory timeline').waitFor({ timeout: scaledTimeout(30_000) })
+  else await page.locator('[data-conversation-scroll] [data-chat-anchor-key]').first().waitFor({ timeout: scaledTimeout(30_000) })
   // Both measurements are taken after a paint, so a rectangle read mid-transition
   // cannot be reported as a shift the cascade did not cause.
   await page.evaluate(() => new Promise<void>((settle) => {
@@ -312,12 +312,12 @@ describe('web e2e: input card position across view tabs', () => {
     page = await newEnglishPage(browser, WIDE_VIEWPORT.height)
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     await openSeededSession(page)
-    await page.getByRole('tab', { name: 'Chat', exact: true }).waitFor({ timeout: 30_000 })
+    await page.getByRole('tab', { name: 'Chat', exact: true }).waitFor({ timeout: scaledTimeout(30_000) })
     await page.getByText(FIXTURE.markers.assistant(FIXTURE.turns), { exact: false }).last()
-      .waitFor({ timeout: 30_000 })
-  }, 180_000)
+      .waitFor({ timeout: scaledTimeout(30_000) })
+  }, scaledTimeout(180_000))
 
   afterAll(async () => {
     await browser?.close()
@@ -334,7 +334,7 @@ describe('web e2e: input card position across view tabs', () => {
     // even without overflow, so a short transcript is not a vacuous case; the
     // poll still pins the measurement to the overflowing state the product
     // ships.
-    await expect.poll(async () => (await measureTab(page)).scrolls, { timeout: 10_000 }).toBe(true)
+    await expect.poll(async () => (await measureTab(page)).scrolls, { timeout: scaledTimeout(10_000) }).toBe(true)
     const comparison = await compareTabs(page)
     expect(comparison.chat.band).toBeGreaterThan(0)
     // Chat keeps the unconditional reservation so its seat's content box never
@@ -353,7 +353,7 @@ describe('web e2e: input card position across view tabs', () => {
     // Only Chat scrolls this box; the Trajectory view owns its own scrollers.
     expect(comparison.trajectory.scrolls).toBe(false)
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('holds the input card in place when the tab changes', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-composer-tab-geometry-wide'))
@@ -366,7 +366,7 @@ describe('web e2e: input card position across view tabs', () => {
     expect(comparison.rightShift).toBe(0)
     expect(comparison.widthShift).toBe(0)
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('holds the input card in place at a viewport where it shrinks with the column', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-composer-tab-geometry-narrow'))
@@ -385,7 +385,7 @@ describe('web e2e: input card position across view tabs', () => {
     expect(comparison.widthShift).toBe(0)
     await setMeasuredViewport(page, WIDE_VIEWPORT, false)
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('moves the card again once the seat compensation is removed in the page', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-composer-tab-geometry-control'))
@@ -406,7 +406,7 @@ describe('web e2e: input card position across view tabs', () => {
     const restored = await compareTabs(page)
     expect(restored.leftShift).toBe(0)
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('matches the committed tab geometry golden', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-composer-tab-geometry-golden'))
@@ -418,7 +418,7 @@ describe('web e2e: input card position across view tabs', () => {
     const control = await compareTabsWithoutCompensation(page)
     await compareOrRefreshGolden(GEOMETRY_EXPECTED, renderGeometry(wide, narrow, control), MODE)
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('commits exactly the fixtures it reads', async () => {
     // The seeded session is generated in-process, so the geometry golden is the

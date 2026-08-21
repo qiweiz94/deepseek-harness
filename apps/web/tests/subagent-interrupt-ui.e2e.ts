@@ -24,7 +24,7 @@ import {
   acknowledgeReloadConnectionLoss, assertFixtureInventory, captureStableAria, compareOrRefreshGolden,
   launchWebScaffold, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const BASE_FIXTURE = fileURLToPath(new URL('./snapshots/live-interactions/session.jsonl', import.meta.url))
 
@@ -56,7 +56,7 @@ function waitForAbortedTurn(scaffold: WebScaffold, childId: SessionId): Promise<
     const timer = setTimeout(() => {
       off()
       reject(new Error('interrupt did not reach an aborted turn/end'))
-    }, 30_000)
+    }, scaledTimeout(30_000))
     const off = scaffold.ctx.on('session/event', (session: { id: SessionId }, event: SessionEvent) => {
       if (session.id !== childId || event.type !== 'turn/end') return
       clearTimeout(timer)
@@ -135,7 +135,7 @@ describe.skipIf(MODE === 'record')('web e2e: composer interrupt for a running co
     })
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
 
     const root = scaffold.ctx.agents.roots()[0]
@@ -163,11 +163,11 @@ describe.skipIf(MODE === 'record')('web e2e: composer interrupt for a running co
     // discovered catalog), with the child still live and running host-side.
     const warningStart = tripwire.warnings.length
     await page.reload({ waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
-    await page.getByRole('button', { name: /1 subagent/ }).waitFor({ timeout: 15_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
+    await page.getByRole('button', { name: /1 subagent/ }).waitFor({ timeout: scaledTimeout(15_000) })
     acknowledgeReloadConnectionLoss(tripwire, warningStart)
     expect(scaffold.ctx.agents.get(childId)?.status).toBe('running')
-  }, 120_000)
+  }, scaledTimeout(120_000))
 
   afterAll(async () => {
     const failures: unknown[] = []
@@ -202,7 +202,7 @@ describe.skipIf(MODE === 'record')('web e2e: composer interrupt for a running co
       const input = page.getByRole('textbox', {
         name: 'Parent session offline; sending is unavailable but you can still stop the run',
       })
-      await input.waitFor({ timeout: 15_000 })
+      await input.waitFor({ timeout: scaledTimeout(15_000) })
       expect(await input.isDisabled()).toBe(true)
       const stop = page.getByRole('button', { name: 'Stop generating' })
       expect(await stop.count()).toBe(1)
@@ -234,7 +234,7 @@ describe.skipIf(MODE === 'record')('web e2e: composer interrupt for a running co
       }).result).toMatchObject({ ok: true, value: { accepted: true } })
       expect(apiCalls.filter(path => path === '/api/session.cancel')).toEqual([])
       await aborted
-      await expect.poll(() => scaffold.ctx.agents.get(childId)?.status, { timeout: 15_000 }).toBe('idle')
+      await expect.poll(() => scaffold.ctx.agents.get(childId)?.status, { timeout: scaledTimeout(15_000) }).toBe('idle')
 
       // Wake the parked setup message only after cancellation converges. A
       // second hang keeps the parent-available case independent from this stop.
@@ -249,7 +249,7 @@ describe.skipIf(MODE === 'record')('web e2e: composer interrupt for a running co
     } finally {
       await page.unroute(pattern)
     }
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('interrupts through subagent.interrupt, parks the follow-up, and resumes it FIFO', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-subagent-interrupt-flow'))
@@ -259,7 +259,7 @@ describe.skipIf(MODE === 'record')('web e2e: composer interrupt for a running co
     await page.getByRole('button', { name: /1 subagent/ }).click()
     await page.getByRole('treeitem', { name: new RegExp(LABEL) }).click()
     const input = page.getByRole('textbox', { name: 'Message the agent' })
-    await input.waitFor({ timeout: 15_000 })
+    await input.waitFor({ timeout: scaledTimeout(15_000) })
     expect(await input.isDisabled()).toBe(false)
 
     // Queue a follow-up through Send while independent Stop remains available.
@@ -285,20 +285,20 @@ describe.skipIf(MODE === 'record')('web e2e: composer interrupt for a running co
 
     // Parked: the Activation stays resident and idle with the retained
     // follow-up; the primary returns to Send without a new turn starting.
-    await expect.poll(() => scaffold.ctx.agents.get(childId)?.status, { timeout: 15_000 }).toBe('idle')
+    await expect.poll(() => scaffold.ctx.agents.get(childId)?.status, { timeout: scaledTimeout(15_000) }).toBe('idle')
     const child = scaffold.ctx.agents.get(childId)
     expect(child).toBeDefined()
     expect(child!.inbox.nextTurn).toHaveLength(2)
     expect(child!.session.events.filter(event => event.type === 'turn/start')).toHaveLength(2)
-    await page.getByRole('button', { name: 'Send message' }).waitFor({ timeout: 15_000 })
+    await page.getByRole('button', { name: 'Send message' }).waitFor({ timeout: scaledTimeout(15_000) })
 
     // Only the waking send resumes the parked queue, FIFO, to settlement.
     await input.fill(WAKING)
     await input.press('Enter')
-    await expect.poll(() => page.getByText(REARMED_ANSWER, { exact: true }).count(), { timeout: 30_000 }).toBe(1)
-    await expect.poll(() => page.getByText(PARKED_ANSWER, { exact: true }).count(), { timeout: 30_000 }).toBe(1)
-    await expect.poll(() => page.getByText(WAKING_ANSWER, { exact: true }).count(), { timeout: 30_000 }).toBe(1)
-    await expect.poll(() => scaffold.ctx.agents.get(childId), { timeout: 60_000 }).toBeUndefined()
+    await expect.poll(() => page.getByText(REARMED_ANSWER, { exact: true }).count(), { timeout: scaledTimeout(30_000) }).toBe(1)
+    await expect.poll(() => page.getByText(PARKED_ANSWER, { exact: true }).count(), { timeout: scaledTimeout(30_000) }).toBe(1)
+    await expect.poll(() => page.getByText(WAKING_ANSWER, { exact: true }).count(), { timeout: scaledTimeout(30_000) }).toBe(1)
+    await expect.poll(() => scaffold.ctx.agents.get(childId), { timeout: scaledTimeout(60_000) }).toBeUndefined()
 
     const loaded = await scaffold.ctx.sessionPersistence.load(childId)
     const userTexts = loaded.events.flatMap(event => event.type === 'user/message'
@@ -311,7 +311,7 @@ describe.skipIf(MODE === 'record')('web e2e: composer interrupt for a running co
       .map(event => event.data.reason.kind)
     expect(turnEndKinds).toEqual(['aborted', 'aborted', 'completed', 'completed', 'completed'])
     expect(tripwire.pageErrors).toEqual([])
-  }, 120_000)
+  }, scaledTimeout(120_000))
 
   it('keeps its snapshot inventory closed', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, ['offline-composer.expected.md'])

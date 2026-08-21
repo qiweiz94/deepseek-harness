@@ -11,7 +11,7 @@ import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden,
   launchWebScaffold, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { ZH_BROWSER_LOCALE, connectFreshWorkspaceZh, saveFailureShot } from './support.ts'
+import { ZH_BROWSER_LOCALE, connectFreshWorkspaceZh, saveFailureShot, scaledTimeout } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/access-confirmation', import.meta.url))
 const UI_EXPECTED = join(SNAPSHOT_DIR, 'ui.expected.md')
@@ -35,9 +35,9 @@ describe('web e2e: Full access confirmation', () => {
     page = await browser.newPage({ viewport: { width: 1680, height: 1000 }, locale: ZH_BROWSER_LOCALE })
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     await connectFreshWorkspaceZh(page, scaffold.workspaceCwd)
-  }, 120_000)
+  }, scaledTimeout(120_000))
 
   afterAll(async () => {
     await browser?.close()
@@ -47,14 +47,14 @@ describe('web e2e: Full access confirmation', () => {
   it('requires acknowledgement before the composer picker can enable Full access', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-full-access-confirmation'))
     const access = page.locator('button[aria-label^="访问模式"]').first()
-    await access.waitFor({ timeout: 10_000 })
+    await access.waitFor({ timeout: scaledTimeout(10_000) })
 
     expect(await access.getAttribute('aria-label')).toBe('访问模式，当前：Workspace Write')
 
     await access.click()
     await page.getByRole('menuitem', { name: 'Full access' }).click()
     const dialog = page.getByRole('dialog', { name: '确认启用 Full access？' })
-    await dialog.waitFor({ timeout: 10_000 })
+    await dialog.waitFor({ timeout: scaledTimeout(10_000) })
     const enable = dialog.getByRole('button', { name: '启用 Full access' })
     expect(await enable.isDisabled()).toBe(true)
 
@@ -67,11 +67,11 @@ describe('web e2e: Full access confirmation', () => {
     await dialog.getByRole('checkbox', { name: '我已了解风险，并愿意继续' }).check()
     expect(await enable.isEnabled()).toBe(true)
     await enable.click()
-    await expect.poll(() => access.getAttribute('aria-label'), { timeout: 10_000 })
+    await expect.poll(() => access.getAttribute('aria-label'), { timeout: scaledTimeout(10_000) })
       .toBe('访问模式，当前：Full access')
     expect(await dialog.count()).toBe(0)
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('keeps its snapshot inventory closed', async () => {
     expect(tripwire.warnings).toEqual([])

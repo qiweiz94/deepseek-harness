@@ -61,7 +61,7 @@ import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-agent'
 import { provideCmdline } from '@deepseek-ai/dsh-cmdline'
-import { REPO_ROOT, requireDist } from './support.ts'
+import { REPO_ROOT, requireDist, scaledTimeout } from './support.ts'
 
 // Host-side web e2e cannot import a browser package: doing so would pull that
 // package's complete TS project into this graph. Mirrored from
@@ -589,7 +589,7 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
     // Barrier stack: the in-process turn/end identifies the session, its
     // explicit flush makes the transcript durable, and the caller's browser
     // settled-poll comes last because host completion strictly precedes render.
-    whenTurnSettled(timeoutMs = mode === 'record' ? 180_000 : 30_000): Promise<SessionId> {
+    whenTurnSettled(timeoutMs = mode === 'record' ? scaledTimeout(180_000) : scaledTimeout(30_000)): Promise<SessionId> {
       return new Promise<SessionId>((resolveSettled, reject) => {
         const timer = setTimeout(() => {
           off()
@@ -833,7 +833,7 @@ export async function captureStableAria(page: Page, selector: string, workspaceC
     const stable = current === previous
     previous = current
     return stable
-  }, { timeout: 5_000, message: 'aria snapshot did not stabilize' }).toBe(true)
+  }, { timeout: scaledTimeout(5_000), message: 'aria snapshot did not stabilize' }).toBe(true)
   return previous
 }
 

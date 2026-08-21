@@ -14,7 +14,7 @@ import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden,
   launchWebScaffold, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { ZH_BROWSER_LOCALE, connectFreshWorkspaceZh, saveFailureShot } from './support.ts'
+import { ZH_BROWSER_LOCALE, connectFreshWorkspaceZh, saveFailureShot, scaledTimeout } from './support.ts'
 
 /** Starts the shipped default on this scenario's declared reasoning model. */
 const OVERLAY = fileURLToPath(new URL('./declared-reasoning.overlay.yml', import.meta.url))
@@ -52,9 +52,9 @@ describe.skipIf(MODE === 'record')('web e2e: declared reasoning efforts reach th
     page = await browser.newPage({ viewport: { width: 1680, height: 1000 }, locale: ZH_BROWSER_LOCALE })
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     await connectFreshWorkspaceZh(page, scaffold.workspaceCwd)
-  }, 120_000)
+  }, scaledTimeout(120_000))
 
   afterAll(async () => {
     await browser?.close()
@@ -64,7 +64,7 @@ describe.skipIf(MODE === 'record')('web e2e: declared reasoning efforts reach th
   it('offers exactly the declared levels and records the picked one', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-declared-reasoning'))
     const trigger = page.getByRole('button', { name: /^选择模型/ })
-    await trigger.waitFor({ timeout: 15_000 })
+    await trigger.waitFor({ timeout: scaledTimeout(15_000) })
     await trigger.click()
     await page.getByRole('menuitem', { name: /推理等级/ }).click()
 
@@ -72,7 +72,7 @@ describe.skipIf(MODE === 'record')('web e2e: declared reasoning efforts reach th
     // configures no `reasoning`), then Off/High/Max — minimal, low, medium,
     // and xhigh were not declared and must not be offered.
     const levels = page.getByRole('menuitemradio')
-    await expect.poll(async () => levels.allTextContents(), { timeout: 10_000 })
+    await expect.poll(async () => levels.allTextContents(), { timeout: scaledTimeout(10_000) })
       .toEqual(['Default', 'Off', 'High', 'Max'])
     const snapshot = await captureStableAria(page, '[role="menu"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(UI_EXPECTED, snapshot, MODE)
@@ -82,12 +82,12 @@ describe.skipIf(MODE === 'record')('web e2e: declared reasoning efforts reach th
     await page.getByRole('menuitemradio', { name: 'High' }).click()
     await expect.poll(
       async () => readFile(join(scaffold.harnessHome, 'settings.yaml'), 'utf8'),
-      { timeout: 10_000 },
+      { timeout: scaledTimeout(10_000) },
     ).toContain('reasoningEffort: high')
-    await expect.poll(() => trigger.getAttribute('aria-label'), { timeout: 10_000 })
+    await expect.poll(() => trigger.getAttribute('aria-label'), { timeout: scaledTimeout(10_000) })
       .toBe('选择模型，当前 Acme Think，推理等级 High')
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('keeps its snapshot inventory closed', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, ['ui.expected.md'])

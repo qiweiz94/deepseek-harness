@@ -19,7 +19,7 @@ import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { launchWebScaffold, watchConsole, type WebScaffold } from './scaffold.ts'
-import { ZH_BROWSER_LOCALE, connectFreshWorkspaceZh, saveFailureShot } from './support.ts'
+import { ZH_BROWSER_LOCALE, connectFreshWorkspaceZh, saveFailureShot, scaledTimeout } from './support.ts'
 
 /** Points the shipped shared Agent default at this scenario's own route. */
 const OVERLAY = fileURLToPath(new URL('./default-model.overlay.yml', import.meta.url))
@@ -83,11 +83,11 @@ describe('web e2e: the composer model switch is the default for later sessions',
     page = await browser.newPage({ viewport: { width: 1680, height: 1000 }, locale: ZH_BROWSER_LOCALE })
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     // The composer's seats only exist once a workspace is connected: without
     // one the input is the locked placeholder and no session scope is open.
     await connectFreshWorkspaceZh(page, scaffold.workspaceCwd)
-  }, 120_000)
+  }, scaledTimeout(120_000))
 
   afterAll(async () => {
     await browser?.close()
@@ -105,7 +105,7 @@ describe('web e2e: the composer model switch is the default for later sessions',
     })
 
     const trigger = page.getByRole('button', { name: /^选择模型/ })
-    await trigger.waitFor({ timeout: 15_000 })
+    await trigger.waitFor({ timeout: scaledTimeout(15_000) })
     await trigger.click()
     await page.getByRole('menuitem', { name: /模型/ }).click()
     await page.getByRole('menuitemradio', { name: 'Acme Large' }).click()
@@ -114,7 +114,7 @@ describe('web e2e: the composer model switch is the default for later sessions',
     // now names it, beside the provider profiles the Models page writes.
     await expect.poll(
       async () => readFile(join(scaffold.harnessHome, 'settings.yaml'), 'utf8'),
-      { timeout: 10_000 },
+      { timeout: scaledTimeout(10_000) },
     ).toContain('agent-default-model:')
     const document = await readFile(join(scaffold.harnessHome, 'settings.yaml'), 'utf8')
     expect(document).toContain(`provider: ${ROUTE}`)
@@ -126,12 +126,12 @@ describe('web e2e: the composer model switch is the default for later sessions',
     // ...while the one holding a logged route keeps deriving from its log.
     expect(await currentOf(loggedId)).toEqual({ provider: START_ROUTE, model: START_MODEL })
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('goes inert when the route the default names stops being served', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-default-model-blocked'))
     const box = page.locator('textarea[data-input-phase], textarea').first()
-    await expect.poll(async () => box.isEnabled(), { timeout: 10_000 }).toBe(true)
+    await expect.poll(async () => box.isEnabled(), { timeout: scaledTimeout(10_000) }).toBe(true)
 
     // What removing the provider on the Models page leaves behind: the saved
     // default still names the route, and nothing serves it any more.
@@ -139,7 +139,7 @@ describe('web e2e: the composer model switch is the default for later sessions',
     // stored profile in place.
     await scaffold.ctx.settings.replace(settingsNamespace('llm-pi-ai'), { providers: {} })
 
-    await expect.poll(async () => box.isEnabled(), { timeout: 15_000 }).toBe(false)
+    await expect.poll(async () => box.isEnabled(), { timeout: scaledTimeout(15_000) }).toBe(false)
     expect(await box.getAttribute('placeholder')).toBe('当前模型不可用，请先选择模型')
 
     // The block is an affordance; the refusal is the Host's. A client that
@@ -161,7 +161,7 @@ describe('web e2e: the composer model switch is the default for later sessions',
     await seat.click()
     await page.getByRole('menuitem', { name: /模型/ }).click()
     await page.getByRole('menuitemradio').first().click()
-    await expect.poll(async () => box.isEnabled(), { timeout: 15_000 }).toBe(true)
+    await expect.poll(async () => box.isEnabled(), { timeout: scaledTimeout(15_000) }).toBe(true)
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
 })

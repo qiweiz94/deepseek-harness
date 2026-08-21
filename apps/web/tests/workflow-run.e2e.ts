@@ -15,7 +15,7 @@ import {
   type WebScaffold,
 } from './scaffold.ts'
 import {
-  connectFreshWorkspace, newEnglishPage, REPO_ROOT, saveFailureShot,
+  connectFreshWorkspace, newEnglishPage, REPO_ROOT, saveFailureShot, scaledTimeout,
 } from './support.ts'
 
 const MODE = webSnapshotMode()
@@ -58,9 +58,9 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
-  }, 120_000)
+  }, scaledTimeout(120_000))
 
   afterAll(async () => {
     await browser?.close()
@@ -75,9 +75,9 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
     await input.press('Enter')
 
     const workflow = page.locator('[data-workflow-run][data-run-status="running"]')
-    await workflow.waitFor({ timeout: 30_000 })
+    await workflow.waitFor({ timeout: scaledTimeout(30_000) })
     const disclosures = workflow.locator('[data-disclosure-row]')
-    await disclosures.nth(1).waitFor({ timeout: 15_000 })
+    await disclosures.nth(1).waitFor({ timeout: scaledTimeout(15_000) })
     expect(await disclosures.nth(0).getAttribute('role')).toBeNull()
     expect(await disclosures.nth(0).getAttribute('aria-expanded')).toBeNull()
     expect(await disclosures.nth(1).getAttribute('role')).toBeNull()
@@ -85,7 +85,7 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
     expect(await disclosures.nth(0).evaluate(element => getComputedStyle(element).cursor)).not.toBe('pointer')
     expect(await disclosures.nth(1).evaluate(element => getComputedStyle(element).cursor)).not.toBe('pointer')
     const member = page.getByRole('button', { name: /^Open Reply with exactly the word/ })
-    await member.waitFor({ timeout: 15_000 })
+    await member.waitFor({ timeout: scaledTimeout(15_000) })
     await member.focus()
 
     const lightColor = await member.locator('[data-member-label]').evaluate(element => getComputedStyle(element).color)
@@ -138,7 +138,7 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
     await page.setViewportSize({ width: 1280, height: 800 })
 
     await member.click()
-    await page.getByText(CHILD_PROMPT, { exact: true }).waitFor({ timeout: 15_000 })
+    await page.getByText(CHILD_PROMPT, { exact: true }).waitFor({ timeout: scaledTimeout(15_000) })
 
     const sessions = page.getByRole('tree', { name: 'Sessions' })
     await sessions.getByRole('treeitem', { name: /Use the workflow tool exactly/ }).click()
@@ -160,16 +160,16 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
     await page.getByText(CHILD_PROMPT, { exact: false }).waitFor()
     await expect.poll(
       () => page.getByRole('button', { name: /^Open Reply with exactly the word/ }).count(),
-      { timeout: 10_000 },
+      { timeout: scaledTimeout(10_000) },
     ).toBe(0)
-  }, 90_000)
+  }, scaledTimeout(90_000))
 
   it('rebuilds the terminal record from history after reload', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-workflow-run-history'))
     await page.reload({ waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     const workflow = page.getByRole('button', { name: /^snapshot-flow/ })
-    await workflow.waitFor({ timeout: 15_000 })
+    await workflow.waitFor({ timeout: scaledTimeout(15_000) })
     expect(await workflow.getAttribute('aria-expanded')).toBe('false')
     await workflow.click()
     const phase = page.getByRole('button', { name: /^Run/ })
@@ -181,7 +181,7 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
 
     const snapshot = await captureStableAria(page, '[data-chat-flow]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(UI_EXPECTED, snapshot, MODE)
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('stays clean and owns only its one golden', async () => {
     expect(tripwire.pageErrors).toEqual([])

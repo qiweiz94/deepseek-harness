@@ -20,7 +20,7 @@ import {
   captureStableAria, compareOrRefreshGolden, launchWebScaffold, watchConsole,
   webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { ZH_BROWSER_LOCALE, connectFreshWorkspaceZh, saveFailureShot } from './support.ts'
+import { ZH_BROWSER_LOCALE, connectFreshWorkspaceZh, saveFailureShot, scaledTimeout } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/agent-preset-authoring', import.meta.url))
 const SECTION_EXPECTED = join(SNAPSHOT_DIR, 'section.expected.md')
@@ -72,8 +72,8 @@ describe('web e2e: agent-preset authoring is a host-side copy', () => {
     page = await browser.newPage({ viewport: { width: 1680, height: 1000 }, locale: ZH_BROWSER_LOCALE })
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
-  }, 120_000)
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
+  }, scaledTimeout(120_000))
 
   afterAll(async () => {
     await browser?.close()
@@ -84,10 +84,10 @@ describe('web e2e: agent-preset authoring is a host-side copy', () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-preset-authoring-section'))
     await page.getByRole('button', { name: '设置', exact: true }).click()
     const dialog = settingsDialog()
-    await dialog.waitFor({ timeout: 10_000 })
+    await dialog.waitFor({ timeout: scaledTimeout(10_000) })
     await dialog.getByRole('button', { name: 'Agent 预设' }).click()
-    await dialog.getByRole('heading', { name: 'Agent 预设' }).waitFor({ timeout: 10_000 })
-    await dialog.getByText('标准模式').first().waitFor({ timeout: 10_000 })
+    await dialog.getByRole('heading', { name: 'Agent 预设' }).waitFor({ timeout: scaledTimeout(10_000) })
+    await dialog.getByText('标准模式').first().waitFor({ timeout: scaledTimeout(10_000) })
 
     const snapshot = await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd)
 
@@ -100,14 +100,14 @@ describe('web e2e: agent-preset authoring is a host-side copy', () => {
     expect(snapshot).toContain('查看: 标准模式')
     expect(snapshot).not.toContain('删除: 标准模式')
     expect(snapshot).not.toContain('打开目录')
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('views a shipped composition read-only instead of editing it', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-preset-authoring-view'))
     const dialog = settingsDialog()
     await dialog.getByRole('button', { name: '查看: 标准模式' }).click()
     const viewer = page.getByRole('dialog', { name: '查看 · 标准模式' })
-    await viewer.waitFor({ timeout: 10_000 })
+    await viewer.waitFor({ timeout: scaledTimeout(10_000) })
 
     // The real shipped composition, not a golden: the viewer shows whatever
     // the deployment ships, and this lane only asserts it is shown read-only.
@@ -117,15 +117,15 @@ describe('web e2e: agent-preset authoring is a host-side copy', () => {
     // The header X and the footer button share the 关闭 name; the footer one
     // is last in the dialog.
     await viewer.getByRole('button', { name: '关闭' }).last().click()
-    await viewer.waitFor({ state: 'detached', timeout: 10_000 })
-  }, 60_000)
+    await viewer.waitFor({ state: 'detached', timeout: scaledTimeout(10_000) })
+  }, scaledTimeout(60_000))
 
   it('copies 极简模式 whole under a new id and lands in its files', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-preset-authoring-copy'))
     const dialog = settingsDialog()
     await dialog.getByRole('button', { name: '复制: 极简模式' }).click()
     const copyDialog = page.getByRole('dialog', { name: '复制预设 · 复制自 极简模式' })
-    await copyDialog.waitFor({ timeout: 10_000 })
+    await copyDialog.waitFor({ timeout: scaledTimeout(10_000) })
 
     const dialogSnapshot = await captureStableAria(
       page, '[role="dialog"][aria-label^="复制预设"]', scaffold.workspaceCwd)
@@ -138,13 +138,13 @@ describe('web e2e: agent-preset authoring is a host-side copy', () => {
     await copyDialog.getByPlaceholder('my-agent').fill('my-agent')
     await copyDialog.getByPlaceholder('选择器中显示的名字，缺省用标识符').fill('我的模式')
     await copyDialog.getByRole('button', { name: '创建' }).click()
-    await copyDialog.waitFor({ state: 'detached', timeout: 10_000 })
+    await copyDialog.waitFor({ state: 'detached', timeout: scaledTimeout(10_000) })
 
     // The new row lands in the custom group, and — with no desktop opener —
     // its directory is revealed as text right away: landing in the files is
     // the completion of a copy, not a follow-up.
-    await dialog.getByText('我的模式').first().waitFor({ timeout: 10_000 })
-    await dialog.getByText('预设文件：').waitFor({ timeout: 10_000 })
+    await dialog.getByText('我的模式').first().waitFor({ timeout: scaledTimeout(10_000) })
+    await dialog.getByText('预设文件：').waitFor({ timeout: scaledTimeout(10_000) })
     // The copy dialog is detached, so the settings dialog is the only one
     // left (it names itself via aria-labelledby, which a CSS attribute
     // selector cannot address).
@@ -163,25 +163,25 @@ describe('web e2e: agent-preset authoring is a host-side copy', () => {
     expect(metadata).toContain('name: 我的模式')
     expect(metadata).toContain('description: 仅提供持久 bash 与 str_replace_editor 的双工具编码 Agent。')
     expect(metadata).not.toContain('order:')
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('deletes the copy after confirmation and reclaims the roster', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-preset-authoring-delete'))
     const dialog = settingsDialog()
     await dialog.getByRole('button', { name: '删除: 我的模式' }).click()
     const confirm = page.getByRole('dialog', { name: '删除该预设？' })
-    await confirm.waitFor({ timeout: 10_000 })
+    await confirm.waitFor({ timeout: scaledTimeout(10_000) })
     await confirm.getByRole('button', { name: '删除', exact: true }).click()
-    await confirm.waitFor({ state: 'detached', timeout: 10_000 })
+    await confirm.waitFor({ state: 'detached', timeout: scaledTimeout(10_000) })
 
-    await expect.poll(async () => dialog.getByText('我的模式').count(), { timeout: 10_000 }).toBe(0)
+    await expect.poll(async () => dialog.getByText('我的模式').count(), { timeout: scaledTimeout(10_000) }).toBe(0)
     expect(existsSync(join(userRoot, 'my-agent'))).toBe(false)
     // The custom group outlives its only member: the heading stays with the
     // creator entry so the place to author a preset never disappears.
     expect(await dialog.getByRole('heading', { name: '自定义' }).count()).toBe(1)
     expect(await dialog.getByRole('button', { name: '用「创造模式」创作自定义预设' }).count()).toBe(1)
     expect(await dialog.getByText('标准模式').count()).toBeGreaterThan(0)
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('marks damaged presets broken and clears a ghost through delete', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-preset-authoring-damaged'))
@@ -196,7 +196,7 @@ describe('web e2e: agent-preset authoring is a host-side copy', () => {
     const dialog = settingsDialog()
     await dialog.getByRole('button', { name: '通用设置' }).click()
     await dialog.getByRole('button', { name: 'Agent 预设' }).click()
-    await dialog.getByText('加载失败').first().waitFor({ timeout: 10_000 })
+    await dialog.getByText('加载失败').first().waitFor({ timeout: scaledTimeout(10_000) })
 
     const snapshot = withPresetRoot(
       await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd))
@@ -217,28 +217,28 @@ describe('web e2e: agent-preset authoring is a host-side copy', () => {
     // is claimable again immediately afterwards.
     await dialog.getByRole('button', { name: '删除: 幽灵预设' }).click()
     const confirm = page.getByRole('dialog', { name: '删除该预设？' })
-    await confirm.waitFor({ timeout: 10_000 })
+    await confirm.waitFor({ timeout: scaledTimeout(10_000) })
     await confirm.getByRole('button', { name: '删除', exact: true }).click()
-    await confirm.waitFor({ state: 'detached', timeout: 10_000 })
-    await expect.poll(async () => dialog.getByText('幽灵预设').count(), { timeout: 10_000 }).toBe(0)
+    await confirm.waitFor({ state: 'detached', timeout: scaledTimeout(10_000) })
+    await expect.poll(async () => dialog.getByText('幽灵预设').count(), { timeout: scaledTimeout(10_000) }).toBe(0)
     expect(existsSync(join(userRoot, 'ghost'))).toBe(false)
 
     await dialog.getByRole('button', { name: '复制: 极简模式' }).click()
     const copyDialog = page.getByRole('dialog', { name: '复制预设 · 复制自 极简模式' })
-    await copyDialog.waitFor({ timeout: 10_000 })
+    await copyDialog.waitFor({ timeout: scaledTimeout(10_000) })
     await copyDialog.getByPlaceholder('my-agent').fill('ghost')
     await copyDialog.getByRole('button', { name: '创建' }).click()
-    await copyDialog.waitFor({ state: 'detached', timeout: 10_000 })
-    await dialog.getByRole('button', { name: '设为默认: ghost' }).waitFor({ timeout: 10_000 })
+    await copyDialog.waitFor({ state: 'detached', timeout: scaledTimeout(10_000) })
+    await dialog.getByRole('button', { name: '设为默认: ghost' }).waitFor({ timeout: scaledTimeout(10_000) })
 
     // Leave the roster as the earlier tests shaped it.
     await dialog.getByRole('button', { name: '删除: ghost' }).click()
     const cleanup = page.getByRole('dialog', { name: '删除该预设？' })
-    await cleanup.waitFor({ timeout: 10_000 })
+    await cleanup.waitFor({ timeout: scaledTimeout(10_000) })
     await cleanup.getByRole('button', { name: '删除', exact: true }).click()
-    await cleanup.waitFor({ state: 'detached', timeout: 10_000 })
+    await cleanup.waitFor({ state: 'detached', timeout: scaledTimeout(10_000) })
     await rm(join(userRoot, 'broken-yaml'), { recursive: true, force: true })
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('starts a creator-mode session from the section', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-preset-authoring-creator'))
@@ -249,15 +249,15 @@ describe('web e2e: agent-preset authoring is a host-side copy', () => {
     await connectFreshWorkspaceZh(page, scaffold.workspaceCwd)
     await page.getByRole('button', { name: '设置', exact: true }).click()
     const dialog = settingsDialog()
-    await dialog.waitFor({ timeout: 10_000 })
+    await dialog.waitFor({ timeout: scaledTimeout(10_000) })
     await dialog.getByRole('button', { name: 'Agent 预设' }).click()
     await dialog.getByRole('button', { name: '用「创造模式」创作自定义预设' }).click()
 
     // Leaving settings is part of the gesture: the flow lands on the
     // new-session screen with the self-referential preset staged, and the
     // blank session the flow produces composes from it on the host.
-    await dialog.waitFor({ state: 'detached', timeout: 10_000 })
-    await page.getByRole('button', { name: '创造模式' }).waitFor({ timeout: 10_000 })
+    await dialog.waitFor({ state: 'detached', timeout: scaledTimeout(10_000) })
+    await page.getByRole('button', { name: '创造模式' }).waitFor({ timeout: scaledTimeout(10_000) })
     await expect.poll(async () => {
       const response = await fetch(`${scaffold.baseUrl}/api/session.list`, {
         method: 'POST',
@@ -270,8 +270,8 @@ describe('web e2e: agent-preset authoring is a host-side copy', () => {
         result: { value?: { sessions: unknown[] } }
       }
       return JSON.stringify(body.result.value?.sessions ?? body.result)
-    }, { timeout: 15_000 }).toContain('"agentPreset":"cordis"')
-  }, 60_000)
+    }, { timeout: scaledTimeout(15_000) }).toContain('"agentPreset":"cordis"')
+  }, scaledTimeout(60_000))
 
   it('drove every surface without a page error or a stream warning', () => {
     expect(tripwire.pageErrors).toEqual([])

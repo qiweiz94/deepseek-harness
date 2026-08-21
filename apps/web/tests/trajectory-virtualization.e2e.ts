@@ -20,7 +20,7 @@ import {
   webSnapshotMode,
   type WebScaffold,
 } from './scaffold.ts'
-import { newEnglishPage, saveFailureShot } from './support.ts'
+import { newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const MODE = webSnapshotMode()
 const LOAD_MORE_EXPECTED = fileURLToPath(new URL(
@@ -72,20 +72,20 @@ async function openSeed(page: Page): Promise<void> {
   const search = page.getByRole('textbox', { name: 'Search sessions...', exact: true })
   await search.fill(FIXTURE.markers.user(1))
   const result = page.getByRole('tree', { name: 'Search results' }).getByRole('treeitem')
-  await expect.poll(() => result.count(), { timeout: 60_000 }).toBe(1)
+  await expect.poll(() => result.count(), { timeout: scaledTimeout(60_000) }).toBe(1)
   await result.click()
-  await page.getByRole('tab', { name: 'Trajectory', exact: true }).waitFor({ timeout: 30_000 })
+  await page.getByRole('tab', { name: 'Trajectory', exact: true }).waitFor({ timeout: scaledTimeout(30_000) })
   await page.getByText(FIXTURE.markers.assistant(FIXTURE.turns), { exact: false })
     .last()
-    .waitFor({ timeout: 30_000 })
+    .waitFor({ timeout: scaledTimeout(30_000) })
 }
 
 async function openTrajectory(page: Page): Promise<void> {
   await page.getByRole('tab', { name: 'Trajectory', exact: true }).click()
   const pane = page.locator('[data-trajectory-scroll]')
-  await pane.waitFor({ timeout: 30_000 })
+  await pane.waitFor({ timeout: scaledTimeout(30_000) })
   await page.locator('[data-trajectory-scroll] table[data-scroll-ready="true"]')
-    .waitFor({ timeout: 30_000 })
+    .waitFor({ timeout: scaledTimeout(30_000) })
 }
 
 async function logicalRows(page: Page): Promise<number> {
@@ -161,12 +161,12 @@ async function loadToFirstTurn(page: Page): Promise<void> {
     await expect.poll(async () => ({
       marker: await page.getByText(marker, { exact: false }).count() > 0,
       rows: await logicalRows(page),
-    }), { timeout: 30_000 }).not.toEqual({ marker: false, rows: before })
+    }), { timeout: scaledTimeout(30_000) }).not.toEqual({ marker: false, rows: before })
     await nextPaint(page)
     await expect.poll(async () => {
       const top = await rowTop(page, anchor.key)
       return top === null ? Number.POSITIVE_INFINITY : Math.abs(top - anchor.top)
-    }, { timeout: 15_000 }).toBeLessThanOrEqual(GEOMETRY_TOLERANCE)
+    }, { timeout: scaledTimeout(15_000) }).toBeLessThanOrEqual(GEOMETRY_TOLERANCE)
   }
   throw new Error('trajectory did not reach the first turn after twelve older-page requests')
 }
@@ -197,11 +197,11 @@ describe('web e2e: Trajectory virtualization over tail-paged history', () => {
     page = await newEnglishPage(browser, 900)
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     // The compact layout dropped group session counts; the seeded baseline is
     // the Ungrouped bucket once cold summaries load.
-    await page.getByText('Ungrouped', { exact: true }).waitFor({ timeout: 30_000 })
-  }, 120_000)
+    await page.getByText('Ungrouped', { exact: true }).waitFor({ timeout: scaledTimeout(30_000) })
+  }, scaledTimeout(120_000))
 
   afterAll(async () => {
     await browser?.close()
@@ -244,7 +244,7 @@ describe('web e2e: Trajectory virtualization over tail-paged history', () => {
       expect(await mountedRows(page)).toBeLessThanOrEqual(MAX_MOUNTED_ROWS)
 
       const loadMore = page.locator('[data-history-load] button')
-      await loadMore.waitFor({ timeout: 15_000 })
+      await loadMore.waitFor({ timeout: scaledTimeout(15_000) })
       expect(await loadMore.textContent()).toBe('Load earlier history')
       const loadMoreSnapshot = await captureStableAria(
         page,
@@ -254,11 +254,11 @@ describe('web e2e: Trajectory virtualization over tail-paged history', () => {
       await compareOrRefreshGolden(LOAD_MORE_EXPECTED, loadMoreSnapshot, MODE)
       // Avoid Playwright scrolling the offscreen first row into the automatic-load threshold.
       await loadMore.evaluate((button: HTMLButtonElement) => { button.click() })
-      await expect.poll(() => held, { timeout: 15_000 }).toBe(true)
+      await expect.poll(() => held, { timeout: scaledTimeout(15_000) }).toBe(true)
       await expect.poll(async () => ({
         disabled: await loadMore.isDisabled(),
         label: await loadMore.getAttribute('aria-label'),
-      }), { timeout: 15_000 }).toEqual({
+      }), { timeout: scaledTimeout(15_000) }).toEqual({
         disabled: true,
         label: 'Loading earlier history…',
       })
@@ -269,24 +269,24 @@ describe('web e2e: Trajectory virtualization over tail-paged history', () => {
         `[data-trajectory-scroll] tr[data-trajectory-row-key=${JSON.stringify(anchor.key)}]`,
       )
       await selectedRow.click()
-      await expect.poll(() => selectedRow.getAttribute('aria-selected'), { timeout: 10_000 })
+      await expect.poll(() => selectedRow.getAttribute('aria-selected'), { timeout: scaledTimeout(10_000) })
         .toBe('true')
 
       releaseHistory()
-      await expect.poll(() => logicalRows(page), { timeout: 60_000 }).toBeGreaterThan(initialRows)
+      await expect.poll(() => logicalRows(page), { timeout: scaledTimeout(60_000) }).toBeGreaterThan(initialRows)
       await nextPaint(page)
       await expect.poll(async () => {
         const top = await rowTop(page, anchor.key)
         return top === null ? Number.POSITIVE_INFINITY : Math.abs(top - anchor.top)
-      }, { timeout: 15_000 }).toBeLessThanOrEqual(GEOMETRY_TOLERANCE)
-      await expect.poll(() => selectedRow.getAttribute('aria-selected'), { timeout: 10_000 })
+      }, { timeout: scaledTimeout(15_000) }).toBeLessThanOrEqual(GEOMETRY_TOLERANCE)
+      await expect.poll(() => selectedRow.getAttribute('aria-selected'), { timeout: scaledTimeout(10_000) })
         .toBe('true')
       expect(await mountedRows(page)).toBeLessThanOrEqual(MAX_MOUNTED_ROWS)
 
       await loadToFirstTurn(page)
       await expect.poll(
         () => page.getByText(FIXTURE.markers.user(1), { exact: false }).count(),
-        { timeout: 10_000 },
+        { timeout: scaledTimeout(10_000) },
       ).toBeGreaterThan(0)
       const fullRows = await logicalRows(page)
 
@@ -302,10 +302,10 @@ describe('web e2e: Trajectory virtualization over tail-paged history', () => {
       await expect.poll(async () => {
         const value = await geometry(page)
         return value.scrollHeight - value.clientHeight - value.scrollTop
-      }, { timeout: 10_000 }).toBeLessThanOrEqual(GEOMETRY_TOLERANCE)
+      }, { timeout: scaledTimeout(10_000) }).toBeLessThanOrEqual(GEOMETRY_TOLERANCE)
       await expect.poll(
         () => page.getByText(FIXTURE.markers.assistant(FIXTURE.turns), { exact: false }).count(),
-        { timeout: 10_000 },
+        { timeout: scaledTimeout(10_000) },
       ).toBeGreaterThan(0)
       expect(await mountedRows(page)).toBeLessThanOrEqual(MAX_MOUNTED_ROWS)
 
@@ -325,7 +325,7 @@ describe('web e2e: Trajectory virtualization over tail-paged history', () => {
       await input.fill('Stream one deterministic response while Trajectory remains visible.')
       await input.press('Enter')
       await settled
-      await page.getByText('stream fragment 01', { exact: false }).waitFor({ timeout: 30_000 })
+      await page.getByText('stream fragment 01', { exact: false }).waitFor({ timeout: scaledTimeout(30_000) })
       await nextPaint(page)
       const streamingScrollCalls = await trajectoryScroll.evaluate(() => {
         return (window as Window & { __trajectoryScrollCalls?: number })
@@ -342,5 +342,5 @@ describe('web e2e: Trajectory virtualization over tail-paged history', () => {
       if (held) await heldRequestFinished
       await page.unroute('**/api/session.history')
     }
-  }, 180_000)
+  }, scaledTimeout(180_000))
 })

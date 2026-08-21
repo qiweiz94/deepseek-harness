@@ -72,7 +72,7 @@ import {
   assertFixtureInventory, compareOrRefreshGolden, launchWebScaffold, seedSession, watchConsole,
   webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { newEnglishPage, saveFailureShot } from './support.ts'
+import { newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const SEED = fileURLToPath(new URL('./snapshots/seeded-history/seed.jsonl', import.meta.url))
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/sidebar-scrollbar', import.meta.url))
@@ -249,13 +249,13 @@ async function measurePalette(page: Page): Promise<PaletteMetrics> {
   await pointAt(page, 'away')
   // Poll rather than sleep the linger out: the wait is the column's, and a
   // fixed sleep would either race it or pad every palette.
-  await expect.poll(async () => resolveThumb(page), { timeout: 10_000 }).toBe(NO_THUMB)
+  await expect.poll(async () => resolveThumb(page), { timeout: scaledTimeout(10_000) }).toBe(NO_THUMB)
   const quietThumb = await resolveThumb(page)
   await pointAt(page, 'list')
   // Poll the reveal too: the reading below is a colour, and taking it in the
   // same tick as the pointer move would race React's flush and land a
   // transparent thumb in the golden.
-  await expect.poll(async () => resolveThumb(page), { timeout: 10_000 }).not.toBe(NO_THUMB)
+  await expect.poll(async () => resolveThumb(page), { timeout: scaledTimeout(10_000) }).not.toBe(NO_THUMB)
   return { hovered: await measureList(page), quietThumb }
 }
 
@@ -357,7 +357,7 @@ async function pointAt(page: Page, where: 'list' | 'away'): Promise<void> {
  */
 async function expandSeededSessions(page: Page): Promise<void> {
   const bucket = page.getByText('Ungrouped', { exact: true }).locator('..').locator('..')
-  await bucket.waitFor({ timeout: 15_000 })
+  await bucket.waitFor({ timeout: scaledTimeout(15_000) })
   const rows = page.locator('[role="tree"][aria-label="Sessions"] [role="treeitem"]')
   const deadline = Date.now() + 30_000
   for (;;) {
@@ -396,13 +396,13 @@ describe('web e2e: sidebar session list scrollbar (reserved gutter / themed thum
     page = await newEnglishPage(browser, 800)
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     await expandSeededSessions(page)
     // Every assertion about a thumb colour needs a drawn thumb, and the column
     // only draws one under the pointer; the quiet state is asserted where it is
     // the subject rather than left as an ambient condition of the whole file.
     await pointAt(page, 'list')
-  }, 180_000)
+  }, scaledTimeout(180_000))
 
   afterAll(async () => {
     await browser?.close()
@@ -413,7 +413,7 @@ describe('web e2e: sidebar session list scrollbar (reserved gutter / themed thum
     onTestFailed(() => saveFailureShot(page, 'web-e2e-sidebar-scrollbar-gutter'))
     // Vacuity guard: with a non-overflowing list `stable` still reserves, but
     // the scenario would no longer be reproducing the reported situation.
-    await expect.poll(async () => (await measureList(page)).overflows, { timeout: 10_000 }).toBe(true)
+    await expect.poll(async () => (await measureList(page)).overflows, { timeout: scaledTimeout(10_000) }).toBe(true)
     const metrics = await measureList(page)
     expect(metrics.gutter).toBe('stable')
     // The control. `band > 0` is the whole observable effect of the
@@ -440,7 +440,7 @@ describe('web e2e: sidebar session list scrollbar (reserved gutter / themed thum
     expect(metrics.timeRight).toBeLessThanOrEqual(metrics.clientRight)
     expect(metrics.clientRight).toBeLessThan(metrics.borderRight)
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('draws no thumb until the pointer is over the column, and lingers on the way out', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-sidebar-scrollbar-pointer'))
@@ -451,7 +451,7 @@ describe('web e2e: sidebar session list scrollbar (reserved gutter / themed thum
     // still drawn on the leave itself, and gone once the window has passed. A
     // tighter timing assertion would pin the wall clock of a CI machine.
     expect(await resolveThumb(page)).toBe(revealed)
-    await expect.poll(async () => resolveThumb(page), { timeout: 10_000 }).toBe(NO_THUMB)
+    await expect.poll(async () => resolveThumb(page), { timeout: scaledTimeout(10_000) }).toBe(NO_THUMB)
     // The reservation is unconditional, so nothing moved while the bar was
     // hidden — this is what buys `transparent` over hiding the bar itself.
     const quiet = await measureList(page)
@@ -466,9 +466,9 @@ describe('web e2e: sidebar session list scrollbar (reserved gutter / themed thum
     await page.waitForTimeout(500)
     expect(await resolveThumb(page)).toBe(NO_THUMB)
     await pointAt(page, 'list')
-    await expect.poll(async () => resolveThumb(page), { timeout: 10_000 }).toBe(revealed)
+    await expect.poll(async () => resolveThumb(page), { timeout: scaledTimeout(10_000) }).toBe(revealed)
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('keeps the row background inset when overflow disappears', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-sidebar-scrollbar-stable-inset'))
@@ -476,13 +476,13 @@ describe('web e2e: sidebar session list scrollbar (reserved gutter / themed thum
     const bucket = page.getByText('Ungrouped', { exact: true }).locator('..').locator('..')
     await bucket.click()
     try {
-      await expect.poll(async () => (await measureRowInset(page)).overflows, { timeout: 10_000 }).toBe(false)
+      await expect.poll(async () => (await measureRowInset(page)).overflows, { timeout: scaledTimeout(10_000) }).toBe(false)
       expect(await measureRowInset(page)).toEqual({ overflows: false, rowEdgeInset: 12 })
     } finally {
       await expandSeededSessions(page)
     }
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('renders the themed thumb through the WebKit path in both palettes', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-sidebar-scrollbar-theme'))
@@ -517,7 +517,7 @@ describe('web e2e: sidebar session list scrollbar (reserved gutter / themed thum
     expect(restored.token).toBe(light.token)
     expect(restored.hoverToken).toBe(light.hoverToken)
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('matches the committed scrollbar geometry golden in both palettes', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-sidebar-scrollbar-golden'))
@@ -527,7 +527,7 @@ describe('web e2e: sidebar session list scrollbar (reserved gutter / themed thum
     await page.evaluate(() => { document.body.removeAttribute('data-ds-dark-theme') })
     await compareOrRefreshGolden(GEOMETRY_EXPECTED, renderGeometry(light, dark), MODE)
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('commits exactly the fixtures it reads', async () => {
     // The scenario borrows seeded-history's seed.jsonl rather than committing a

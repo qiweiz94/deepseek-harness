@@ -18,7 +18,7 @@ import {
   webSnapshotMode,
   type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, conversationContextKey, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, conversationContextKey, newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const MODE = webSnapshotMode()
 const TURN_COUNT = 12
@@ -198,9 +198,9 @@ describe('web e2e: continuous conversation grown through the composer', () => {
       if (message.type() === 'warning') consoleWarnings.push(message.text())
     })
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     await connectFreshWorkspace(page, scaffold.workspaceCwd, 'continuous-chat-e2e')
-  }, 120_000)
+  }, scaledTimeout(120_000))
 
   afterAll(async () => {
     const failures: unknown[] = []
@@ -217,7 +217,7 @@ describe('web e2e: continuous conversation grown through the composer', () => {
   it.skipIf(MODE === 'record')('keeps twelve generated turns and tool rows bound to one live session', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-chat-continuous-conversation'))
     const composer = page.locator('textarea:enabled').last()
-    await composer.waitFor({ timeout: 15_000 })
+    await composer.waitFor({ timeout: scaledTimeout(15_000) })
     let sessionId: SessionId | undefined
 
     for (const spec of specs) {
@@ -229,12 +229,12 @@ describe('web e2e: continuous conversation grown through the composer', () => {
 
       const settled = scaffold.whenTurnSettled(60_000)
       await page.getByRole('button', { name: 'Send message', exact: true }).click()
-      await page.getByText(spec.userMarker, { exact: false }).last().waitFor({ timeout: 15_000 })
+      await page.getByText(spec.userMarker, { exact: false }).last().waitFor({ timeout: scaledTimeout(15_000) })
       await expect.poll(() => sessionEvents.slice(eventStart).some(event => (
         event.type === 'user/message'
         && event.data.source.kind === 'user'
         && userText(event).includes(spec.userMarker)
-      )), { timeout: 15_000 }).toBe(true)
+      )), { timeout: scaledTimeout(15_000) }).toBe(true)
       const echoedUser = sessionEvents.slice(eventStart).find(
         (event): event is SessionEvent<'user/message'> => (
           event.type === 'user/message'
@@ -244,10 +244,10 @@ describe('web e2e: continuous conversation grown through the composer', () => {
       )
       if (echoedUser === undefined) throw new Error(`turn ${String(spec.index)} has no user echo event`)
       const userRow = page.locator(`[data-chat-anchor-key="${messageKey(echoedUser)}"]`)
-      await expect.poll(() => userRow.count(), { timeout: 10_000 }).toBe(1)
+      await expect.poll(() => userRow.count(), { timeout: scaledTimeout(10_000) }).toBe(1)
       expect(await userRow.getAttribute('data-chat-flow-kind')).toBe('user')
       expect(await userRow.textContent()).toContain(spec.userMarker)
-      await page.getByText(spec.firstMarker, { exact: false }).last().waitFor({ timeout: 15_000 })
+      await page.getByText(spec.firstMarker, { exact: false }).last().waitFor({ timeout: scaledTimeout(15_000) })
       const settledSessionId = await settled
       if (sessionId === undefined) {
         sessionId = settledSessionId
@@ -255,10 +255,10 @@ describe('web e2e: continuous conversation grown through the composer', () => {
         expect(settledSessionId).toBe(sessionId)
       }
 
-      await expect.poll(() => page.locator('[data-streaming="true"]').count(), { timeout: 15_000 }).toBe(0)
-      await page.getByText(spec.doneMarker, { exact: false }).last().waitFor({ timeout: 15_000 })
-      await expect.poll(() => composer.inputValue(), { timeout: 10_000 }).toBe('')
-      await expect.poll(() => composer.isEnabled(), { timeout: 10_000 }).toBe(true)
+      await expect.poll(() => page.locator('[data-streaming="true"]').count(), { timeout: scaledTimeout(15_000) }).toBe(0)
+      await page.getByText(spec.doneMarker, { exact: false }).last().waitFor({ timeout: scaledTimeout(15_000) })
+      await expect.poll(() => composer.inputValue(), { timeout: scaledTimeout(10_000) }).toBe('')
+      await expect.poll(() => composer.isEnabled(), { timeout: scaledTimeout(10_000) }).toBe(true)
 
       const turnEvents = sessionEvents.slice(eventStart)
       const turnStarts = turnEvents.filter((event): event is SessionEvent<'turn/start'> => (
@@ -288,7 +288,7 @@ describe('web e2e: continuous conversation grown through the composer', () => {
       expect(chunks).toHaveLength(spec.deltas.length + (spec.callId === undefined ? 4 : 9))
 
       const assistantRow = page.locator(`[data-chat-anchor-key="${assistantKey(finalAssistants[0]!)}"]`)
-      await expect.poll(() => assistantRow.count(), { timeout: 10_000 }).toBe(1)
+      await expect.poll(() => assistantRow.count(), { timeout: scaledTimeout(10_000) }).toBe(1)
       expect(await assistantRow.getAttribute('data-chat-flow-kind')).toBe('assistant-step')
       expect(await assistantRow.textContent()).toContain(spec.doneMarker)
 
@@ -313,17 +313,17 @@ describe('web e2e: continuous conversation grown through the composer', () => {
       expect(toolResultText(results[0]!)).toBe(`${spec.toolResultMarker}\n`)
 
       const toolRow = page.locator(`[data-chat-call-id="${spec.callId}"]`)
-      await expect.poll(() => toolRow.count(), { timeout: 10_000 }).toBe(1)
+      await expect.poll(() => toolRow.count(), { timeout: scaledTimeout(10_000) }).toBe(1)
       expect(await toolRow.textContent()).toContain(spec.toolResultMarker)
       const disclosure = toolRow.locator('[data-sample="bash"]')
       expect(await disclosure.getAttribute('aria-expanded')).toBe('false')
       await disclosure.click()
-      await expect.poll(() => disclosure.getAttribute('aria-expanded'), { timeout: 10_000 }).toBe('true')
+      await expect.poll(() => disclosure.getAttribute('aria-expanded'), { timeout: scaledTimeout(10_000) }).toBe('true')
       // The collapsed summary deliberately repeats the result marker; the
       // last exact match is the expanded terminal output owned by this call.
-      await toolRow.getByText(spec.toolResultMarker, { exact: true }).last().waitFor({ timeout: 10_000 })
+      await toolRow.getByText(spec.toolResultMarker, { exact: true }).last().waitFor({ timeout: scaledTimeout(10_000) })
       await disclosure.click()
-      await expect.poll(() => disclosure.getAttribute('aria-expanded'), { timeout: 10_000 }).toBe('false')
+      await expect.poll(() => disclosure.getAttribute('aria-expanded'), { timeout: scaledTimeout(10_000) }).toBe('false')
     }
 
     if (sessionId === undefined) throw new Error('continuous conversation completed no turn')
@@ -337,5 +337,5 @@ describe('web e2e: continuous conversation grown through the composer', () => {
     expect(consoleWarnings).toEqual([])
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
-  }, 180_000)
+  }, scaledTimeout(180_000))
 })

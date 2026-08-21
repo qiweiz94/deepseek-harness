@@ -19,7 +19,7 @@ import {
   webSnapshotMode,
   type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/sidebar-subagent-activity', import.meta.url))
 const RUNNING_OWNER_EXPECTED = join(SNAPSHOT_DIR, 'owner-running.expected.md')
@@ -112,12 +112,12 @@ describe('web e2e: sidebar subagent activity', () => {
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
     const workspace = await scaffold.ctx.workspaceRegistry.resolveByPath(cwd)
     if (workspace === undefined) throw new Error('connected Web workspace was not registered')
     await workspace.attachSession(parentHandle.agent.session.id)
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   afterAll(async () => {
     const failures: unknown[] = []
@@ -137,7 +137,7 @@ describe('web e2e: sidebar subagent activity', () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-sidebar-subagent-activity'))
     const sidebar = page.getByRole('tree', { name: 'Sessions' })
     const ownerRow = sidebar.getByRole('treeitem', { name: /1 subagent running Delegate a background job/ })
-    await ownerRow.waitFor({ timeout: 10_000 })
+    await ownerRow.waitFor({ timeout: scaledTimeout(10_000) })
     expect(parentHandle.agent.status).toBe('idle')
     await compareOrRefreshGolden(
       RUNNING_OWNER_EXPECTED,
@@ -147,7 +147,7 @@ describe('web e2e: sidebar subagent activity', () => {
     expect(await ownerRow.locator('[data-state="ongoing"]').count()).toBe(1)
     await ownerRow.click()
     const runningTrigger = page.getByRole('button', { name: '1 subagent running' })
-    await runningTrigger.waitFor({ timeout: 10_000 })
+    await runningTrigger.waitFor({ timeout: scaledTimeout(10_000) })
     expect(await runningTrigger.locator('[data-state="ongoing"]').count()).toBe(1)
     await assertFixtureInventory(SNAPSHOT_DIR, ['owner-running.expected.md'])
     expect(tripwire.pageErrors).toEqual([])

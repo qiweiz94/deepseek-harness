@@ -13,7 +13,7 @@ import type {} from '@deepseek-ai/dsh-session-title'
 import {
   launchWebScaffold, seedSession, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { newEnglishPage, saveFailureShot } from './support.ts'
+import { newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const MODE = webSnapshotMode()
 const OVERLAY = fileURLToPath(new URL('./produced-files.overlay.yml', import.meta.url))
@@ -119,8 +119,8 @@ describe('web e2e: a finished turn ends with the files it produced', () => {
     await page.setViewportSize({ width: 1280, height: 900 })
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
-  }, 120_000)
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
+  }, scaledTimeout(120_000))
 
   afterAll(async () => {
     await browser?.close()
@@ -130,16 +130,16 @@ describe('web e2e: a finished turn ends with the files it produced', () => {
   it.skipIf(MODE === 'record')('keeps a narrow ten-file summary on one line with +8 and a folder action', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-produced-files'))
     const groupRow = page.locator('[role="treeitem"]').first()
-    await groupRow.waitFor({ timeout: 15_000 })
+    await groupRow.waitFor({ timeout: scaledTimeout(15_000) })
     if (await groupRow.getAttribute('aria-expanded') !== 'true') await groupRow.click()
     const sessionRow = page.locator('[role="treeitem"]').nth(1)
-    await sessionRow.waitFor({ timeout: 10_000 })
+    await sessionRow.waitFor({ timeout: scaledTimeout(10_000) })
     await sessionRow.click()
 
-    await expect.poll(() => page.getByText(DONE, { exact: true }).count(), { timeout: 15_000 }).toBe(1)
+    await expect.poll(() => page.getByText(DONE, { exact: true }).count(), { timeout: scaledTimeout(15_000) }).toBe(1)
     await page.setViewportSize({ width: 780, height: 900 })
     const row = page.locator('[data-produced-files-row]')
-    await row.waitFor({ timeout: 15_000 })
+    await row.waitFor({ timeout: scaledTimeout(15_000) })
     const chips = row.getByRole('button')
     await expect.poll(() => chips.count()).toBe(2)
     expect(await chips.nth(0).innerText()).toBe('关于我.md')
@@ -176,5 +176,5 @@ describe('web e2e: a finished turn ends with the files it produced', () => {
 
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
-  }, 90_000)
+  }, scaledTimeout(90_000))
 })

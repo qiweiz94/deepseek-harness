@@ -39,7 +39,7 @@ import {
   assertFixtureInventory, compareOrRefreshGolden, launchWebScaffold, watchConsole,
   webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/composer-draft-scroll', import.meta.url))
 /**
@@ -257,10 +257,10 @@ describe('web e2e: composer draft scrolling', () => {
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     await connectFreshWorkspace(page, scaffold.workspaceCwd, 'composer-draft-scroll')
     await page.locator('textarea:enabled').first().fill(DRAFT)
-  }, 180_000)
+  }, scaledTimeout(180_000))
 
   afterAll(async () => {
     await browser?.close()
@@ -271,13 +271,13 @@ describe('web e2e: composer draft scrolling', () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-composer-draft-scroll-top'))
     // Vacuity guard: without an overflowing draft there is nothing to scroll and
     // every assertion below holds trivially.
-    await expect.poll(async () => (await measureComposer(page)).overflows, { timeout: 10_000 }).toBe(true)
+    await expect.poll(async () => (await measureComposer(page)).overflows, { timeout: scaledTimeout(10_000) }).toBe(true)
     // Typing the draft left the caret — and the box — at its end, so reach the
     // start by the same gesture a user would, and leave it there for the wheel
     // case below.
     await page.locator('textarea:enabled').first().hover()
     await page.mouse.wheel(0, -2000)
-    await expect.poll(async () => (await measureComposer(page)).scrollTop, { timeout: 10_000 }).toBe(0)
+    await expect.poll(async () => (await measureComposer(page)).scrollTop, { timeout: scaledTimeout(10_000) }).toBe(0)
     const metrics = await measureComposer(page)
     // The cap is the composer seat's `--dsh-composer-text-max-height` (336px =
     // 14 x 24px lines). The count, not the pixels: it is the figma constant and
@@ -291,7 +291,7 @@ describe('web e2e: composer draft scrolling', () => {
     expect(metrics.firstLineOffset).toBeLessThan(metrics.clientHeight)
     expect(metrics.lastLineOffset).toBeGreaterThan(metrics.clientHeight)
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('lays out all three text layers at one wrap width', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-composer-draft-scroll-wrap-width'))
@@ -308,7 +308,7 @@ describe('web e2e: composer draft scrolling', () => {
     // clip content before the 14-line cap, with every other assertion green.
     expect(metrics.mirrorWrapWidth).toBe(metrics.inputWrapWidth)
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('the glyphs cannot lag the caret: one task moves both', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-composer-draft-scroll-lag'))
@@ -321,7 +321,7 @@ describe('web e2e: composer draft scrolling', () => {
     const metrics = await measureComposer(page)
     expect(metrics.gapShiftOnScroll).toBe(0)
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('a wheel gesture over a long draft moves the words, not only the caret', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-composer-draft-scroll-wheel'))
@@ -332,7 +332,7 @@ describe('web e2e: composer draft scrolling', () => {
     // wheel-chaining handler leaves it native because the box is not yet at its
     // edge when the gesture starts (the chaining itself is owned by the unit spec).
     await page.mouse.wheel(0, 2000)
-    await expect.poll(async () => (await measureComposer(page)).scrollTop, { timeout: 10_000 })
+    await expect.poll(async () => (await measureComposer(page)).scrollTop, { timeout: scaledTimeout(10_000) })
       .toBeGreaterThan(0)
     const metrics = await measureComposer(page)
     // The caret is still on its own glyphs after the gesture.
@@ -343,7 +343,7 @@ describe('web e2e: composer draft scrolling', () => {
     expect(metrics.lastLineOffset).toBeLessThan(metrics.clientHeight)
     expect(metrics.firstLineOffset).toBeLessThan(0)
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('typing at the end of a scrolled draft brings the caret back into view', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-composer-draft-scroll-edit'))
@@ -356,14 +356,14 @@ describe('web e2e: composer draft scrolling', () => {
     await input.press('End')
     await input.hover()
     await page.mouse.wheel(0, -2000)
-    await expect.poll(async () => (await measureComposer(page)).scrollTop, { timeout: 10_000 }).toBe(0)
+    await expect.poll(async () => (await measureComposer(page)).scrollTop, { timeout: scaledTimeout(10_000) }).toBe(0)
     await input.pressSequentially(' tail')
     const metrics = await measureComposer(page)
     expect(metrics.scrollTop).toBeGreaterThan(0)
     expect(metrics.lastLineOffset).toBeGreaterThanOrEqual(0)
     expect(metrics.lastLineOffset).toBeLessThan(metrics.clientHeight)
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('pasting a long block scrolls to the caret it leaves at the end', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-composer-draft-scroll-paste'))
@@ -385,11 +385,11 @@ describe('web e2e: composer draft scrolling', () => {
       // lands on a line with nothing on it, where chromium reports no client
       // rects at all for the collapsed position.
     }, `\n${DRAFT}\n`)
-    await expect.poll(async () => (await measureComposer(page)).overflows, { timeout: 10_000 }).toBe(true)
+    await expect.poll(async () => (await measureComposer(page)).overflows, { timeout: scaledTimeout(10_000) }).toBe(true)
     // The restore lands one frame after the machine commits the draft, so the
     // box overflows before it moves; waiting on the offset is waiting for the
     // behavior itself, and its absence fails this poll.
-    await expect.poll(async () => (await measureComposer(page)).scrollTop, { timeout: 10_000 }).toBeGreaterThan(0)
+    await expect.poll(async () => (await measureComposer(page)).scrollTop, { timeout: scaledTimeout(10_000) }).toBeGreaterThan(0)
     const metrics = await measureComposer(page)
     // The caret is at the end of what was pasted, so the draft's last line is
     // what has to be on screen.
@@ -397,7 +397,7 @@ describe('web e2e: composer draft scrolling', () => {
     expect(metrics.lastLineOffset).toBeLessThan(metrics.clientHeight)
     expect(metrics.gapShiftOnScroll).toBe(0)
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('a draft ending in a newline scrolls to its true end, not a line above it', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-composer-draft-scroll-trailing-newline'))
@@ -406,13 +406,13 @@ describe('web e2e: composer draft scrolling', () => {
     // one line short of the caret's own last position.
     const input = page.locator('textarea:enabled').first()
     await input.fill(DRAFT_TRAILING_NEWLINE)
-    await expect.poll(async () => (await measureComposer(page)).overflows, { timeout: 10_000 }).toBe(true)
+    await expect.poll(async () => (await measureComposer(page)).overflows, { timeout: scaledTimeout(10_000) }).toBe(true)
     await input.hover()
     await page.mouse.wheel(0, 4000)
     await expect.poll(async () => {
       const m = await measureComposer(page)
       return m.scrollTop === m.scrollMax
-    }, { timeout: 10_000 }).toBe(true)
+    }, { timeout: scaledTimeout(10_000) }).toBe(true)
     const bottom = await measureComposer(page)
     // At the very bottom the glyphs are level with the caret, and the draft's
     // own last line — the one before the empty final line — is on screen.
@@ -420,7 +420,7 @@ describe('web e2e: composer draft scrolling', () => {
     expect(bottom.lastLineOffset).toBeGreaterThanOrEqual(0)
     expect(bottom.lastLineOffset).toBeLessThan(bottom.clientHeight)
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('matches the committed composer scroll geometry golden', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-composer-draft-scroll-golden'))
@@ -430,11 +430,11 @@ describe('web e2e: composer draft scrolling', () => {
     await input.fill(DRAFT)
     await input.hover()
     await page.mouse.wheel(0, -2000)
-    await expect.poll(async () => (await measureComposer(page)).scrollTop, { timeout: 10_000 }).toBe(0)
+    await expect.poll(async () => (await measureComposer(page)).scrollTop, { timeout: scaledTimeout(10_000) }).toBe(0)
     const top = await measureComposer(page)
     await input.hover()
     await page.mouse.wheel(0, 2000)
-    await expect.poll(async () => (await measureComposer(page)).scrollTop, { timeout: 10_000 })
+    await expect.poll(async () => (await measureComposer(page)).scrollTop, { timeout: scaledTimeout(10_000) })
       .toBeGreaterThan(0)
     const bottom = await measureComposer(page)
     await input.fill(DRAFT_TRAILING_NEWLINE)
@@ -443,7 +443,7 @@ describe('web e2e: composer draft scrolling', () => {
     await expect.poll(async () => {
       const m = await measureComposer(page)
       return m.scrollTop === m.scrollMax
-    }, { timeout: 10_000 }).toBe(true)
+    }, { timeout: scaledTimeout(10_000) }).toBe(true)
     const trailingNewline = await measureComposer(page)
     // The paste path, measured the way a user meets it: a short draft, the
     // caret at its end, one long block pasted in.
@@ -457,12 +457,12 @@ describe('web e2e: composer draft scrolling', () => {
       // of the reveal keeps a real engine under it; the case above owns the
       // after-newline branch.
     }, `\n${DRAFT}`)
-    await expect.poll(async () => (await measureComposer(page)).overflows, { timeout: 10_000 }).toBe(true)
-    await expect.poll(async () => (await measureComposer(page)).scrollTop, { timeout: 10_000 }).toBeGreaterThan(0)
+    await expect.poll(async () => (await measureComposer(page)).overflows, { timeout: scaledTimeout(10_000) }).toBe(true)
+    await expect.poll(async () => (await measureComposer(page)).scrollTop, { timeout: scaledTimeout(10_000) }).toBeGreaterThan(0)
     const pasted = await measureComposer(page)
     await compareOrRefreshGolden(GEOMETRY_EXPECTED, renderGeometry(top, bottom, trailingNewline, pasted), MODE)
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('commits exactly the fixtures it reads', async () => {
     // Zero model calls, so the scenario records no session fixture: the geometry

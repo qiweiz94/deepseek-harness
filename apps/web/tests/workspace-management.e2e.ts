@@ -22,7 +22,7 @@ import {
   acknowledgeReloadConnectionLoss, assertFixtureInventory, captureStableAria, compareOrRefreshGolden,
   launchWebScaffold, seedSession, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { newEnglishPage, saveFailureShot } from './support.ts'
+import { newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/workspace-management', import.meta.url))
 // The seed is another scenario's committed fixture, reused read-only: this
@@ -50,7 +50,7 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
   async function browseTo(path: string): Promise<Locator> {
     await page.getByRole('button', { name: 'Add workspace' }).click()
     const dialog = page.getByRole('dialog', { name: 'Select Workspace Directory' })
-    await dialog.waitFor({ timeout: 10_000 })
+    await dialog.waitFor({ timeout: scaledTimeout(10_000) })
     await dialog.getByRole('button', { name: 'Edit path' }).click()
     await dialog.getByLabel('Edit path').fill(path)
     await dialog.getByLabel('Edit path').press('Enter')
@@ -68,10 +68,10 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await page.getByRole('button', { name: 'Create', exact: true }).click()
     // Creating selects the new folder in the listing; Open adopts it.
     await dialog.getByRole('button', { name: 'Open', exact: true }).click()
-    await dialog.waitFor({ state: 'hidden', timeout: 10_000 })
+    await dialog.waitFor({ state: 'hidden', timeout: scaledTimeout(10_000) })
     await expect.poll(
       () => scaffold.ctx.workspaceRegistry.resolveByPath(join(parent, name)),
-      { timeout: 10_000 },
+      { timeout: scaledTimeout(10_000) },
     ).not.toBeUndefined()
   }
 
@@ -84,17 +84,17 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     const agentsBefore = scaffold.ctx.agents.list().length
     const dialog = await browseTo(path)
     await dialog.getByRole('button', { name: 'Open', exact: true }).click()
-    await dialog.waitFor({ state: 'hidden', timeout: 10_000 })
+    await dialog.waitFor({ state: 'hidden', timeout: scaledTimeout(10_000) })
     await expect.poll(
       () => scaffold.ctx.workspaceRegistry.resolveByPath(path),
-      { timeout: 10_000 },
+      { timeout: scaledTimeout(10_000) },
     ).not.toBeUndefined()
     // First adoption births a blank Session+Agent whose workspace attach must
     // settle before a test may delete the registration; re-registration after
     // a delete mints a fresh blank Session+Agent too (no cwd-based reuse
     // exists), so callers opt in only where a fresh attach is possible.
     if (options.waitForAgent === true) {
-      await expect.poll(() => scaffold.ctx.agents.list().length, { timeout: 10_000 })
+      await expect.poll(() => scaffold.ctx.agents.list().length, { timeout: scaledTimeout(10_000) })
         .toBeGreaterThan(agentsBefore)
     }
   }
@@ -108,7 +108,7 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await expect.poll(async () => {
       await row.hover()
       return await button.isVisible()
-    }, { timeout: 10_000 }).toBe(true)
+    }, { timeout: scaledTimeout(10_000) }).toBe(true)
     await button.click()
   }
 
@@ -124,8 +124,8 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
-  }, 120_000)
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
+  }, scaledTimeout(120_000))
 
   afterAll(async () => {
     await browser?.close()
@@ -137,7 +137,7 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     const add = async (name: string): Promise<void> => {
       await addNewFolderWorkspace(scaffold.workspaceCwd, name)
       // The real workspace materializes in the tree as a group row.
-      await expect.poll(() => page.getByText(name, { exact: true }).count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(1)
+      await expect.poll(() => page.getByText(name, { exact: true }).count(), { timeout: scaledTimeout(10_000) }).toBeGreaterThanOrEqual(1)
     }
     await add('alpha-ws')
     await add('beta-ws')
@@ -146,7 +146,7 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     const titles = scaffold.ctx.workspaceRegistry.list().map(workspace => workspace.title)
     expect(titles.slice(0, 2)).toEqual(['beta-ws', 'alpha-ws'])
     expect(tripwire.pageErrors).toEqual([])
-  }, 90_000)
+  }, scaledTimeout(90_000))
 
   it('renames a workspace over the wire with a duplicate-name pre-check', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-ws-rename'))
@@ -154,29 +154,29 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await clickHoverAction(alphaRow, 'Workspace actions for alpha-ws')
     await page.getByRole('menuitem', { name: 'Rename' }).click()
     const dialog = page.getByRole('dialog', { name: 'Rename workspace' })
-    await dialog.waitFor({ timeout: 10_000 })
+    await dialog.waitFor({ timeout: scaledTimeout(10_000) })
     const input = dialog.getByLabel('Workspace name')
     // Client pre-check: a name colliding with another live workspace raises
     // the inline alert and blocks the primary button before any wire call.
     await input.fill('beta-ws')
-    await expect.poll(() => dialog.getByRole('alert').count(), { timeout: 5_000 }).toBe(1)
+    await expect.poll(() => dialog.getByRole('alert').count(), { timeout: scaledTimeout(5_000) }).toBe(1)
     expect(await dialog.getByRole('button', { name: 'Rename' }).isDisabled()).toBe(true)
     // A fresh name goes through workspace.rename to the durable registry.
     await input.fill('gamma-ws')
-    await expect.poll(() => dialog.getByRole('alert').count(), { timeout: 5_000 }).toBe(0)
+    await expect.poll(() => dialog.getByRole('alert').count(), { timeout: scaledTimeout(5_000) }).toBe(0)
     await dialog.getByRole('button', { name: 'Rename' }).click()
-    await expect.poll(() => page.getByRole('dialog', { name: 'Rename workspace' }).count(), { timeout: 10_000 }).toBe(0)
-    await expect.poll(() => page.getByText('gamma-ws', { exact: true }).count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(1)
+    await expect.poll(() => page.getByRole('dialog', { name: 'Rename workspace' }).count(), { timeout: scaledTimeout(10_000) }).toBe(0)
+    await expect.poll(() => page.getByText('gamma-ws', { exact: true }).count(), { timeout: scaledTimeout(10_000) }).toBeGreaterThanOrEqual(1)
     expect(await page.getByText('alpha-ws', { exact: true }).count()).toBe(0)
     // Host durability, then reload: the projection is rebuilt from the wire.
     expect(scaffold.ctx.workspaceRegistry.list().map(workspace => workspace.title)).toContain('gamma-ws')
     const warningStart = tripwire.warnings.length
     await page.reload({ waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     acknowledgeReloadConnectionLoss(tripwire, warningStart)
-    await expect.poll(() => page.getByText('gamma-ws', { exact: true }).count(), { timeout: 15_000 }).toBeGreaterThanOrEqual(1)
+    await expect.poll(() => page.getByText('gamma-ws', { exact: true }).count(), { timeout: scaledTimeout(15_000) }).toBeGreaterThanOrEqual(1)
     expect(tripwire.pageErrors).toEqual([])
-  }, 90_000)
+  }, scaledTimeout(90_000))
 
   it('deletes only the Workspace registration and keeps its current Session, folder, and log', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-ws-delete'))
@@ -221,7 +221,7 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     // Open the seeded (first/accounted) Session so deletion must preserve the
     // current selection while it moves into Ungrouped.
     const groupRow = page.locator('[role="treeitem"]').filter({ hasText: workspace.title }).first()
-    await groupRow.waitFor({ timeout: 10_000 })
+    await groupRow.waitFor({ timeout: scaledTimeout(10_000) })
     // The header row is wrapped by its HoverCard anchor span, so the section
     // is the nearest groupSection ancestor, not the immediate parent.
     const groupSection = groupRow.locator('xpath=ancestor::*[contains(@class, "groupSection")][1]')
@@ -232,32 +232,32 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
         await page.waitForTimeout(50)
       }
       return await groupSection.locator('[role="treeitem"]').count()
-    }, { timeout: 10_000 }).toBeGreaterThanOrEqual(2)
+    }, { timeout: scaledTimeout(10_000) }).toBeGreaterThanOrEqual(2)
     const seededRow = groupSection.locator('[role="treeitem"]').nth(1)
     await seededRow.click()
-    await expect.poll(() => seededRow.getAttribute('aria-selected'), { timeout: 10_000 }).toBe('true')
+    await expect.poll(() => seededRow.getAttribute('aria-selected'), { timeout: scaledTimeout(10_000) }).toBe('true')
 
     await clickHoverAction(groupRow, `Workspace actions for ${workspace.title}`)
     await page.getByRole('menuitem', { name: 'Delete workspace' }).click()
     const dialog = page.getByRole('dialog', { name: 'Delete workspace' })
-    await dialog.waitFor({ timeout: 10_000 })
+    await dialog.waitFor({ timeout: scaledTimeout(10_000) })
     const copy = await dialog.textContent()
     expect(copy).toContain('workspace list')
     expect(copy).toContain('folder and session logs will be kept')
     expect(copy).toContain('sessions will appear under Ungrouped')
     await dialog.getByRole('button', { name: 'Delete workspace' }).click()
-    await expect.poll(() => dialog.count(), { timeout: 10_000 }).toBe(0)
+    await expect.poll(() => dialog.count(), { timeout: scaledTimeout(10_000) }).toBe(0)
 
     expect(scaffold.ctx.workspaceRegistry.get(workspace.id)).toBeUndefined()
     await expect.poll(
       () => page.getByRole('button', { name: `Workspace actions for ${workspace.title}` }).count(),
-      { timeout: 10_000 },
+      { timeout: scaledTimeout(10_000) },
     ).toBe(0)
-    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 10_000 })
+    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: scaledTimeout(10_000) })
       .toBeGreaterThanOrEqual(1)
     await expect.poll(
       () => page.locator('[role="treeitem"][aria-selected="true"]').count(),
-      { timeout: 10_000 },
+      { timeout: scaledTimeout(10_000) },
     ).toBe(1)
     expect(await readFile(join(scaffold.workspaceCwd, 'workspace', 'a.txt'), 'utf8')).toBe('alpha\n')
     await stat(logLocation.path)
@@ -271,17 +271,17 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await adoptDirectory(scaffold.workspaceCwd)
     await expect.poll(
       () => scaffold.ctx.workspaceRegistry.resolveByPath(scaffold.workspaceCwd),
-      { timeout: 10_000 },
+      { timeout: scaledTimeout(10_000) },
     ).not.toBeUndefined()
     const reregistered = await scaffold.ctx.workspaceRegistry.resolveByPath(scaffold.workspaceCwd)
     expect(reregistered?.id).toBeDefined()
     expect(reregistered?.id).not.toBe(workspace.id)
     await expect.poll(
       () => reregistered?.sessionIds ?? [],
-      { timeout: 10_000 },
+      { timeout: scaledTimeout(10_000) },
     ).not.toEqual([])
     expect(reregistered?.sessionIds).not.toContain(SEED_ID)
-    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 10_000 })
+    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: scaledTimeout(10_000) })
       .toBeGreaterThanOrEqual(1)
     expect(await readFile(join(scaffold.workspaceCwd, 'workspace', 'a.txt'), 'utf8')).toBe('alpha\n')
     await stat(logLocation.path)
@@ -292,18 +292,18 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await scaffold.ctx.workspaceRegistry.delete(reregistered.id)
     await expect.poll(
       () => page.getByRole('button', { name: `Workspace actions for ${reregistered.title}` }).count(),
-      { timeout: 10_000 },
+      { timeout: scaledTimeout(10_000) },
     ).toBe(0)
 
     const warningStart = tripwire.warnings.length
     await page.reload({ waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     acknowledgeReloadConnectionLoss(tripwire, warningStart)
-    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 15_000 })
+    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: scaledTimeout(15_000) })
       .toBeGreaterThanOrEqual(1)
     await expect.poll(
       () => page.locator('[role="treeitem"][aria-selected="true"]').count(),
-      { timeout: 15_000 },
+      { timeout: scaledTimeout(15_000) },
     ).toBe(1)
     expect(scaffold.ctx.workspaceRegistry.get(workspace.id)).toBeUndefined()
     expect(await readFile(join(scaffold.workspaceCwd, 'workspace', 'a.txt'), 'utf8')).toBe('alpha\n')
@@ -313,7 +313,7 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     expect(transientSlotErrors).toEqual([])
     expect(slotConsoleErrors).toEqual([])
     expect(tripwire.pageErrors).toEqual([])
-  }, 90_000)
+  }, scaledTimeout(90_000))
 
   it('reuses a deleted title for a different new directory without any transient error surface', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-ws-reuse-title'))
@@ -345,7 +345,7 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await adoptDirectory(oldPath)
     await expect.poll(
       () => scaffold.ctx.workspaceRegistry.resolveByPath(oldPath),
-      { timeout: 10_000 },
+      { timeout: scaledTimeout(10_000) },
     ).not.toBeUndefined()
     const oldWorkspace = await scaffold.ctx.workspaceRegistry.resolveByPath(oldPath)
     if (oldWorkspace === undefined) throw new Error('old same-name Workspace was not registered')
@@ -355,7 +355,7 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await page.getByRole('menuitem', { name: 'Delete workspace' }).click()
     await page.getByRole('dialog', { name: 'Delete workspace' })
       .getByRole('button', { name: 'Delete workspace' }).click()
-    await expect.poll(() => scaffold.ctx.workspaceRegistry.get(oldWorkspace.id), { timeout: 10_000 }).toBeUndefined()
+    await expect.poll(() => scaffold.ctx.workspaceRegistry.get(oldWorkspace.id), { timeout: scaledTimeout(10_000) }).toBeUndefined()
 
     await addNewFolderWorkspace(scaffold.workspaceCwd, title)
     const fresh = scaffold.ctx.workspaceRegistry.list().find(workspace => workspace.title === title)
@@ -365,33 +365,33 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     expect(transientErrors).toEqual([])
     expect(consoleErrors).toEqual([])
     expect(tripwire.pageErrors).toEqual([])
-  }, 90_000)
+  }, scaledTimeout(90_000))
 
   it('switches to the flat "In one list" view and persists the preference', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-ws-flat'))
     // Grouped default: workspace group rows render (the seeded session sits
     // under Ungrouped; the created workspaces are empty groups).
-    await expect.poll(() => page.getByText('Workspaces', { exact: true }).count(), { timeout: 10_000 }).toBe(1)
+    await expect.poll(() => page.getByText('Workspaces', { exact: true }).count(), { timeout: scaledTimeout(10_000) }).toBe(1)
     // Grouping and ordering moved into the View options menu.
     await page.getByRole('button', { name: 'View options' }).click()
     await page.getByRole('menuitem', { name: 'In one list' }).click()
     // Flat mode: the section label flips and the seeded session is a
     // top-level row with no group headers above it.
-    await expect.poll(() => page.getByText('Sessions', { exact: true }).count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(1)
-    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 5_000 }).toBe(0)
-    await expect.poll(() => page.locator('[role="treeitem"]').count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(1)
+    await expect.poll(() => page.getByText('Sessions', { exact: true }).count(), { timeout: scaledTimeout(10_000) }).toBeGreaterThanOrEqual(1)
+    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: scaledTimeout(5_000) }).toBe(0)
+    await expect.poll(() => page.locator('[role="treeitem"]').count(), { timeout: scaledTimeout(10_000) }).toBeGreaterThanOrEqual(1)
     expect(await page.evaluate(() => localStorage.getItem('dsh.workspace.view.v5'))).toContain('flat')
     // Persisted across reload; then restore grouped for inter-spec hygiene.
     const warningStart = tripwire.warnings.length
     await page.reload({ waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     acknowledgeReloadConnectionLoss(tripwire, warningStart)
-    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 15_000 }).toBe(0)
+    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: scaledTimeout(15_000) }).toBe(0)
     await page.getByRole('button', { name: 'View options' }).click()
     await page.getByRole('menuitem', { name: 'WorkSpace' }).click()
-    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(1)
+    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: scaledTimeout(10_000) }).toBeGreaterThanOrEqual(1)
     expect(tripwire.pageErrors).toEqual([])
-  }, 90_000)
+  }, scaledTimeout(90_000))
 
   it('matches the directory-browser dialog aria golden at a staged directory', async () => {
     // A staged subtree under the scaffold cwd keeps the listing deterministic
@@ -409,11 +409,11 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     process.env.USERPROFILE = scaffold.workspaceCwd
     try {
       const dialog = await browseTo(staged)
-      await expect.poll(() => dialog.getByText('alpha', { exact: true }).count(), { timeout: 10_000 }).toBe(1)
+      await expect.poll(() => dialog.getByText('alpha', { exact: true }).count(), { timeout: scaledTimeout(10_000) }).toBe(1)
       const snapshot = await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd)
       await compareOrRefreshGolden(BROWSER_EXPECTED, snapshot, MODE)
       await dialog.getByRole('button', { name: 'Cancel' }).click()
-      await dialog.waitFor({ state: 'hidden', timeout: 10_000 })
+      await dialog.waitFor({ state: 'hidden', timeout: scaledTimeout(10_000) })
     } finally {
       if (realHome === undefined) delete process.env.HOME
       else process.env.HOME = realHome
@@ -421,7 +421,7 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
       else process.env.USERPROFILE = realUserProfile
     }
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('walks the panes with the typed path: deeper past a separator, back up on erase, whole on a miss', async () => {
     // The panes must track the draft without leaving the editor, so the
@@ -432,33 +432,33 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await mkdir(join(staged, 'alpha', 'only-under-alpha'), { recursive: true })
     await mkdir(join(staged, 'beta'), { recursive: true })
     const dialog = await browseTo(staged)
-    await expect.poll(() => dialog.getByText('alpha', { exact: true }).count(), { timeout: 10_000 }).toBe(1)
+    await expect.poll(() => dialog.getByText('alpha', { exact: true }).count(), { timeout: scaledTimeout(10_000) }).toBe(1)
     await dialog.getByRole('button', { name: 'Edit path' }).click()
     const path = dialog.getByLabel('Edit path')
     // A directory part no pane lists: the panes walk to it, landing the
     // ordinary two-pane Miller view (level | its children) with the editor
     // still up and the draft intact.
     await path.fill(`${join(staged, 'alpha')}${sep}`)
-    await expect.poll(() => dialog.getByText('only-under-alpha', { exact: true }).count(), { timeout: 10_000 }).toBe(1)
-    await expect.poll(() => dialog.getByRole('list').count(), { timeout: 10_000 }).toBe(2)
+    await expect.poll(() => dialog.getByText('only-under-alpha', { exact: true }).count(), { timeout: scaledTimeout(10_000) }).toBe(1)
+    await expect.poll(() => dialog.getByRole('list').count(), { timeout: scaledTimeout(10_000) }).toBe(2)
     expect(await path.inputValue()).toBe(`${join(staged, 'alpha')}${sep}`)
     // Erasing back past the separator walks the panes up, so the level being
     // typed is the last pane again (its children no longer stand to its
     // right) and the tail filters it.
     await path.fill(`${staged}${sep}al`)
-    await expect.poll(() => dialog.getByText('only-under-alpha', { exact: true }).count(), { timeout: 10_000 }).toBe(0)
+    await expect.poll(() => dialog.getByText('only-under-alpha', { exact: true }).count(), { timeout: scaledTimeout(10_000) }).toBe(0)
     expect(await dialog.getByText('alpha', { exact: true }).count()).toBe(1)
     expect(await dialog.getByText('beta', { exact: true }).count()).toBe(0)
-    await expect.poll(() => dialog.getByRole('list').count(), { timeout: 10_000 }).toBe(2)
+    await expect.poll(() => dialog.getByRole('list').count(), { timeout: scaledTimeout(10_000) }).toBe(2)
     // A tail nobody matches is a name still being spelled: the level shows
     // whole instead of emptying under it.
     await path.fill(`${staged}${sep}zzz`)
-    await expect.poll(() => dialog.getByText('beta', { exact: true }).count(), { timeout: 10_000 }).toBe(1)
+    await expect.poll(() => dialog.getByText('beta', { exact: true }).count(), { timeout: scaledTimeout(10_000) }).toBe(1)
     expect(await dialog.getByText('alpha', { exact: true }).count()).toBe(1)
     await dialog.getByRole('button', { name: 'Cancel' }).click()
-    await dialog.waitFor({ state: 'hidden', timeout: 10_000 })
+    await dialog.waitFor({ state: 'hidden', timeout: scaledTimeout(10_000) })
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   /**
    * Expand Ungrouped and return its seeded session row. The only visible child
@@ -477,9 +477,9 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
         await page.waitForTimeout(50)
       }
       return await ungroupedRow.getAttribute('aria-expanded')
-    }, { timeout: 5_000 }).toBe('true')
+    }, { timeout: scaledTimeout(5_000) }).toBe('true')
     const row = ungroupedSection.locator('[role="treeitem"]').nth(1)
-    await row.waitFor({ timeout: 10_000 })
+    await row.waitFor({ timeout: scaledTimeout(10_000) })
     return row
   }
 
@@ -492,7 +492,7 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await sessionRow.hover()
     // Card content: the full title plus the Idle status line (no aria role —
     // text anchors are the stable selector).
-    await expect.poll(() => page.getByText('Idle', { exact: true }).count(), { timeout: 5_000 }).toBeGreaterThanOrEqual(1)
+    await expect.poll(() => page.getByText('Idle', { exact: true }).count(), { timeout: scaledTimeout(5_000) }).toBeGreaterThanOrEqual(1)
     // The card is REACHABLE: it sits 8px off the row, so getting to it means
     // crossing ground that belongs to neither. Hovering it must not dismiss
     // it — the hazard this scenario pins.
@@ -507,16 +507,16 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     const cardHeight = (await card.boundingBox())?.height
     await card.click()
     const copied = page.getByRole('status').getByText('Copied', { exact: true })
-    await copied.waitFor({ timeout: 5_000 })
+    await copied.waitFor({ timeout: scaledTimeout(5_000) })
     await page.waitForTimeout(POINTER_HOLD_MS)
     expect((await card.boundingBox())?.height).toBe(cardHeight)
     expect(await copied.isVisible()).toBe(true)
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(rowTitle)
     // Leaving anchor and card together closes it after the grace.
     await page.getByRole('button', { name: 'Settings' }).hover()
-    await expect.poll(() => card.count(), { timeout: 5_000 }).toBe(0)
+    await expect.poll(() => card.count(), { timeout: scaledTimeout(5_000) }).toBe(0)
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('keeps an open row menu up while the pointer moves between trigger and list', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-ws-row-menu'))
@@ -527,7 +527,7 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     if (triggerName === null) throw new Error('seeded Session row has no actions label')
     await clickHoverAction(sessionRow, triggerName)
     const item = page.getByRole('menuitem', { name: 'Rename' })
-    await item.waitFor({ timeout: 5_000 })
+    await item.waitFor({ timeout: scaledTimeout(5_000) })
     // Into the list, then back up to the trigger across the 4px gap below it:
     // without the gap-crossing grace, that return trip fires the list's
     // pointerleave and closes the menu — a hesitating pointer loses it.
@@ -544,9 +544,9 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     expect(await page.getByRole('menuitem', { name: 'Rename' }).count()).toBe(1)
     // Pointer-leave dismissal still applies once the pointer genuinely leaves.
     await page.getByRole('button', { name: 'Settings' }).hover()
-    await expect.poll(() => page.getByRole('menuitem', { name: 'Rename' }).count(), { timeout: 5_000 }).toBe(0)
+    await expect.poll(() => page.getByRole('menuitem', { name: 'Rename' }).count(), { timeout: scaledTimeout(5_000) }).toBe(0)
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('archives the seeded session from its row menu, hiding it durably across reload', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-ws-archive'))
@@ -560,7 +560,7 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
         await page.waitForTimeout(50)
       }
       return await ungroupedRow.getAttribute('aria-expanded')
-    }, { timeout: 5_000 }).toBe('true')
+    }, { timeout: scaledTimeout(5_000) }).toBe('true')
     // Anchor on session rows (the rows carrying a session actions button),
     // not a positional index, and assert the single-stray assumption loudly
     // so a fixture gaining a second stray fails here instead of archiving
@@ -568,7 +568,7 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     // display:none until its row hovers, and role queries skip hidden nodes.
     const sessionRows = ungroupedSection.locator('[role="treeitem"]')
       .filter({ has: page.locator('button[aria-label^="Session actions for "]') })
-    await expect.poll(() => sessionRows.count(), { timeout: 10_000 }).toBe(1)
+    await expect.poll(() => sessionRows.count(), { timeout: scaledTimeout(10_000) }).toBe(1)
     const sessionRow = sessionRows.first()
     const rowTitle = await sessionRow.locator('[class*="title"]').innerText()
     // Row menu: hover reveals the actions button; Archive session commits
@@ -577,8 +577,8 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await page.getByRole('menuitem', { name: 'Archive session' }).click()
     // The row disappears on the archive-set echo; with no other visible
     // stray, the whole Ungrouped bucket withdraws.
-    await expect.poll(() => page.getByText(rowTitle, { exact: true }).count(), { timeout: 10_000 }).toBe(0)
-    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 10_000 }).toBe(0)
+    await expect.poll(() => page.getByText(rowTitle, { exact: true }).count(), { timeout: scaledTimeout(10_000) }).toBe(0)
+    await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: scaledTimeout(10_000) }).toBe(0)
     // Durable on the host: the registry-global set carries the id while the
     // session log itself stays in persistence untouched.
     expect([...scaffold.ctx.workspaceRegistry.archivedSessionIds]).toEqual([SessionId(SEED_ID)])
@@ -586,15 +586,15 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     // Reload: the hidden state is rebuilt from the workspace.list baseline.
     const warningStart = tripwire.warnings.length
     await page.reload({ waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     acknowledgeReloadConnectionLoss(tripwire, warningStart)
-    await expect.poll(() => page.getByText('Workspaces', { exact: true }).count(), { timeout: 15_000 }).toBe(1)
+    await expect.poll(() => page.getByText('Workspaces', { exact: true }).count(), { timeout: scaledTimeout(15_000) }).toBe(1)
     // The archived row must not resurface (the Ungrouped bucket itself may
     // reappear if selection restore lands on another stray — not this test's
     // concern).
     expect(await page.getByText(rowTitle, { exact: true }).count()).toBe(0)
     expect(tripwire.pageErrors).toEqual([])
-  }, 90_000)
+  }, scaledTimeout(90_000))
 
   it('opens folders with identical basenames as distinct workspaces', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-ws-duplicate-basename'))
@@ -612,10 +612,10 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
       .toEqual([firstPath, secondPath].sort())
     await expect.poll(
       () => page.locator('button[aria-label="Workspace actions for xx"]').count(),
-      { timeout: 10_000 },
+      { timeout: scaledTimeout(10_000) },
     ).toBe(2)
     expect(tripwire.pageErrors).toEqual([])
-  }, 90_000)
+  }, scaledTimeout(90_000))
 
   it.skipIf(MODE === 'record')('issued zero model calls and stayed clean', async () => {
     expect(tripwire.warnings).toEqual([])

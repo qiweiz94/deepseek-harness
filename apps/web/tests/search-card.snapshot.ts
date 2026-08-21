@@ -19,6 +19,7 @@ import { dirname, join } from 'node:path'
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { hasClass, installAssembledBootEnv, mountAssembledApp, REFRESHING_GOLDEN } from './assembled-boot.ts'
+import { scaledTimeout } from './support.ts'
 
 const EXPECTED = join(process.cwd(), 'apps/web/tests/snapshots/search-card/grep-card.expected.txt')
 
@@ -48,19 +49,19 @@ describe('assembled search card', () => {
   it('renders the grep card, its truncation summary, and its capped head/tail slice from the built bundles', async () => {
     mountAssembledApp()
 
-    const tree = await screen.findByRole('tree', { name: 'Sessions' }, { timeout: 10_000 })
+    const tree = await screen.findByRole('tree', { name: 'Sessions' }, { timeout: scaledTimeout(10_000) })
     fireEvent.click(await within(tree).findByText('Fixture 历史会话'))
     // Wait for chat content to reach the fixture's later turns (the bash sample
     // is turn 66, the grep card turn 67).
     await waitFor(() => {
       expect(document.querySelector('[data-sample="bash"]')).not.toBeNull()
-    }, { timeout: 10_000 })
+    }, { timeout: scaledTimeout(10_000) })
     // The grep turn's keyed SearchRow composes ToolRow: the card is collapsed
     // by default, so wait for the summary row, then expand it to reach the card.
     await waitFor(() => {
       const tools = [...document.querySelectorAll('[data-tool]')].map(el => el.getAttribute('data-tool'))
       expect(tools, `tools present: ${tools.join(', ')}`).toContain('grep')
-    }, { timeout: 10_000 })
+    }, { timeout: scaledTimeout(10_000) })
 
     // `data-tool` sits on the ToolRow root; the collapsed row is the expand
     // toggle. Click it so the card and its recovery footer mount, then serialize the
@@ -69,7 +70,7 @@ describe('assembled search card', () => {
     act(() => { fireEvent.click(grepRow.querySelector('[data-expandable]') ?? grepRow) })
     await waitFor(() => {
       expect(grepRow.querySelector('[data-search]')).not.toBeNull()
-    }, { timeout: 10_000 })
+    }, { timeout: scaledTimeout(10_000) })
     const shape = cardShape(grepRow)
     if (REFRESHING_GOLDEN) {
       mkdirSync(dirname(EXPECTED), { recursive: true })

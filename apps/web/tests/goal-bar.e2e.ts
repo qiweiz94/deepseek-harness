@@ -12,7 +12,7 @@ import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden,
   launchWebScaffold, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { newEnglishPage, saveFailureShot } from './support.ts'
+import { newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/goal-bar', import.meta.url))
 const ACTIVE_EXPECTED = join(SNAPSHOT_DIR, 'active.expected.md')
@@ -31,8 +31,8 @@ describe('web e2e: goal bar clear convergence', () => {
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
     await page.goto(`${scaffold.baseUrl}?fixture`, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
-  }, 120_000)
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
+  }, scaledTimeout(120_000))
 
   afterAll(async () => {
     await browser?.close()
@@ -44,12 +44,12 @@ describe('web e2e: goal bar clear convergence', () => {
     // Startup reuses the fixture workspace's blank session, keeping this
     // command independent of alpha's running replay and pending question.
     const input = page.getByPlaceholder('Describe what you want to build')
-    await input.waitFor({ timeout: 10_000 })
+    await input.waitFor({ timeout: scaledTimeout(10_000) })
     await input.fill('/goal guard rapid clear clicks')
     await input.press('Enter')
 
     const bar = page.locator('[data-goal-bar]')
-    await bar.waitFor({ timeout: 10_000 })
+    await bar.waitFor({ timeout: scaledTimeout(10_000) })
     const snapshot = await captureStableAria(page, '[data-goal-bar]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(ACTIVE_EXPECTED, snapshot, MODE)
 
@@ -59,11 +59,11 @@ describe('web e2e: goal bar clear convergence', () => {
       control.click()
       control.click()
     })
-    await expect.poll(() => page.locator('[data-goal-bar]').count(), { timeout: 10_000 }).toBe(0)
+    await expect.poll(() => page.locator('[data-goal-bar]').count(), { timeout: scaledTimeout(10_000) }).toBe(0)
     expect(await page.getByText(/no current goal/iu).count()).toBe(0)
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it.skipIf(MODE === 'record')('keeps the fixture inventory closed', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, ['active.expected.md'])

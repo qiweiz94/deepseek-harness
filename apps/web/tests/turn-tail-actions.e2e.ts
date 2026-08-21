@@ -20,7 +20,7 @@ import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden, fixtureUserPrompts,
   launchWebScaffold, recordFixture, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/turn-tail-actions', import.meta.url))
 const FIXTURE = join(SNAPSHOT_DIR, 'session.jsonl')
@@ -77,14 +77,14 @@ describe('web e2e: assistant IconActions wait for the turn to end', () => {
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
   }
 
   /** Send the recorded prompt with the settled barrier pre-armed (returned wrapped so the caller can act mid-turn). */
   async function sendPrompt(timeoutMs?: number): Promise<{ settled: ReturnType<WebScaffold['whenTurnSettled']> }> {
     const input = page.locator('textarea').first()
-    await input.waitFor({ timeout: 10_000 })
+    await input.waitFor({ timeout: scaledTimeout(10_000) })
     const settled = scaffold!.whenTurnSettled(timeoutMs)
     await input.fill(PROMPT)
     await input.press('Enter')
@@ -97,7 +97,7 @@ describe('web e2e: assistant IconActions wait for the turn to end', () => {
     const { settled } = await sendPrompt(180_000)
     const sessionId = await settled
     await recordFixture(scaffold!, sessionId, FIXTURE)
-  }, 200_000)
+  }, scaledTimeout(200_000))
 
   it.skipIf(MODE === 'record')('withholds the footer while the turn runs and grants it at turn/end', async () => {
     expect(fixtureUserPrompts(await readFile(FIXTURE, 'utf8'))).toEqual([PROMPT])
@@ -116,16 +116,16 @@ describe('web e2e: assistant IconActions wait for the turn to end', () => {
     const { settled } = await sendPrompt(120_000)
     // The marker IS the synchronization: the second call is provably parked,
     // so the first step's message and tool result are already durable.
-    await expect.poll(() => existsSync(marker), { timeout: 20_000 }).toBe(true)
-    await expect.poll(() => page.getByText(NARRATION, { exact: true }).count(), { timeout: 10_000 }).toBe(1)
+    await expect.poll(() => existsSync(marker), { timeout: scaledTimeout(20_000) }).toBe(true)
+    await expect.poll(() => page.getByText(NARRATION, { exact: true }).count(), { timeout: scaledTimeout(10_000) }).toBe(1)
     await expect.poll(
       () => page.getByRole('status').filter({ hasText: 'Deep diving...' }).isVisible(),
-      { timeout: 10_000 },
+      { timeout: scaledTimeout(10_000) },
     ).toBe(true)
     // Only the user bubble owns a footer (clock + copy; user bubbles carry no
     // branch action): the narration is not the answer yet.
     const copyButtons = page.getByRole('button', { name: 'Copy' })
-    await expect.poll(() => copyButtons.count(), { timeout: 10_000 }).toBe(1)
+    await expect.poll(() => copyButtons.count(), { timeout: scaledTimeout(10_000) }).toBe(1)
     expect(await page.getByRole('button', { name: 'Branch into a new conversation' }).count()).toBe(0)
     await copyButtons.first().focus()
     const running = await captureStableAria(page, '[class*="centerCol"]', scaffold!.workspaceCwd)
@@ -137,14 +137,14 @@ describe('web e2e: assistant IconActions wait for the turn to end', () => {
     await page.getByRole('button', { name: 'Stop generating' }).click()
     await settled
     expect(sessionEvents.filter(e => e.type === 'turn/end').map(e => e.data.reason.kind)).toEqual(['aborted'])
-    await expect.poll(() => copyButtons.count(), { timeout: 10_000 }).toBe(2)
-    await expect.poll(() => page.locator('[data-streaming="true"]').count(), { timeout: 10_000 }).toBe(0)
+    await expect.poll(() => copyButtons.count(), { timeout: scaledTimeout(10_000) }).toBe(2)
+    await expect.poll(() => page.locator('[data-streaming="true"]').count(), { timeout: scaledTimeout(10_000) }).toBe(0)
     await copyButtons.last().focus()
     const settledAria = await captureStableAria(page, '[class*="centerCol"]', scaffold!.workspaceCwd)
     await compareOrRefreshGolden(SETTLED_EXPECTED, settledAria, MODE)
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
-  }, 120_000)
+  }, scaledTimeout(120_000))
 
   it.skipIf(MODE === 'record')('keeps a closed fixture inventory', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, ['running.expected.md', 'session.jsonl', 'settled.expected.md'])

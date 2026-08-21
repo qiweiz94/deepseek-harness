@@ -22,7 +22,7 @@ import {
   fixtureUserPrompts, launchWebScaffold, seedSession, webSnapshotMode,
   type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/pwsh-terminal', import.meta.url))
 const SEED = join(SNAPSHOT_DIR, 'seed.jsonl')
@@ -57,7 +57,7 @@ describe.skipIf(MODE === 'record' || !HAS_PWSH)('web e2e: pwsh calls use the bas
     page = await newEnglishPage(browser)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
-  }, 120_000)
+  }, scaledTimeout(120_000))
 
   afterAll(async () => {
     await browser?.close()
@@ -75,16 +75,16 @@ describe.skipIf(MODE === 'record' || !HAS_PWSH)('web e2e: pwsh calls use the bas
     const search = page.getByPlaceholder('Search sessions', { exact: false })
     await search.fill('Run a PowerShell command')
     const result = page.getByRole('tree', { name: 'Search results' }).getByRole('treeitem')
-    await expect.poll(() => result.count(), { timeout: 15_000 }).toBe(1)
+    await expect.poll(() => result.count(), { timeout: scaledTimeout(15_000) }).toBe(1)
     await result.click()
-    await page.getByRole('tab', { name: 'Chat', exact: true }).waitFor({ timeout: 15_000 })
+    await page.getByRole('tab', { name: 'Chat', exact: true }).waitFor({ timeout: scaledTimeout(15_000) })
     // The tool row is expand-gated: the settled row uses the bash layout and carries the
     // shell-family variant, and the terminal card lives in the expanded body.
     const row = page.locator('[data-tool="pwsh"]').first()
-    await row.waitFor({ timeout: 15_000 })
+    await row.waitFor({ timeout: scaledTimeout(15_000) })
     if (await row.getAttribute('aria-expanded') !== 'true') await row.click()
     const card = page.locator('[data-terminal]').first()
-    await card.waitFor({ timeout: 15_000 })
+    await card.waitFor({ timeout: scaledTimeout(15_000) })
     // The parsed exit pill replaces the `[exit code: 1]` marker in the output
     // body — the bash tool's terminal presentation, not the generic fence.
     const text = await card.textContent()
@@ -98,7 +98,7 @@ describe.skipIf(MODE === 'record' || !HAS_PWSH)('web e2e: pwsh calls use the bas
       .split(scaffold.workspaceCwd.split(/[\\/]/).pop()!).join('{{workspace}}')
       .split(SEED_ID).join('{{seededId}}')
     await compareOrRefreshGolden(TERMINAL_EXPECTED, snapshot, MODE)
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('guards the lane fixture inventory', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, ['seed.jsonl', 'terminal-card.expected.md'])

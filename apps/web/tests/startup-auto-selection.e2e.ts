@@ -29,7 +29,7 @@ import type { Browser, Page } from 'playwright'
 import { chromium } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
 import { acknowledgeReloadConnectionLoss, launchWebScaffold, watchConsole, type WebScaffold } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 /** Wire path of the history round-trip the conversation root waits out (POST /api/session.history). */
 const HISTORY_ROUTE = '**/api/session.history'
@@ -57,8 +57,8 @@ describe('web e2e: startup auto-selection', () => {
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
-  }, 180_000)
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
+  }, scaledTimeout(180_000))
 
   afterAll(async () => {
     await browser?.close()
@@ -67,7 +67,7 @@ describe('web e2e: startup auto-selection', () => {
 
   it('keeps the resident Hero and composer nodes when the first Workspace session appears', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-first-workspace-stable-tree'))
-    await page.locator(`${ROOT_PHASE}[data-phase="hero"]`).waitFor({ timeout: 15_000 })
+    await page.locator(`${ROOT_PHASE}[data-phase="hero"]`).waitFor({ timeout: scaledTimeout(15_000) })
     const headline = page.getByText('Into the Unknown', { exact: true })
     const fish = headline.locator('xpath=preceding-sibling::span[1]/*[name()="svg"]')
     const fishHitbox = fish.locator('..')
@@ -112,7 +112,7 @@ describe('web e2e: startup auto-selection', () => {
       textareaEnabled: true,
     })
     expect(tripwire.pageErrors).toEqual([])
-  }, 120_000)
+  }, scaledTimeout(120_000))
 
   it('keeps the hero and the composer on screen while the auto-selected blank session opens', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-startup-auto-selection'))
@@ -150,19 +150,19 @@ describe('web e2e: startup auto-selection', () => {
     // The frame a user sees while the session is still opening: hero phase, the
     // hero title, and a composer that is actually painted (`settling` hides the
     // seat with `visibility:hidden`, which Playwright reports as not visible).
-    await page.waitForSelector(ROOT_PHASE, { timeout: 15_000 })
+    await page.waitForSelector(ROOT_PHASE, { timeout: scaledTimeout(15_000) })
     expect(await page.locator(ROOT_PHASE).first().getAttribute('data-phase')).toBe('hero')
     expect(await page.getByText('Into the Unknown').isVisible()).toBe(true)
     expect(await page.locator('textarea').first().isVisible()).toBe(true)
 
     releaseHistory()
     await page.locator('textarea:enabled[placeholder="Describe what you want to build"]')
-      .waitFor({ timeout: 15_000 })
+      .waitFor({ timeout: scaledTimeout(15_000) })
     acknowledgeReloadConnectionLoss(tripwire, warningsBefore)
 
     // Settling is not merely absent from the frame sampled above: the root
     // never entered it at any point of the load.
     expect(await recordedPhases(page)).toEqual(['hero'])
     expect(tripwire.pageErrors).toEqual([])
-  }, 120_000)
+  }, scaledTimeout(120_000))
 })

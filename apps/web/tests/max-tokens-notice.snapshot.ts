@@ -14,6 +14,7 @@ import { dirname, join } from 'node:path'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { hasClass, installAssembledBootEnv, mountAssembledApp, REFRESHING_GOLDEN } from './assembled-boot.ts'
+import { scaledTimeout } from './support.ts'
 
 const EXPECTED = join(process.cwd(), 'apps/web/tests/snapshots/max-tokens-notice/history-turn.expected.txt')
 
@@ -34,17 +35,17 @@ describe('assembled max-tokens turn-end notice', () => {
   it('renders the localized truncation notice after the cut-off answer instead of ending silently', async () => {
     mountAssembledApp()
 
-    const tree = await screen.findByRole('tree', { name: 'Sessions' }, { timeout: 10_000 })
+    const tree = await screen.findByRole('tree', { name: 'Sessions' }, { timeout: scaledTimeout(10_000) })
     fireEvent.click(await within(tree).findByText('Fixture 历史会话'))
     // The truncated answer itself stays in the flow: the notice supplements the
     // partial output, it never replaces it.
-    await screen.findByText(/条目 3：这一条写到一半被/, undefined, { timeout: 10_000 })
+    await screen.findByText(/条目 3：这一条写到一半被/, undefined, { timeout: scaledTimeout(10_000) })
     const row = await waitFor(() => {
       const found = [...document.querySelectorAll('[role="status"]')]
         .find(candidate => [...candidate.querySelectorAll('*')].some(el => hasClass(el, 'maxTokensTitle')))
       expect(found).not.toBeUndefined()
       return found!
-    }, { timeout: 10_000 })
+    }, { timeout: scaledTimeout(10_000) })
 
     const shape = noticeShape(row)
     if (REFRESHING_GOLDEN) {

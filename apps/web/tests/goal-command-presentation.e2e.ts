@@ -12,7 +12,7 @@ import {
   compareOrRefreshGolden, launchWebScaffold, watchConsole, webSnapshotMode,
   type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/goal-command-presentation', import.meta.url))
 const UI_EXPECTED = fileURLToPath(new URL(
@@ -34,9 +34,9 @@ describe('web e2e: /goal human transcript presentation', () => {
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
-  }, 120_000)
+  }, scaledTimeout(120_000))
 
   afterAll(async () => {
     await browser?.close()
@@ -46,7 +46,7 @@ describe('web e2e: /goal human transcript presentation', () => {
   it('shows the bare input and result from a fresh session without a model turn', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-goal-command-presentation'))
     await expect.poll(() => page.getByText('Into the Unknown', { exact: false }).count(), {
-      timeout: 15_000,
+      timeout: scaledTimeout(15_000),
     }).toBe(1)
     const input = page.locator('textarea').first()
     await input.fill('/goal')
@@ -55,7 +55,7 @@ describe('web e2e: /goal human transcript presentation', () => {
     await input.press('Enter')
 
     const commandInput = page.locator('[data-command-input]')
-    await commandInput.waitFor({ timeout: 10_000 })
+    await commandInput.waitFor({ timeout: scaledTimeout(10_000) })
     await expect.poll(() => commandInput.textContent()).toBe('/goal')
     expect(await commandInput.getAttribute('role')).toBe('group')
     expect(await commandInput.getAttribute('aria-label')).toBe('Command input')
@@ -75,7 +75,7 @@ describe('web e2e: /goal human transcript presentation', () => {
     expect(typography).toMatchObject({ fontSize: '14px', lineHeight: '22px' })
     expect(typography.fontFamily).not.toBe(typography.parentFontFamily)
     const resultRow = page.locator('[data-variant="others"]').filter({ hasText: 'No goal is currently set.' })
-    await expect.poll(() => resultRow.count(), { timeout: 10_000 }).toBe(1)
+    await expect.poll(() => resultRow.count(), { timeout: scaledTimeout(10_000) }).toBe(1)
     expect(await resultRow.getByText('goal', { exact: true }).count()).toBe(1)
     await expect.poll(() => page.locator('[data-phase="active"]').count()).toBe(1)
     expect(await page.getByText('Into the Unknown', { exact: false }).count()).toBe(0)
@@ -93,18 +93,18 @@ describe('web e2e: /goal human transcript presentation', () => {
 
     const snapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(UI_EXPECTED, snapshot, MODE)
-  }, 60_000)
+  }, scaledTimeout(60_000))
 
   it('reloads the same bubble and result from the persisted command lifecycle', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-goal-command-presentation-reload'))
     const warningStart = tripwire.warnings.length
     await page.reload({ waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     acknowledgeReloadConnectionLoss(tripwire, warningStart)
 
-    await expect.poll(() => page.locator('[data-command-input]').textContent(), { timeout: 15_000 }).toBe('/goal')
+    await expect.poll(() => page.locator('[data-command-input]').textContent(), { timeout: scaledTimeout(15_000) }).toBe('/goal')
     const resultRow = page.locator('[data-variant="others"]').filter({ hasText: 'No goal is currently set.' })
-    await expect.poll(() => resultRow.count(), { timeout: 10_000 }).toBe(1)
+    await expect.poll(() => resultRow.count(), { timeout: scaledTimeout(10_000) }).toBe(1)
     await expect.poll(() => page.locator('[data-phase="active"]').count()).toBe(1)
 
     const sessions = scaffold.ctx.sessions.list()
@@ -119,5 +119,5 @@ describe('web e2e: /goal human transcript presentation', () => {
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
     await assertFixtureInventory(SNAPSHOT_DIR, ['ui.expected.md'])
-  }, 90_000)
+  }, scaledTimeout(90_000))
 })
