@@ -23,7 +23,7 @@ import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden,
   launchWebScaffold, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { ZH_BROWSER_LOCALE, saveFailureShot } from './support.ts'
+import { ZH_BROWSER_LOCALE, saveFailureShot, scaledTimeout } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/models-settings', import.meta.url))
 const EMPTY_EXPECTED = join(SNAPSHOT_DIR, 'empty.expected.md')
@@ -47,8 +47,9 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     page = await browser.newPage({ viewport: { width: 1680, height: 1000 }, locale: ZH_BROWSER_LOCALE })
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
-  }, 120_000)
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
+  }, scaledTimeout(120_000))
+
 
   afterAll(async () => {
     await browser?.close()
@@ -59,27 +60,28 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-models-empty'))
     await page.getByRole('button', { name: '设置', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: '设置' })
-    await dialog.waitFor({ timeout: 10_000 })
+    await dialog.waitFor({ timeout: scaledTimeout(10_000) })
     await dialog.getByRole('button', { name: '模型' }).click()
-    await dialog.getByText('填入各提供方的 API 密钥即可使用其模型。').waitFor({ timeout: 10_000 })
+    await dialog.getByText('填入各提供方的 API 密钥即可使用其模型。').waitFor({ timeout: scaledTimeout(10_000) })
     // The dormant pi-ai adapter contributes its whole installed catalog; no
     // provider is configured yet, so the page is one add button.
     const add = dialog.getByRole('button', { name: '添加提供方' })
-    await add.waitFor({ timeout: 10_000 })
+    await add.waitFor({ timeout: scaledTimeout(10_000) })
     // The button enables once the dormant catalog lands in the join.
-    await expect.poll(async () => add.isEnabled(), { timeout: 10_000 }).toBe(true)
+    await expect.poll(async () => add.isEnabled(), { timeout: scaledTimeout(10_000) }).toBe(true)
     await add.click()
     const pick = dialog.getByLabel('提供方')
-    await pick.waitFor({ timeout: 10_000 })
-    await expect.poll(async () => pick.locator('option').count(), { timeout: 10_000 }).toBeGreaterThan(30)
+    await pick.waitFor({ timeout: scaledTimeout(10_000) })
+    await expect.poll(async () => pick.locator('option').count(), { timeout: scaledTimeout(10_000) }).toBeGreaterThan(30)
     const options = await pick.locator('option').allTextContents()
     expect(options).toContain('anthropic')
     expect(options).toContain('minimax-cn')
     await pick.selectOption('minimax-cn')
-    await dialog.getByRole('textbox', { name: 'API 密钥', exact: true }).waitFor({ timeout: 10_000 })
+    await dialog.getByRole('textbox', { name: 'API 密钥', exact: true }).waitFor({ timeout: scaledTimeout(10_000) })
     const snapshot = await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(EMPTY_EXPECTED, snapshot, MODE)
-  }, 60_000)
+  }, scaledTimeout(60_000))
+
 
   it('refuses a key no HTTP header can carry before anything is written', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-models-illegal-key'))
@@ -91,36 +93,38 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     // turn with a ByteString TypeError; the form names the offending field
     // instead.
     await key.fill('sk-\u{1F600}minimax')
-    await dialog.getByText('该 API 密钥格式错误，请检查。').waitFor({ timeout: 10_000 })
-    await expect.poll(async () => save.isEnabled(), { timeout: 10_000 }).toBe(false)
+    await dialog.getByText('该 API 密钥格式错误，请检查。').waitFor({ timeout: scaledTimeout(10_000) })
+    await expect.poll(async () => save.isEnabled(), { timeout: scaledTimeout(10_000) }).toBe(false)
 
     // Clearing it restores submit: an empty field means "keep what is stored",
     // never a refusal, or editing any other setting would demand the key.
     await key.fill('')
-    await expect.poll(async () => save.isEnabled(), { timeout: 10_000 }).toBe(true)
+    await expect.poll(async () => save.isEnabled(), { timeout: scaledTimeout(10_000) }).toBe(true)
     expect(await dialog.getByText('该 API 密钥格式错误，请检查。').count()).toBe(0)
-  }, 60_000)
+  }, scaledTimeout(60_000))
+
 
   it('saves a blank key as a reference-free provider-native profile', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-models-native-auth'))
     const dialog = page.getByRole('dialog', { name: '设置' })
     await dialog.getByRole('button', { name: '保存', exact: true }).click()
     const row = dialog.getByText('minimax-cn', { exact: true }).first()
-    await row.waitFor({ timeout: 10_000 })
-    await dialog.getByText('已保存 minimax-cn。', { exact: true }).waitFor({ timeout: 10_000 })
+    await row.waitFor({ timeout: scaledTimeout(10_000) })
+    await dialog.getByText('已保存 minimax-cn。', { exact: true }).waitFor({ timeout: scaledTimeout(10_000) })
     expect(await dialog.getByRole('img', { name: 'API 密钥已配置' }).count()).toBe(0)
     expect(await dialog.getByRole('img', { name: 'API 密钥缺失' }).count()).toBe(0)
     const document = await readFile(join(scaffold.harnessHome, 'settings.yaml'), 'utf8')
     expect(document).toContain('minimax-cn: {}')
     expect(document).not.toContain('MINIMAX_CN_API_KEY')
-  }, 60_000)
+  }, scaledTimeout(60_000))
+
 
   it('describes reference-free deletion without claiming a credential exists', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-models-native-delete'))
     const settingsDialog = page.getByRole('dialog', { name: '设置' })
     await settingsDialog.getByRole('button', { name: '删除 minimax-cn', exact: true }).click()
     const deleteDialog = page.getByRole('dialog', { name: '删除 minimax-cn？' })
-    await deleteDialog.waitFor({ timeout: 10_000 })
+    await deleteDialog.waitFor({ timeout: scaledTimeout(10_000) })
     const snapshot = await captureStableAria(
       page,
       '[role="dialog"][aria-label="删除 minimax-cn？"]',
@@ -128,7 +132,8 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     )
     await compareOrRefreshGolden(NATIVE_DELETE_EXPECTED, snapshot, MODE)
     await deleteDialog.getByRole('button', { name: '取消', exact: true }).click()
-  }, 60_000)
+  }, scaledTimeout(60_000))
+
 
   it('stores the key under the derived reference and keeps the route live', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-models-add'))
@@ -141,10 +146,10 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     // registers, and the topology frame invalidates the page into the row.
     await expect.poll(
       async () => dialog.getByRole('textbox', { name: 'API 密钥', exact: true }).count(),
-      { timeout: 10_000 },
+      { timeout: scaledTimeout(10_000) },
     ).toBe(0)
-    await dialog.getByRole('img', { name: 'API 密钥已配置' }).waitFor({ timeout: 10_000 })
-    await dialog.getByText('已保存 minimax-cn。', { exact: true }).waitFor({ timeout: 10_000 })
+    await dialog.getByRole('img', { name: 'API 密钥已配置' }).waitFor({ timeout: scaledTimeout(10_000) })
+    await dialog.getByText('已保存 minimax-cn。', { exact: true }).waitFor({ timeout: scaledTimeout(10_000) })
     const document = await readFile(join(scaffold.harnessHome, 'settings.yaml'), 'utf8')
     expect(document).toContain('minimax-cn:')
     expect(document).toContain('apiKeyEnv: MINIMAX_CN_API_KEY')
@@ -152,10 +157,11 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     const credentialFile = join(scaffold.harnessHome, '.credentials.yaml')
     await expect.poll(
       async () => readFile(credentialFile, 'utf8').catch(() => ''),
-      { timeout: 10_000 },
+      { timeout: scaledTimeout(10_000) },
     ).toContain('MINIMAX_CN_API_KEY: sk-e2e-minimax')
     expect(await page.content()).not.toContain('sk-e2e-minimax')
-  }, 60_000)
+  }, scaledTimeout(60_000))
+
 
   it('applies a customized-settings field as a merge patch', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-models-customized'))
@@ -163,26 +169,27 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     await dialog.getByRole('button', { name: '编辑 minimax-cn' }).click()
     await dialog.getByText('自定义设置').click()
     const url = dialog.getByLabel('API 地址')
-    await url.waitFor({ timeout: 10_000 })
+    await url.waitFor({ timeout: scaledTimeout(10_000) })
     await url.fill('https://gateway.minimax.example/v1')
     await dialog.getByRole('button', { name: '保存', exact: true }).click()
     // The editor closes back to the row; the fold's write merged into the
     // stored profile beside the reference.
-    await expect.poll(async () => dialog.getByLabel('API 地址').count(), { timeout: 10_000 }).toBe(0)
-    await dialog.getByText('已保存 minimax-cn。', { exact: true }).waitFor({ timeout: 10_000 })
+    await expect.poll(async () => dialog.getByLabel('API 地址').count(), { timeout: scaledTimeout(10_000) }).toBe(0)
+    await dialog.getByText('已保存 minimax-cn。', { exact: true }).waitFor({ timeout: scaledTimeout(10_000) })
     const document = await readFile(join(scaffold.harnessHome, 'settings.yaml'), 'utf8')
     expect(document).toContain('baseURL: https://gateway.minimax.example/v1')
     expect(document).toContain('apiKeyEnv: MINIMAX_CN_API_KEY')
     const snapshot = await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(CONFIGURED_EXPECTED, snapshot, MODE)
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
+
 
   it('declares a route the adapter does not ship', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-models-declare'))
     const dialog = page.getByRole('dialog', { name: '设置' })
     const declare = dialog.getByRole('button', { name: '添加自定义提供方' })
-    await expect.poll(async () => declare.isEnabled(), { timeout: 10_000 }).toBe(true)
+    await expect.poll(async () => declare.isEnabled(), { timeout: scaledTimeout(10_000) }).toBe(true)
     await declare.click()
     await dialog.getByLabel('Provider ID').fill('acme-gateway')
     await dialog.getByLabel('显示名称').fill('Acme Gateway')
@@ -196,20 +203,21 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     await dialog.getByRole('button', { name: '创建提供方', exact: true }).click()
 
     const row = dialog.getByText('Acme Gateway', { exact: true }).first()
-    await row.waitFor({ timeout: 10_000 })
+    await row.waitFor({ timeout: scaledTimeout(10_000) })
     const document = await readFile(join(scaffold.harnessHome, 'settings.yaml'), 'utf8')
     expect(document).toContain('acme-gateway:')
 
     // The tag follows the adapter's installed catalog: this route is in no
     // catalog, while minimax-cn is — even though both now have profiles.
     const rowCard = (name: string) => dialog.locator('li').filter({ hasText: name }).first()
-    await expect.poll(async () => rowCard('Acme Gateway').getByText('自定义').count(), { timeout: 10_000 }).toBe(1)
+    await expect.poll(async () => rowCard('Acme Gateway').getByText('自定义').count(), { timeout: scaledTimeout(10_000) }).toBe(1)
     expect(await rowCard('minimax-cn').getByText('自定义').count()).toBe(0)
 
     const snapshot = await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(DECLARED_EXPECTED, snapshot, MODE)
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
+
 
   it('reopens the name and protocol a declared route was created with', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-models-declared-identity'))
@@ -220,7 +228,7 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     // nothing can default them; the editor reaches the same two fields rather
     // than sending the user to settings.yaml for what only this route names.
     const protocol = dialog.getByLabel('API 协议')
-    await protocol.waitFor({ timeout: 10_000 })
+    await protocol.waitFor({ timeout: scaledTimeout(10_000) })
     expect(await protocol.inputValue()).toBe('openai-completions')
     const name = dialog.getByLabel('显示名称', { exact: true })
     expect(await name.inputValue()).toBe('Acme Gateway')
@@ -230,27 +238,28 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     await protocol.selectOption('anthropic-messages')
     await name.fill('Acme 网关')
     await dialog.getByRole('button', { name: '保存', exact: true }).click()
-    await expect.poll(async () => dialog.getByLabel('API 协议').count(), { timeout: 10_000 }).toBe(0)
+    await expect.poll(async () => dialog.getByLabel('API 协议').count(), { timeout: scaledTimeout(10_000) }).toBe(0)
     // The adapter re-resolved the route under the new protocol and re-registered
     // it under the new name: an unserviceable profile would have been refused
     // at the write instead, and a rename that did not re-register would leave
     // the old label on the row.
-    await dialog.getByText('Acme 网关', { exact: true }).first().waitFor({ timeout: 10_000 })
+    await dialog.getByText('Acme 网关', { exact: true }).first().waitFor({ timeout: scaledTimeout(10_000) })
     // The status line names the route as the refreshed directory reports it;
     // the target captured when the card opened still carries the old name.
-    await dialog.getByText('已保存 Acme 网关 (acme-gateway)。', { exact: true }).waitFor({ timeout: 10_000 })
+    await dialog.getByText('已保存 Acme 网关 (acme-gateway)。', { exact: true }).waitFor({ timeout: scaledTimeout(10_000) })
     const document = await readFile(join(scaffold.harnessHome, 'settings.yaml'), 'utf8')
     expect(document).toContain('api: anthropic-messages')
     expect(document).toContain('displayName: Acme 网关')
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
+
 
   it('confirms an identified provider deletion before removing its profile and key', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-models-delete'))
     const settingsDialog = page.getByRole('dialog', { name: '设置' })
     await settingsDialog.getByRole('button', { name: '删除 minimax-cn', exact: true }).click()
     const deleteDialog = page.getByRole('dialog', { name: '删除 minimax-cn？' })
-    await deleteDialog.waitFor({ timeout: 10_000 })
+    await deleteDialog.waitFor({ timeout: scaledTimeout(10_000) })
     const snapshot = await captureStableAria(
       page,
       '[role="dialog"][aria-label="删除 minimax-cn？"]',
@@ -265,17 +274,18 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
       .getByRole('button', { name: '删除 minimax-cn', exact: true }).click()
     await expect.poll(
       async () => readFile(join(scaffold.harnessHome, 'settings.yaml'), 'utf8'),
-      { timeout: 10_000 },
+      { timeout: scaledTimeout(10_000) },
     ).not.toContain('minimax-cn:')
     expect(await readFile(join(scaffold.harnessHome, '.credentials.yaml'), 'utf8'))
       .not.toContain('MINIMAX_CN_API_KEY')
     await expect.poll(
       async () => page.getByRole('dialog', { name: '删除 minimax-cn？' }).count(),
-      { timeout: 10_000 },
+      { timeout: scaledTimeout(10_000) },
     ).toBe(0)
     await page.keyboard.press('Escape')
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
+
 
   it.skipIf(MODE === 'record')('keeps the fixture inventory closed', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, [

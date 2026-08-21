@@ -13,6 +13,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { SessionId as sessionId, type SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-agent'
 import { launchWebScaffold, webSnapshotMode, type WebScaffold } from './scaffold.ts'
+import { scaledTimeout } from './support.ts'
 
 const MODE = webSnapshotMode()
 const INITIAL = 'Explain event sourcing in one sentence.'
@@ -38,7 +39,7 @@ async function rpc<T>(baseUrl: string, method: string, payload: unknown): Promis
 }
 
 /** Poll a synchronous condition (hook-safe; expect.poll is test-body only). */
-async function waitFor(predicate: () => boolean, what: string, timeoutMs = 30_000): Promise<void> {
+async function waitFor(predicate: () => boolean, what: string, timeoutMs = scaledTimeout(30_000)): Promise<void> {
   const deadline = Date.now() + timeoutMs
   while (!predicate()) {
     if (Date.now() >= deadline) throw new Error(`timed out waiting for ${what}`)
@@ -108,7 +109,8 @@ describe.skipIf(MODE === 'record')('web e2e: subagent.interrupt over the real co
     // The hang entry writes readyFile after its prefix chunks, immediately
     // before waiting for cancellation: the deterministic "turn is open" gate.
     await waitFor(() => existsSync(readyFile), 'the held child turn to open')
-  }, 120_000)
+  }, scaledTimeout(120_000))
+
 
   afterAll(async () => {
     const failures: unknown[] = []
@@ -158,7 +160,7 @@ describe.skipIf(MODE === 'record')('web e2e: subagent.interrupt over the real co
       content: [{ type: 'text', text: WAKING }],
     })
     expect(waking).toMatchObject({ ok: true })
-    await expect.poll(() => scaffold.ctx.agents.get(childId), { timeout: 60_000 }).toBeUndefined()
+    await expect.poll(() => scaffold.ctx.agents.get(childId), { timeout: scaledTimeout(60_000) }).toBeUndefined()
 
     const loaded = await scaffold.ctx.sessionPersistence.load(childId)
     // Human-origin messages only: the real composition also injects
@@ -172,5 +174,6 @@ describe.skipIf(MODE === 'record')('web e2e: subagent.interrupt over the real co
       .filter(event => event.type === 'turn/end')
       .map(event => (event).data.reason.kind)
     expect(turnEndKinds).toEqual(['aborted', 'completed', 'completed'])
-  }, 120_000)
+  }, scaledTimeout(120_000))
+
 })

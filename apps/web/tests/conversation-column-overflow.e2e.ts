@@ -29,7 +29,7 @@ import {
   assertFixtureInventory, compareOrRefreshGolden, launchWebScaffold, watchConsole, webSnapshotMode,
   type WebScaffold,
 } from './scaffold.ts'
-import { newEnglishPage, saveFailureShot } from './support.ts'
+import { newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/conversation-column-overflow', import.meta.url))
 /**
@@ -209,8 +209,9 @@ describe('web e2e: the conversation column scrolls on one axis', () => {
     page = await newEnglishPage(browser, 900)
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[data-conversation-scroll] [class*="heroGlow"]', { timeout: 30_000 })
-  }, 180_000)
+    await page.waitForSelector('[data-conversation-scroll] [class*="heroGlow"]', { timeout: scaledTimeout(30_000) })
+  }, scaledTimeout(180_000))
+
 
   afterAll(async () => {
     await browser?.close()
@@ -235,7 +236,7 @@ describe('web e2e: the conversation column scrolls on one axis', () => {
       const settled = current === previous
       previous = current
       return settled
-    }, { timeout: 10_000 }).toBe(true)
+    }, { timeout: scaledTimeout(10_000) }).toBe(true)
     return measureColumn(page, width)
   }
 
@@ -280,7 +281,8 @@ describe('web e2e: the conversation column scrolls on one axis', () => {
       expect(stop.scrollsVertically, `viewport ${String(stop.width)}`).toBe(true)
     }
     expect(tripwire.pageErrors).toEqual([])
-  }, 120_000)
+  }, scaledTimeout(120_000))
+
 
   it('scrolls horizontally again once the axis is opened back up (control)', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-conversation-column-overflow-control'))
@@ -324,13 +326,15 @@ describe('web e2e: the conversation column scrolls on one axis', () => {
     // read the product, not the control.
     expect((await settleAt(CONTROL_VIEWPORT)).overflowX).toBe('hidden')
     expect(tripwire.pageErrors).toEqual([])
-  }, 120_000)
+  }, scaledTimeout(120_000))
+
 
   it('matches the committed column-overflow golden', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-conversation-column-overflow-golden'))
     await compareOrRefreshGolden(GEOMETRY_EXPECTED, renderGeometry(await sweep()), MODE)
     expect(tripwire.pageErrors).toEqual([])
-  }, 120_000)
+  }, scaledTimeout(120_000))
+
 
   it('commits exactly the fixtures it reads', async () => {
     // No model calls, so no replay log: the golden is the whole inventory.

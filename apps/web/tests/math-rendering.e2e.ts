@@ -15,7 +15,7 @@ import {
   webSnapshotMode,
   type WebScaffold,
 } from './scaffold.ts'
-import { newEnglishPage, saveFailureShot } from './support.ts'
+import { newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/math-rendering', import.meta.url))
 const UI_EXPECTED = fileURLToPath(new URL('./snapshots/math-rendering/ui.expected.md', import.meta.url))
@@ -98,8 +98,9 @@ describe('web e2e: settled Markdown math rendering', () => {
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
-  }, 120_000)
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
+  }, scaledTimeout(120_000))
+
 
   afterAll(async () => {
     await browser?.close()
@@ -109,19 +110,19 @@ describe('web e2e: settled Markdown math rendering', () => {
   it.skipIf(MODE === 'record')('renders the settled reply without KaTeX errors', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-math-rendering'))
     const groupRow = page.locator('[role="treeitem"]').first()
-    await groupRow.waitFor({ timeout: 15_000 })
+    await groupRow.waitFor({ timeout: scaledTimeout(15_000) })
     await groupRow.click()
     const sessionRow = page.locator('[role="treeitem"]').nth(1)
-    await sessionRow.waitFor({ timeout: 10_000 })
+    await sessionRow.waitFor({ timeout: scaledTimeout(10_000) })
     await sessionRow.click()
-    await expect.poll(() => page.getByText(DONE, { exact: true }).count(), { timeout: 15_000 }).toBe(1)
+    await expect.poll(() => page.getByText(DONE, { exact: true }).count(), { timeout: scaledTimeout(15_000) }).toBe(1)
 
-    await expect.poll(() => page.locator('.katex').count(), { timeout: 10_000 }).toBe(6)
-    await expect.poll(() => page.locator('.katex-display').count(), { timeout: 10_000 }).toBe(2)
+    await expect.poll(() => page.locator('.katex').count(), { timeout: scaledTimeout(10_000) }).toBe(6)
+    await expect.poll(() => page.locator('.katex-display').count(), { timeout: scaledTimeout(10_000) }).toBe(2)
     expect(await page.locator('.katex-error').count()).toBe(0)
     await expect.poll(
       () => page.getByText('1 turns · 1 steps', { exact: false }).count(),
-      { timeout: 10_000 },
+      { timeout: scaledTimeout(10_000) },
     ).toBe(1)
 
     const snapshot = (await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd))
@@ -130,5 +131,6 @@ describe('web e2e: settled Markdown math rendering', () => {
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
     await assertFixtureInventory(SNAPSHOT_DIR, ['ui.expected.md'])
-  }, 60_000)
+  }, scaledTimeout(60_000))
+
 })

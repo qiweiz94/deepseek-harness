@@ -15,6 +15,7 @@ import { dirname, join } from 'node:path'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { hasClass, installAssembledBootEnv, mountAssembledApp, REFRESHING_GOLDEN } from './assembled-boot.ts'
+import { scaledTimeout } from './support.ts'
 
 const EXPECTED = join(process.cwd(), 'apps/web/tests/snapshots/todo-row/parallel-plan.expected.txt')
 
@@ -44,7 +45,7 @@ describe('assembled todo surfaces', () => {
   it('renders the parallel plan as a row summary, a separate active count, and the dock plan strip', async () => {
     mountAssembledApp()
 
-    const tree = await screen.findByRole('tree', { name: 'Sessions' }, { timeout: 10_000 })
+    const tree = await screen.findByRole('tree', { name: 'Sessions' }, { timeout: scaledTimeout(10_000) })
     fireEvent.click(await within(tree).findByText('Fixture 历史会话'))
     // The todo turn is the fixture's last, so wait for its keyed row rather
     // than for chat content in general.
@@ -52,11 +53,11 @@ describe('assembled todo surfaces', () => {
       const found = document.querySelector('[data-tool="todo_write"]')
       expect(found).not.toBeNull()
       return found!
-    }, { timeout: 10_000 })
+    }, { timeout: scaledTimeout(10_000) })
     // The panel is the standing plan the turn's `todo/write` event feeds; it
     // mounts above the composer, outside the row, and starts collapsed — its
     // list only exists once expanded.
-    const panel = await screen.findByTestId('todo-panel', undefined, { timeout: 10_000 })
+    const panel = await screen.findByTestId('todo-panel', undefined, { timeout: scaledTimeout(10_000) })
     const toggle = panel.querySelector('button[aria-expanded]')
     if (toggle === null) throw new Error('the plan strip must expose its expand toggle')
     if (toggle.getAttribute('aria-expanded') === 'false') fireEvent.click(toggle)

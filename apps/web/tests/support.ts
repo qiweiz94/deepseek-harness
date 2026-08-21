@@ -5,6 +5,31 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Browser, Page } from 'playwright'
 
+const TIMEOUT_FACTOR_ENV = 'DSH_TEST_TIMEOUT_FACTOR'
+
+/**
+ * Mirrors `vitest.shared.ts`'s `scaledTimeout`: these tests compile under
+ * `tsconfig.host.json`, whose explicit file list cannot reach a
+ * repository-root config module (TS6307), so the same small scaling logic
+ * lives here too — see `packages/typert/generator/tests/tools-catalog.spec.ts`
+ * and `packages/test-support/acp-snapshot/src/harness.ts` for the same
+ * duplication and its reason. Every locator/poll bound in this web e2e lane
+ * scales through this so a slow runner (`DSH_TEST_TIMEOUT_FACTOR` above 1)
+ * gets proportional headroom while the local default (unset, factor 1) keeps
+ * every bound at exactly its authored value.
+ * @param baseMs - the bound that clears a full-speed development machine.
+ * @returns `baseMs` multiplied by the validated factor, rounded to whole milliseconds.
+ */
+export function scaledTimeout(baseMs: number): number {
+  const raw = process.env[TIMEOUT_FACTOR_ENV]
+  if (raw === undefined || raw === '') return baseMs
+  const factor = Number(raw)
+  if (!Number.isFinite(factor) || factor < 1) {
+    throw new Error(`${TIMEOUT_FACTOR_ENV} must be a finite number >= 1, got ${JSON.stringify(raw)}`)
+  }
+  return Math.round(baseMs * factor)
+}
+
 /** The built page under test; `pnpm run test:web` rebuilds it before running. */
 export const DIST_INDEX = fileURLToPath(new URL('../dist/index.html', import.meta.url))
 
@@ -75,7 +100,7 @@ export async function connectFreshWorkspace(page: Page, root: string, name = 'wo
   mkdirSync(join(root, name), { recursive: true })
   await page.getByRole('textbox', { name: 'Choose workspace' }).click()
   const dialog = page.getByRole('dialog', { name: 'Select Workspace Directory' })
-  await dialog.waitFor({ timeout: 10_000 })
+  await dialog.waitFor({ timeout: scaledTimeout(10_000) })
   await dialog.getByRole('button', { name: 'Edit path' }).click()
   const pathInput = dialog.getByRole('textbox', { name: 'Edit path' })
   await pathInput.fill(join(root, name))
@@ -84,7 +109,7 @@ export async function connectFreshWorkspace(page: Page, root: string, name = 'wo
   // The pick connected the workspace: the blank session's live composer
   // replaces the locked placeholder and enables.
   await page.locator('textarea:enabled[placeholder="Describe what you want to build"]')
-    .waitFor({ timeout: 15_000 })
+    .waitFor({ timeout: scaledTimeout(15_000) })
 }
 
 /**
@@ -99,14 +124,14 @@ export async function connectFreshWorkspaceZh(page: Page, root: string, name = '
   mkdirSync(join(root, name), { recursive: true })
   await page.getByRole('textbox', { name: '选择工作区' }).click()
   const dialog = page.getByRole('dialog', { name: '选择工作区目录' })
-  await dialog.waitFor({ timeout: 10_000 })
+  await dialog.waitFor({ timeout: scaledTimeout(10_000) })
   await dialog.getByRole('button', { name: '编辑路径' }).click()
   const pathInput = dialog.getByRole('textbox', { name: '编辑路径' })
   await pathInput.fill(join(root, name))
   await pathInput.press('Enter')
   await dialog.getByRole('button', { name: '打开', exact: true }).click()
   await page.locator('textarea:enabled[placeholder="描述你想要构建的内容"]')
-    .waitFor({ timeout: 15_000 })
+    .waitFor({ timeout: scaledTimeout(15_000) })
 }
 
 /** Failure evidence goes to the gitignored .artifacts/ (repo convention). */

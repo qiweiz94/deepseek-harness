@@ -9,12 +9,13 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { expect, it } from 'vitest'
 import { installAssembledBootEnv, mountAssembledApp } from './assembled-boot.ts'
+import { scaledTimeout } from './support.ts'
 
 installAssembledBootEnv()
 
 /** Open the fixture history session (the alpha log carrying the turn-72 image pair) and wait for its gallery. */
 async function openFixtureSession(): Promise<void> {
-  const tree = await screen.findByRole('tree', { name: 'Sessions' }, { timeout: 10_000 })
+  const tree = await screen.findByRole('tree', { name: 'Sessions' }, { timeout: scaledTimeout(10_000) })
   const group = (await within(tree).findAllByText('fixture'))
     .map(el => el.closest<HTMLElement>('[role="treeitem"]'))
     .find(el => el?.getAttribute('aria-expanded') !== null)
@@ -29,7 +30,7 @@ async function openFixtureSession(): Promise<void> {
   fireEvent.click(session)
   await waitFor(() => {
     expect(document.querySelectorAll('[data-align] img').length).toBeGreaterThan(0)
-  }, { timeout: 10_000 })
+  }, { timeout: scaledTimeout(10_000) })
 }
 
 it('renders the history image pair through the authorized attachment route and opens the lightbox', async () => {
@@ -45,7 +46,7 @@ it('renders the history image pair through the authorized attachment route and o
       || document.querySelector('[data-align="start"] img') === null) {
       throw new Error('history image galleries missing')
     }
-  }, { timeout: 10_000 })
+  }, { timeout: scaledTimeout(10_000) })
   const galleryShape = (align: string) => [...document.querySelectorAll(`[data-align="${align}"] img`)]
     .map(img => ({ alt: img.getAttribute('alt'), scheme: img.getAttribute('src')?.split(':')[0] }))
   expect({ user: galleryShape('end'), assistant: galleryShape('start') }).toMatchInlineSnapshot(`
@@ -81,14 +82,14 @@ it('renders the history image pair through the authorized attachment route and o
 it('accepts pasted images into the composer rail in order and removes them', async () => {
   mountAssembledApp()
 
-  const tree = await screen.findByRole('tree', { name: 'Sessions' }, { timeout: 10_000 })
+  const tree = await screen.findByRole('tree', { name: 'Sessions' }, { timeout: scaledTimeout(10_000) })
   const start = tree.querySelector<HTMLButtonElement>('button[aria-label="New session in fixture"]')
   if (start === null) throw new Error('fixture Workspace new-session action missing')
   fireEvent.click(start)
 
   // Image-only send arming is pinned at package level (input-bar.spec.tsx);
   // this assembled lane pins the intake chain over the built graph.
-  const textarea = await screen.findByPlaceholderText('Describe what you want to build', {}, { timeout: 10_000 })
+  const textarea = await screen.findByPlaceholderText('Describe what you want to build', {}, { timeout: scaledTimeout(10_000) })
   const image = new File([new Uint8Array([137, 80, 78, 71])], 'pasted.png', { type: 'image/png' })
   fireEvent.paste(textarea, {
     clipboardData: {
@@ -103,7 +104,7 @@ it('accepts pasted images into the composer rail in order and removes them', asy
     const el = document.querySelector('[role="group"][aria-label="Pending images"]')
     if (el === null) throw new Error('attachment rail missing')
     return el
-  }, { timeout: 5_000 })
+  }, { timeout: scaledTimeout(5_000) })
   expect([...rail.querySelectorAll('img')].map(img => ({
     alt: img.getAttribute('alt'), scheme: img.getAttribute('src')?.split(':')[0],
   }))).toMatchInlineSnapshot(`
@@ -146,17 +147,17 @@ it('accepts pasted images into the composer rail in order and removes them', asy
   expect(toast.textContent).toContain('Only PNG, JPG, WebP, and GIF images are supported')
   await waitFor(() => {
     expect(screen.queryByRole('alert')).toBeNull()
-  }, { timeout: 6_000 })
+  }, { timeout: scaledTimeout(6_000) })
 })
 
 it('accepts a whole-page drop under the limits-labeled overlay and refuses an over-limit batch at intake', async () => {
   mountAssembledApp()
 
-  const tree = await screen.findByRole('tree', { name: 'Sessions' }, { timeout: 10_000 })
+  const tree = await screen.findByRole('tree', { name: 'Sessions' }, { timeout: scaledTimeout(10_000) })
   const start = tree.querySelector<HTMLButtonElement>('button[aria-label="New session in fixture"]')
   if (start === null) throw new Error('fixture Workspace new-session action missing')
   fireEvent.click(start)
-  const textarea = await screen.findByPlaceholderText('Describe what you want to build', {}, { timeout: 10_000 })
+  const textarea = await screen.findByPlaceholderText('Describe what you want to build', {}, { timeout: scaledTimeout(10_000) })
 
   // A file drag anywhere over the page raises the full-viewport overlay whose
   // desc line carries the projected limits — copy that can only render after
@@ -176,7 +177,7 @@ it('accepts a whole-page drop under the limits-labeled overlay and refuses an ov
     const rail = document.querySelector('[role="group"][aria-label="Pending images"]')
     if (rail === null) throw new Error('attachment rail missing after page drop')
     expect([...rail.querySelectorAll('img')].map(img => img.getAttribute('alt'))).toEqual(['dropped.png'])
-  }, { timeout: 5_000 })
+  }, { timeout: scaledTimeout(5_000) })
   expect(screen.queryByRole('status')).toBeNull()
 
   // An intake that would exceed the projected per-message count is refused as

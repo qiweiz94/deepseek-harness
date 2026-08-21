@@ -20,7 +20,7 @@ import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden, fixtureUserPrompts,
   launchWebScaffold, recordFixture, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, REPO_ROOT, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, REPO_ROOT, saveFailureShot, scaledTimeout } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/fresh-round-trip', import.meta.url))
 const FIXTURE = fileURLToPath(new URL('./snapshots/fresh-round-trip/session.jsonl', import.meta.url))
@@ -50,10 +50,11 @@ describe('web e2e: fresh round trip through the real assembly', () => {
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     // Fresh world: connect a Workspace so the composer scenarios start live.
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
-  }, 120_000)
+  }, scaledTimeout(120_000))
+
 
   afterAll(async () => {
     await browser?.close()
@@ -67,7 +68,7 @@ describe('web e2e: fresh round trip through the real assembly', () => {
       expect(fixtureUserPrompts(await readFile(FIXTURE, 'utf8'))).toEqual([PROMPT])
     }
     const input = page.locator('textarea').first()
-    await input.waitFor({ timeout: 10_000 })
+    await input.waitFor({ timeout: scaledTimeout(10_000) })
     // Arm the host-side settled barrier BEFORE the send click.
     const settled = scaffold.whenTurnSettled()
     await input.fill(PROMPT)
@@ -77,7 +78,8 @@ describe('web e2e: fresh round trip through the real assembly', () => {
     if (MODE === 'record') {
       await recordFixture(scaffold, sessionId, FIXTURE)
     }
-  }, 200_000)
+  }, scaledTimeout(200_000))
+
 
   it('records the Web surface, source checkout, and session cwd in the request header', async () => {
     if (settledSessionId === undefined) throw new Error('the drive turn did not publish a session id')
@@ -97,7 +99,7 @@ describe('web e2e: fresh round trip through the real assembly', () => {
     const agent = scaffold.ctx.agents.get(settledSessionId)
     if (agent === undefined) throw new Error(`the settled Web agent ${settledSessionId} is no longer live`)
     const result = await scaffold.ctx.tools.execute({
-      signal: AbortSignal.timeout(5_000),
+      signal: AbortSignal.timeout(scaledTimeout(5_000)),
       callId: CallId('web-url-probe'),
       name: 'bash',
       arguments: {
@@ -114,11 +116,11 @@ describe('web e2e: fresh round trip through the real assembly', () => {
   it.skipIf(MODE === 'record')('rendered the settled turn: markdown, tool row, composer restore', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-round-trip-settled'))
     // Browser settled-poll after host completion (host strictly precedes render).
-    await page.locator('[data-streaming="true"]').waitFor({ state: 'detached', timeout: 15_000 }).catch(() => {
+    await page.locator('[data-streaming="true"]').waitFor({ state: 'detached', timeout: scaledTimeout(15_000) }).catch(() => {
       // Chunks may coalesce into one commit; a never-mounted streaming node is
       // legal — the chunk-event assertions below carry incrementality.
     })
-    await expect.poll(() => page.getByText('DONE', { exact: true }).count(), { timeout: 15_000 }).toBeGreaterThanOrEqual(1)
+    await expect.poll(() => page.getByText('DONE', { exact: true }).count(), { timeout: scaledTimeout(15_000) }).toBeGreaterThanOrEqual(1)
     // World state, not self-report: the real bash executor returned the exact
     // command output, and the turn closed cleanly.
     const bashCall = sessionEvents.find(event => event.type === 'tool/call' && event.data.name === 'bash')
@@ -134,7 +136,8 @@ describe('web e2e: fresh round trip through the real assembly', () => {
     expect((turnEnds[0] as SessionEvent & { data: { reason: { kind: string } } }).data.reason.kind).toBe('completed')
     // The persisted chunk events are the authoritative incrementality proof.
     expect(sessionEvents.filter(e => e.type === 'assistant/chunk').length).toBeGreaterThan(10)
-  }, 60_000)
+  }, scaledTimeout(60_000))
+
 
   it.skipIf(MODE === 'record')('matches the conversation aria golden with stable anchors', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-round-trip-aria'))
@@ -144,7 +147,7 @@ describe('web e2e: fresh round trip through the real assembly', () => {
     expect(await page.getByText('WEB_E2E_OK', { exact: false }).count()).toBeGreaterThanOrEqual(1)
     await page.getByRole('button', {
       name: 'Select model, current DeepSeek-V4-Flash',
-    }).waitFor({ timeout: 10_000 })
+    }).waitFor({ timeout: scaledTimeout(10_000) })
     const snapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(UI_EXPECTED, snapshot, MODE)
   })
@@ -158,9 +161,9 @@ describe('web e2e: fresh round trip through the real assembly', () => {
     const think = page.getByRole('button', { name: /^Think/ }).first()
     expect(await think.getAttribute('aria-expanded')).toBe('false')
     await think.click()
-    await expect.poll(() => think.getAttribute('aria-expanded'), { timeout: 5_000 }).toBe('true')
+    await expect.poll(() => think.getAttribute('aria-expanded'), { timeout: scaledTimeout(5_000) }).toBe('true')
     await think.click()
-    await expect.poll(() => think.getAttribute('aria-expanded'), { timeout: 5_000 }).toBe('false')
+    await expect.poll(() => think.getAttribute('aria-expanded'), { timeout: scaledTimeout(5_000) }).toBe('false')
   })
 
   it.skipIf(MODE === 'record')('stayed clean: no pageerrors, no reconnect self-healing, no server errors', async () => {

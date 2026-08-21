@@ -14,7 +14,7 @@ import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden,
   launchWebScaffold, recordFixture, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/goal-multi-turn-actions', import.meta.url))
 const FIXTURE = join(SNAPSHOT_DIR, 'session.jsonl')
@@ -118,14 +118,14 @@ describe('web e2e: Goal keeps one assistant action row per completed turn', () =
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
   }
 
   /** Submit the Goal command after arming the two-turn barrier. */
   async function runGoal(timeoutMs: number): Promise<SessionId> {
     const input = page.locator('textarea').first()
-    await input.waitFor({ timeout: 10_000 })
+    await input.waitFor({ timeout: scaledTimeout(10_000) })
     const settled = whenTurnsSettled(scaffold!, 2, timeoutMs)
     await input.fill(COMMAND)
     await input.press('Enter')
@@ -135,9 +135,9 @@ describe('web e2e: Goal keeps one assistant action row per completed turn', () =
   it.skipIf(MODE !== 'record')('records the two-round Goal through the real model', async () => {
     await launch()
     onTestFailed(() => saveFailureShot(page, 'web-e2e-goal-multi-turn-actions-record'))
-    const sessionId = await runGoal(360_000)
+    const sessionId = await runGoal(scaledTimeout(360_000))
     await recordFixture(scaffold!, sessionId, FIXTURE)
-  }, 380_000)
+  }, scaledTimeout(380_000))
 
   it.skipIf(MODE === 'record')('keeps actions on both completed Goal turn tails', async () => {
     const fixtureEvents = parseSessionLog(await readFile(FIXTURE, 'utf8'))
@@ -146,13 +146,13 @@ describe('web e2e: Goal keeps one assistant action row per completed turn', () =
 
     await launch()
     onTestFailed(() => saveFailureShot(page, 'web-e2e-goal-multi-turn-actions'))
-    await runGoal(120_000)
+    await runGoal(scaledTimeout(120_000))
 
     expect(sessionEvents.flatMap(event => event.type === 'turn/end' ? [event.data.turn] : []))
       .toEqual([1, 2])
     expect(goalRounds(sessionEvents)).toEqual([1, 2])
     const branchButtons = page.getByRole('button', { name: 'Branch into a new conversation' })
-    await expect.poll(() => branchButtons.count(), { timeout: 15_000 }).toBe(2)
+    await expect.poll(() => branchButtons.count(), { timeout: scaledTimeout(15_000) }).toBe(2)
     expect(await branchButtons.evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-disabled'))))
       .toEqual([null, null])
     await branchButtons.last().focus()
@@ -160,7 +160,8 @@ describe('web e2e: Goal keeps one assistant action row per completed turn', () =
     await compareOrRefreshGolden(UI_EXPECTED, snapshot, MODE)
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
-  }, 140_000)
+  }, scaledTimeout(140_000))
+
 
   it.skipIf(MODE === 'record')('keeps a closed fixture inventory', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, ['replay.override.json', 'session.jsonl', 'ui.expected.md'])

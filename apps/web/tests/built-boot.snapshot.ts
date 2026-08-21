@@ -13,6 +13,7 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { expect, it } from 'vitest'
 import { installAssembledBootEnv, mountAssembledApp } from './assembled-boot.ts'
+import { scaledTimeout } from './support.ts'
 
 installAssembledBootEnv()
 
@@ -20,7 +21,7 @@ it('boots the built plugin graph and renders a fixture session end to end', asyn
   mountAssembledApp()
 
   // The sidebar renders from the boot graph: every inject layer activated.
-  const tree = await screen.findByRole('tree', { name: 'Sessions' }, { timeout: 10_000 })
+  const tree = await screen.findByRole('tree', { name: 'Sessions' }, { timeout: scaledTimeout(10_000) })
   // The compact layout dropped group session counts; the fixture workspace
   // group row renders immediately with its sessions beneath it.
   const fixtureGroup = (await within(tree).findAllByText('fixture'))
@@ -42,7 +43,7 @@ it('boots the built plugin graph and renders a fixture session end to end', asyn
   fireEvent.click(waitingTitle)
   await waitFor(() => {
     expect(document.querySelector('[data-sample="bash"]')).not.toBeNull()
-  }, { timeout: 10_000 })
+  }, { timeout: scaledTimeout(10_000) })
   // Resolve the resident approval so the ordinary composer bar (which owns
   // ContextMeter) resumes without replacing the session shell. This minimal
   // boot graph intentionally does not mount the separate question UI plugin.
@@ -88,13 +89,13 @@ it('boots the built plugin graph and renders a fixture session end to end', asyn
     expect(row).not.toBeNull()
     expect(document.querySelector('[data-tool="web_fetch"]')).not.toBeNull()
     return row!
-  }, { timeout: 10_000 })
+  }, { timeout: scaledTimeout(10_000) })
   // Expand the web_search row to prove its WebBlock card renders end to end.
   const webToggle = webSearchRow.querySelector('[data-expandable]')
   if (webToggle !== null) act(() => { fireEvent.click(webToggle) })
   await waitFor(() => {
     expect(webSearchRow.querySelector('[data-web]')).not.toBeNull()
-  }, { timeout: 10_000 })
+  }, { timeout: scaledTimeout(10_000) })
 
   // Every bundle injected its plugin-owned style tag (the loader's CSS path).
   const styleOwners = [...document.head.querySelectorAll('style[data-plugin]')]

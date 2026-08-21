@@ -21,7 +21,7 @@ import {
   webSnapshotMode,
   type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/skill-user-invoke', import.meta.url))
 const UI_EXPECTED = join(SNAPSHOT_DIR, 'ui.expected.md')
@@ -80,9 +80,10 @@ describe.skipIf(MODE === 'record')('web e2e: user-explicit skill invocation thro
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
-  }, 120_000)
+  }, scaledTimeout(120_000))
+
 
   afterAll(async () => {
     const failures: unknown[] = []
@@ -99,14 +100,14 @@ describe.skipIf(MODE === 'record')('web e2e: user-explicit skill invocation thro
   it('claims /name args into a gesture bubble, an injection row, and a replayed answer', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-skill-user-invoke'))
     const composer = page.locator('textarea:enabled').last()
-    await composer.waitFor({ timeout: 15_000 })
+    await composer.waitFor({ timeout: scaledTimeout(15_000) })
 
     // The menu lists the user-only skill (its only entry point) before enter.
     await composer.fill(`/${SKILL_NAME}`)
     const menu = page.getByRole('listbox', { name: 'Trigger suggestions' })
     await expect.poll(
       () => menu.getByRole('option', { name: new RegExp(SKILL_NAME) }).count(),
-      { timeout: 10_000 },
+      { timeout: scaledTimeout(10_000) },
     ).toBe(1)
 
     const settled = scaffold.whenTurnSettled()
@@ -116,33 +117,34 @@ describe.skipIf(MODE === 'record')('web e2e: user-explicit skill invocation thro
     // The gesture stays an ordinary user bubble (decorated /name token plus
     // the trailing text), ahead of the injected context.
     const bubble = page.locator('[data-ref-chip="skill"]').first()
-    await bubble.waitFor({ timeout: 15_000 })
+    await bubble.waitFor({ timeout: scaledTimeout(15_000) })
     expect(await bubble.textContent()).toBe(`/${SKILL_NAME}`)
 
     // The rendered body arrives as a context-injection row named after the
     // skill; expanding it reveals the canonical <skill_content> block, and
     // the user's text is NOT folded into it.
     const injectionRow = page.getByRole('button', { name: `Context injection ${SKILL_NAME}` })
-    await injectionRow.waitFor({ timeout: 15_000 })
+    await injectionRow.waitFor({ timeout: scaledTimeout(15_000) })
     await injectionRow.click()
     const injectionBody = page
       .locator('[data-context-injection-body]')
       .filter({ hasText: `<skill_content name="${SKILL_NAME}">` })
-    await injectionBody.waitFor({ timeout: 10_000 })
+    await injectionBody.waitFor({ timeout: scaledTimeout(10_000) })
     const injected = await injectionBody.textContent()
     expect(injected).toContain('Reply with the fixture acknowledgement line.')
     expect(injected).not.toContain(ARGS_TEXT)
     await injectionRow.click()
 
     // The injection started a turn; the replay adapter answers it.
-    await page.getByText('USER_INVOKE_REPLY', { exact: false }).first().waitFor({ timeout: 20_000 })
+    await page.getByText('USER_INVOKE_REPLY', { exact: false }).first().waitFor({ timeout: scaledTimeout(20_000) })
     await settled
 
     const snapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(UI_EXPECTED, snapshot, MODE)
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
+
 
   it('keeps its snapshot inventory closed', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, ['ui.expected.md'])

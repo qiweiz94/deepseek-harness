@@ -19,7 +19,7 @@ import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden, fixtureUserPrompts,
   launchWebScaffold, recordFixture, seedSession, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { newEnglishPage, saveFailureShot } from './support.ts'
+import { newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/navigation-panes', import.meta.url))
 const SEED = join(SNAPSHOT_DIR, 'seed.jsonl')
@@ -42,7 +42,7 @@ async function baselineResponse(
   return page.waitForResponse(response => (
     response.request().method() === 'POST'
     && new URL(response.url()).pathname === `/api/${method}`
-  ), { timeout: 30_000 })
+  ), { timeout: scaledTimeout(30_000) })
 }
 
 async function assertBaselineSucceeded(response: Response, method: string): Promise<void> {
@@ -55,7 +55,7 @@ async function ensureSeedOpen(page: Page): Promise<void> {
   const welcome = page.locator('[class*="onboardingOverlay"]')
   if (await welcome.count() > 0) {
     await welcome.getByRole('button').click()
-    await welcome.waitFor({ state: 'detached', timeout: 15_000 })
+    await welcome.waitFor({ state: 'detached', timeout: scaledTimeout(15_000) })
   }
   const chat = page.getByRole('tab', { name: 'Chat', exact: true })
   // Search is a collapsed header action; expand it so the input is actionable.
@@ -65,15 +65,15 @@ async function ensureSeedOpen(page: Page): Promise<void> {
   if (await chat.count() === 0) {
     await search.fill('WATERFALL')
     const result = page.getByRole('tree', { name: 'Search results' }).getByRole('treeitem')
-    await expect.poll(() => result.count(), { timeout: 15_000 }).toBe(1)
+    await expect.poll(() => result.count(), { timeout: scaledTimeout(15_000) }).toBe(1)
     await result.click()
-    await chat.waitFor({ timeout: 15_000 })
+    await chat.waitFor({ timeout: scaledTimeout(15_000) })
   }
   await chat.click()
-  await page.getByText('FIRST_DONE', { exact: true }).waitFor({ timeout: 15_000 })
+  await page.getByText('FIRST_DONE', { exact: true }).waitFor({ timeout: scaledTimeout(15_000) })
   if (await search.inputValue() !== '') {
     await search.fill('')
-    await expect.poll(() => search.inputValue(), { timeout: 5_000 }).toBe('')
+    await expect.poll(() => search.inputValue(), { timeout: scaledTimeout(5_000) }).toBe('')
   }
 }
 
@@ -100,7 +100,8 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
       await seedSession(scaffold, raw, SEED_ID)
     }
     browser = await chromium.launch()
-  }, 120_000)
+  }, scaledTimeout(120_000))
+
 
   beforeEach(async () => {
     page = await newEnglishPage(browser)
@@ -124,13 +125,14 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
       assertBaselineSucceeded(sessionResponse, 'session.list'),
       assertBaselineSucceeded(workspaceResponse, 'workspace.list'),
     ])
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     // The frame mounts before the asynchronous session-list baseline lands.
     // Search must target the settled seeded row, not the startup input that
     // the ready projection replaces (the compact layout dropped group session
     // counts; the Ungrouped bucket row is the barrier).
-    await page.getByText('Ungrouped', { exact: true }).waitFor({ timeout: 30_000 })
-  }, 120_000)
+    await page.getByText('Ungrouped', { exact: true }).waitFor({ timeout: scaledTimeout(30_000) })
+  }, scaledTimeout(120_000))
+
 
   afterEach(async () => {
     const failures: unknown[] = []
@@ -163,12 +165,12 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
   it.skipIf(MODE !== 'record')('records the two-turn seed live through the composer', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-navigation-record'))
     const input = page.locator('textarea').first()
-    await input.waitFor({ timeout: 10_000 })
+    await input.waitFor({ timeout: scaledTimeout(10_000) })
     let sessionId: Awaited<ReturnType<WebScaffold['whenTurnSettled']>> | undefined
     for (const prompt of [PROMPT_TURN1, PROMPT_TURN2]) {
       const settled = scaffold.whenTurnSettled()
       // Turn 2 types into the same composer once turn 1 unlocks it.
-      await expect.poll(() => input.isEnabled(), { timeout: 15_000 }).toBe(true)
+      await expect.poll(() => input.isEnabled(), { timeout: scaledTimeout(15_000) }).toBe(true)
       await input.fill(prompt)
       await input.press('Enter')
       sessionId = await settled
@@ -180,14 +182,15 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     expect(recorded.filter(e => e.type === 'turn/end')).toHaveLength(2)
     const calls = recorded.filter((e): e is SessionEvent & { data: { name: string } } => e.type === 'tool/call')
     expect(calls.map(e => e.data.name).sort()).toEqual(['bash', 'read', 'read'])
-  }, 400_000)
+  }, scaledTimeout(400_000))
+
 
   it.skipIf(MODE === 'record')('finds an unopened seeded session by message content and opens it', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-navigation-search'))
     // The API baselines can settle before React commits their projection. The
     // seeded Ungrouped bucket row is the final user-visible barrier before
     // editing search (the compact layout dropped group session counts).
-    await page.getByText('Ungrouped', { exact: true }).waitFor({ timeout: 30_000 })
+    await page.getByText('Ungrouped', { exact: true }).waitFor({ timeout: scaledTimeout(30_000) })
     // Search is a collapsed header action; expand it so the input is actionable.
     const searchButton = page.getByRole('button', { name: 'Search sessions' })
     if (await searchButton.getAttribute('aria-expanded') !== 'true') await searchButton.click()
@@ -195,18 +198,18 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     // The cold row has not been opened, so only the persisted log can satisfy
     // this query. First search lazily reconciles the SQLite content index.
     await search.fill('zzzqx-no-such-session')
-    await page.getByText('No matching sessions').waitFor({ timeout: 30_000 })
+    await page.getByText('No matching sessions').waitFor({ timeout: scaledTimeout(30_000) })
     await expect.poll(
       () => page.getByRole('tree', { name: 'Search results' }).getByRole('treeitem').count(),
-      { timeout: 10_000 },
+      { timeout: scaledTimeout(10_000) },
     ).toBe(0)
 
     await search.fill('WATERFALL')
     const resultTree = page.getByRole('tree', { name: 'Search results' })
     const result = resultTree.getByRole('treeitem')
-    await expect.poll(() => result.count(), { timeout: 30_000 }).toBe(1)
+    await expect.poll(() => result.count(), { timeout: scaledTimeout(30_000) }).toBe(1)
     await expect.poll(() => result.getByText('WATERFALL', { exact: false }).count(), {
-      timeout: 10_000,
+      timeout: scaledTimeout(10_000),
     }).toBeGreaterThanOrEqual(1)
     const snapshot = (await captureStableAria(page, '[class*="listArea"]', scaffold.workspaceCwd))
       .split(SEED_ID).join('{{seededId}}')
@@ -215,13 +218,14 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     await result.click()
     // Search navigation addresses the session, not a specific event, and the
     // query remains until the user explicitly clears it.
-    await expect.poll(() => search.inputValue(), { timeout: 5_000 }).toBe('WATERFALL')
-    await expect.poll(() => page.getByText('FIRST_DONE', { exact: true }).count(), { timeout: 15_000 }).toBeGreaterThanOrEqual(1)
-    await expect.poll(() => page.getByRole('heading', { name: 'Navigation Summary' }).count(), { timeout: 15_000 }).toBe(1)
+    await expect.poll(() => search.inputValue(), { timeout: scaledTimeout(5_000) }).toBe('WATERFALL')
+    await expect.poll(() => page.getByText('FIRST_DONE', { exact: true }).count(), { timeout: scaledTimeout(15_000) }).toBeGreaterThanOrEqual(1)
+    await expect.poll(() => page.getByRole('heading', { name: 'Navigation Summary' }).count(), { timeout: scaledTimeout(15_000) }).toBe(1)
     await page.getByRole('button', { name: 'Clear search' }).click()
-    await expect.poll(() => search.inputValue(), { timeout: 5_000 }).toBe('')
-    await expect.poll(() => page.locator('[role="treeitem"]').count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(1)
-  }, 90_000)
+    await expect.poll(() => search.inputValue(), { timeout: scaledTimeout(5_000) }).toBe('')
+    await expect.poll(() => page.locator('[role="treeitem"]').count(), { timeout: scaledTimeout(10_000) }).toBeGreaterThanOrEqual(1)
+  }, scaledTimeout(90_000))
+
 
   it.skipIf(MODE === 'record')('renders the trajectory ledger and opens its local record inspector', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-navigation-trajectory'))
@@ -255,11 +259,11 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
       warnings: [],
     })
     // Turn rules partition the ledger without restoring a separate header row.
-    await expect.poll(() => page.locator('tr[data-turn-start="true"]').count(), { timeout: 15_000 }).toBe(2)
-    await expect.poll(() => page.getByRole('columnheader').count(), { timeout: 10_000 }).toBe(0)
+    await expect.poll(() => page.locator('tr[data-turn-start="true"]').count(), { timeout: scaledTimeout(15_000) }).toBe(2)
+    await expect.poll(() => page.getByRole('columnheader').count(), { timeout: scaledTimeout(10_000) }).toBe(0)
     await page.locator('tr[data-kind="tool"]').first().click()
     const details = page.getByRole('complementary', { name: 'Event details' })
-    await expect.poll(() => details.count(), { timeout: 10_000 }).toBe(1)
+    await expect.poll(() => details.count(), { timeout: scaledTimeout(10_000) }).toBe(1)
     expect(await details.getByRole('tabpanel').evaluate(panel => getComputedStyle(panel).overflowX))
       .toBe('hidden')
     await page.evaluate(() => { document.body.setAttribute('data-ds-dark-theme', '') })
@@ -270,12 +274,12 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     expect(darkSummarySurfaces.heading).toBe(darkSummarySurfaces.panel)
     await page.evaluate(() => { document.body.removeAttribute('data-ds-dark-theme') })
     await page.getByRole('tab', { name: 'Result' }).click()
-    await expect.poll(() => page.getByText('NAVIGATION_OK', { exact: false }).count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(1)
+    await expect.poll(() => page.getByText('NAVIGATION_OK', { exact: false }).count(), { timeout: scaledTimeout(10_000) }).toBeGreaterThanOrEqual(1)
     const assistantSpan = page.locator('[data-timeline-span="message"][data-assistant-timing="true"]').first()
     await assistantSpan.hover()
     const timingTooltip = page.getByRole('tooltip')
-    await timingTooltip.waitFor({ timeout: 5_000 })
-    await expect.poll(() => timingTooltip.textContent(), { timeout: 5_000 }).toMatch(/TTFT .* Decoding/)
+    await timingTooltip.waitFor({ timeout: scaledTimeout(5_000) })
+    await expect.poll(() => timingTooltip.textContent(), { timeout: scaledTimeout(5_000) }).toMatch(/TTFT .* Decoding/)
     const assistantTimingStyle = await assistantSpan.evaluate(node => ({
       background: getComputedStyle(node).backgroundImage,
       ttft: getComputedStyle(node).getPropertyValue('--trajectory-assistant-ttft'),
@@ -286,7 +290,8 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
       .split(SEED_ID).join('{{seededId}}')
     await compareOrRefreshGolden(TRAJECTORY_EXPECTED, snapshot, MODE)
     await details.getByRole('button', { name: 'Close details' }).click()
-  }, 60_000)
+  }, scaledTimeout(60_000))
+
 
   it.skipIf(MODE === 'record')('downloads through the Session Header and /export with one dialog', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-navigation-export'))
@@ -303,15 +308,15 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     expect(headerBox.x + headerBox.width - (buttonBox.x + buttonBox.width)).toBeLessThanOrEqual(32)
     const responsePromise = page.waitForResponse(response =>
       response.request().method() === 'HEAD'
-      && new URL(response.url()).pathname === '/api/session.export', { timeout: 30_000 })
-    const downloadPromise = page.waitForEvent('download', { timeout: 30_000 })
+      && new URL(response.url()).pathname === '/api/session.export', { timeout: scaledTimeout(30_000) })
+    const downloadPromise = page.waitForEvent('download', { timeout: scaledTimeout(30_000) })
     await exportButton.click()
     const response = await responsePromise
     expect(response.status()).toBe(200)
     const download = await downloadPromise
     expect(download.suggestedFilename()).toMatch(/^dsh-session-.+\.zip$/)
     const dialog = page.getByRole('dialog', { name: 'Session download started' })
-    await dialog.waitFor({ timeout: 30_000 })
+    await dialog.waitFor({ timeout: scaledTimeout(30_000) })
     // The real host streamed the ZIP; its root entry is the persisted log
     // text verbatim (the assembled seam: real route, real persistence read).
     const files = unzipSync(await readFile(await download.path()))
@@ -342,14 +347,14 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
       assertBaselineSucceeded(observerSessionResponse, 'observer session.list'),
       assertBaselineSucceeded(observerWorkspaceResponse, 'observer workspace.list'),
     ])
-    await observer.getByText('Ungrouped', { exact: true }).waitFor({ timeout: 30_000 })
+    await observer.getByText('Ungrouped', { exact: true }).waitFor({ timeout: scaledTimeout(30_000) })
     await ensureSeedOpen(observer)
 
     try {
       const input = page.locator('textarea').first()
-      const slashDownloadPromise = page.waitForEvent('download', { timeout: 30_000 })
+      const slashDownloadPromise = page.waitForEvent('download', { timeout: scaledTimeout(30_000) })
       await input.fill('/export')
-      await page.getByRole('option', { name: /export/u }).waitFor({ timeout: 10_000 })
+      await page.getByRole('option', { name: /export/u }).waitFor({ timeout: scaledTimeout(10_000) })
       await input.press('Enter')
       const slashDownload = await slashDownloadPromise
       expect(slashDownload.suggestedFilename()).toBe(download.suggestedFilename())
@@ -361,10 +366,10 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
       const exportDone = slashEvents.find(event =>
         event.type === 'command/done' && event.data.commandId === exportRun.data.commandId)
       expect(exportDone?.type).toBe('command/done')
-      await page.getByRole('dialog', { name: 'Session download started' }).waitFor({ timeout: 30_000 })
+      await page.getByRole('dialog', { name: 'Session download started' }).waitFor({ timeout: scaledTimeout(30_000) })
       await page.getByRole('dialog', { name: 'Session download started' })
         .getByText('Close', { exact: true }).click()
-      await observer.getByText('Session log download requested.', { exact: true }).waitFor({ timeout: 30_000 })
+      await observer.getByText('Session log download requested.', { exact: true }).waitFor({ timeout: scaledTimeout(30_000) })
       expect(observerDownloads).toBe(0)
       expect(await observer.getByRole('dialog', { name: 'Session download started' }).count()).toBe(0)
       expect({
@@ -375,14 +380,15 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     } finally {
       await observer.close()
     }
-  }, 120_000)
+  }, scaledTimeout(120_000))
+
 
   it.skipIf(MODE === 'record')('focuses the ledger by dragging an overview interval', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-navigation-timeline'))
     await ensureSeedOpen(page)
     await page.getByRole('tab', { name: 'Trajectory' }).click()
     const plot = page.getByLabel('Timeline overview; drag horizontally to focus events')
-    await plot.waitFor({ timeout: 15_000 })
+    await plot.waitFor({ timeout: scaledTimeout(15_000) })
     const before = await page.locator('tr[data-kind]').count()
     const box = await plot.boundingBox()
     if (box === null) throw new Error('trajectory timeline plot has no layout box')
@@ -390,34 +396,36 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     await page.mouse.down()
     await page.mouse.move(box.x + box.width * 0.9, box.y + box.height / 2)
     await page.mouse.up()
-    await expect.poll(() => page.locator('tr[data-timeline-focus="outside"]').count(), { timeout: 10_000 })
+    await expect.poll(() => page.locator('tr[data-timeline-focus="outside"]').count(), { timeout: scaledTimeout(10_000) })
       .toBeGreaterThan(0)
-    await expect.poll(() => page.locator('tr[data-kind]').count(), { timeout: 10_000 }).toBe(before)
+    await expect.poll(() => page.locator('tr[data-kind]').count(), { timeout: scaledTimeout(10_000) }).toBe(before)
     await plot.click({ button: 'right' })
-    await expect.poll(() => page.locator('tr[data-timeline-focus]').count(), { timeout: 10_000 }).toBe(0)
-  }, 60_000)
+    await expect.poll(() => page.locator('tr[data-timeline-focus]').count(), { timeout: scaledTimeout(10_000) }).toBe(0)
+  }, scaledTimeout(60_000))
+
 
   it.skipIf(MODE === 'record')('bash and file-path rows leave the default details column closed', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-navigation-details'))
     await ensureSeedOpen(page)
     const bashRow = page.locator('[data-sample="bash"]').first()
-    await bashRow.waitFor({ timeout: 15_000 })
+    await bashRow.waitFor({ timeout: scaledTimeout(15_000) })
     const frame = page.locator('[style*="grid-template-columns"]').first()
     expect(await frame.getAttribute('data-details-collapsed')).toBe('true')
     // The row click is the card's expand toggle (unified tool-row
     // interaction); it must not drive layout geometry either way.
     await bashRow.click()
-    await expect.poll(() => frame.getAttribute('data-details-collapsed'), { timeout: 5_000 }).toBe('true')
+    await expect.poll(() => frame.getAttribute('data-details-collapsed'), { timeout: scaledTimeout(5_000) }).toBe('true')
     // The card's own controls are outside the summary row and must not open
     // details either — the expanded terminal card is read in place.
     await page.locator('[data-sample="bash"] ~ div [data-terminal] [class*="_copyButton_"]').first().click()
-    await expect.poll(() => frame.getAttribute('data-details-collapsed'), { timeout: 5_000 }).toBe('true')
+    await expect.poll(() => frame.getAttribute('data-details-collapsed'), { timeout: scaledTimeout(5_000) }).toBe('true')
     // Read summaries are host-open file links; they also must not open details.
     const fileLink = page.locator('[data-variant="read"] button').first()
-    await fileLink.waitFor({ timeout: 10_000 })
+    await fileLink.waitFor({ timeout: scaledTimeout(10_000) })
     await fileLink.click()
-    await expect.poll(() => frame.getAttribute('data-details-collapsed'), { timeout: 5_000 }).toBe('true')
-  }, 60_000)
+    await expect.poll(() => frame.getAttribute('data-details-collapsed'), { timeout: scaledTimeout(5_000) }).toBe('true')
+  }, scaledTimeout(60_000))
+
 
   it.skipIf(MODE === 'record')('renders the bash row as a terminal card in the real browser', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-navigation-terminal'))
@@ -427,10 +435,10 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     // Expanded, the recorded command's own output sits in the message flow,
     // derived from the logged call/result presentations alone.
     const bashRow = page.locator('[data-sample="bash"]').first()
-    await bashRow.waitFor({ timeout: 15_000 })
+    await bashRow.waitFor({ timeout: scaledTimeout(15_000) })
     if (await bashRow.getAttribute('aria-expanded') !== 'true') await bashRow.click()
     const card = page.locator('[data-sample="bash"] ~ div [data-terminal]').first()
-    await card.waitFor({ timeout: 15_000 })
+    await card.waitFor({ timeout: scaledTimeout(15_000) })
     // Real layout, not jsdom's stub (which computes no geometry at all):
     // squeeze the output pane below its content width and the line must keep
     // its single row and overflow sideways instead of folding. Soft-wrapping
@@ -499,10 +507,11 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     // a real page is the async Clipboard API rather than the jsdom fallback.
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
     await card.locator('[class*="_copyButton_"]').first().click()
-    await expect.poll(() => card.locator('[class*="_copyButton_"]').first().textContent(), { timeout: 5_000 })
+    await expect.poll(() => card.locator('[class*="_copyButton_"]').first().textContent(), { timeout: scaledTimeout(5_000) })
       .toBe('Copied')
     expect(await page.evaluate(() => navigator.clipboard.readText())).toContain('NAVIGATION_OK')
-  }, 60_000)
+  }, scaledTimeout(60_000))
+
 
   it.skipIf(MODE === 'record')('keeps the recorded fixture inventory exact', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, [

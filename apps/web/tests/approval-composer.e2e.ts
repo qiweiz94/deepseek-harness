@@ -25,7 +25,7 @@ import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden, fixtureUserPrompts,
   launchWebScaffold, recordFixture, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/approval-composer', import.meta.url))
 const FIXTURE = join(SNAPSHOT_DIR, 'session.jsonl')
@@ -60,9 +60,10 @@ describe('web e2e: approval takeover keeps its actions reachable', () => {
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
-  }, 120_000)
+  }, scaledTimeout(120_000))
+
 
   afterAll(async () => {
     await browser?.close()
@@ -75,7 +76,7 @@ describe('web e2e: approval takeover keeps its actions reachable', () => {
       expect(fixtureUserPrompts(await readFile(FIXTURE, 'utf8'))).toEqual([PROMPT])
     }
     const input = page.locator('textarea').first()
-    await input.waitFor({ timeout: 10_000 })
+    await input.waitFor({ timeout: scaledTimeout(10_000) })
 
     // The composer's own text cap, measured on the live draft scrollport before
     // the takeover replaces it — the box that carries the cap, while the
@@ -94,7 +95,7 @@ describe('web e2e: approval takeover keeps its actions reachable', () => {
     await page.getByRole('menuitem', { name: 'Read Only' }).click()
     await expect.poll(
       () => page.locator('[aria-label="Access mode, current: Read Only"]').count(),
-      { timeout: 15_000 },
+      { timeout: scaledTimeout(15_000) },
     ).toBe(1)
 
     const settled = scaffold.whenTurnSettled(MODE === 'record' ? 240_000 : 60_000)
@@ -107,7 +108,7 @@ describe('web e2e: approval takeover keeps its actions reachable', () => {
     const panel = page.locator('[data-approval-key]')
     await panel.waitFor({ timeout: MODE === 'record' ? 180_000 : 60_000 })
     const scroll = panel.locator('[data-approval-scroll]')
-    await expect.poll(() => scroll.getByText(/tok/).count(), { timeout: 15_000 }).toBeGreaterThan(0)
+    await expect.poll(() => scroll.getByText(/tok/).count(), { timeout: scaledTimeout(15_000) }).toBeGreaterThan(0)
 
     if (MODE !== 'record') {
       // This golden owns the stable waiting surface; the answered golden below
@@ -169,12 +170,13 @@ describe('web e2e: approval takeover keeps its actions reachable', () => {
       .toContain('allowed-once')
     const written = await readFile(join(scaffold.workspaceCwd, 'workspace', 'notes.txt'), 'utf8')
     expect(written).toContain(TOKENS.slice(0, 64))
-    await expect.poll(() => page.getByText('DONE', { exact: true }).count(), { timeout: 20_000 }).toBeGreaterThanOrEqual(1)
+    await expect.poll(() => page.getByText('DONE', { exact: true }).count(), { timeout: scaledTimeout(20_000) }).toBeGreaterThanOrEqual(1)
     expect(await page.locator('[data-approval-key]').count()).toBe(0)
-    await expect.poll(() => page.locator('textarea').first().isEnabled(), { timeout: 10_000 }).toBe(true)
+    await expect.poll(() => page.locator('textarea').first().isEnabled(), { timeout: scaledTimeout(10_000) }).toBe(true)
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
-  }, 300_000)
+  }, scaledTimeout(300_000))
+
 
   it.skipIf(MODE === 'record')('keeps the fixture inventory closed', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, ['session.jsonl', 'ui.expected.md'])

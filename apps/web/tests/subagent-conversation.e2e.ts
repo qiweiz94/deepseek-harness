@@ -15,7 +15,7 @@ import {
   launchWebScaffold, watchConsole,
   webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const BASE_FIXTURE = fileURLToPath(new URL('./snapshots/live-interactions/session.jsonl', import.meta.url))
 const AVAILABLE_CHILD_EXPECTED = fileURLToPath(new URL('./snapshots/subagent-conversation/ui.expected.md', import.meta.url))
@@ -88,7 +88,7 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
     })
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
 
     const parent = scaffold.ctx.agents.roots()[0]
@@ -223,16 +223,17 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
     // to exercise the restart baseline that discovers their full lineage.
     const warningStart = tripwire.warnings.length
     await page.reload({ waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     const catalogButton = page.getByRole('button', { name: /subagents/ })
-    await catalogButton.waitFor({ timeout: 15_000 })
+    await catalogButton.waitFor({ timeout: scaledTimeout(15_000) })
     await catalogButton.click()
     const catalogTree = page.getByRole('tree', { name: 'Subagent sessions' })
-    await catalogTree.getByRole('treeitem').nth(1).waitFor({ timeout: 15_000 })
+    await catalogTree.getByRole('treeitem').nth(1).waitFor({ timeout: scaledTimeout(15_000) })
     await catalogTree.press('Escape')
-    await page.getByRole('button', { name: '3 subagents' }).waitFor({ timeout: 15_000 })
+    await page.getByRole('button', { name: '3 subagents' }).waitFor({ timeout: scaledTimeout(15_000) })
     acknowledgeReloadConnectionLoss(tripwire, warningStart)
-  }, 120_000)
+  }, scaledTimeout(120_000))
+
 
   afterAll(async () => {
     const failures: unknown[] = []
@@ -275,13 +276,13 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
     const warningStart = tripwire.warnings.length
     try {
       await page.reload({ waitUntil: 'load' })
-      await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
-      await expect.poll(() => emptyDelivered, { timeout: 15_000 }).toBe(true)
-      await page.getByRole('button', { name: '3 subagents' }).waitFor({ timeout: 15_000 })
+      await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
+      await expect.poll(() => emptyDelivered, { timeout: scaledTimeout(15_000) }).toBe(true)
+      await page.getByRole('button', { name: '3 subagents' }).waitFor({ timeout: scaledTimeout(15_000) })
       acknowledgeReloadConnectionLoss(tripwire, warningStart)
 
       await page.getByRole('button', { name: '3 subagents' }).click()
-      await expect.poll(() => trailingRequested, { timeout: 15_000 }).toBe(true)
+      await expect.poll(() => trailingRequested, { timeout: scaledTimeout(15_000) }).toBe(true)
       const tree = page.getByRole('tree', { name: 'Subagent sessions' })
       await tree.getByRole('treeitem', { name: 'Loading subagents' }).first().waitFor()
       expect(await tree.getByRole('treeitem', { name: 'Loading subagents' }).count()).toBe(2)
@@ -291,7 +292,7 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
         MODE,
       )
       releaseCatalog()
-      await tree.getByRole('treeitem', { name: new RegExp(LABEL) }).waitFor({ timeout: 15_000 })
+      await tree.getByRole('treeitem', { name: new RegExp(LABEL) }).waitFor({ timeout: scaledTimeout(15_000) })
       await tree.press('Escape')
     } finally {
       releaseCatalog()
@@ -313,7 +314,7 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
     const childLabel = await childRow.getAttribute('aria-label')
     await page.waitForTimeout(1_100)
     expect(await childRow.getAttribute('aria-label')).toBe(childLabel)
-    await page.getByRole('treeitem', { name: new RegExp(NESTED_LABEL) }).waitFor({ timeout: 15_000 })
+    await page.getByRole('treeitem', { name: new RegExp(NESTED_LABEL) }).waitFor({ timeout: scaledTimeout(15_000) })
     expect(scaffold.ctx.agents.get(childId)).toBeUndefined()
     expect(scaffold.ctx.agents.get(grandchildId)).toBeUndefined()
     const snapshot = await captureStableAria(
@@ -331,7 +332,7 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
     await page.getByRole('treeitem', { name: new RegExp(LABEL) }).click()
     await expect.poll(
       () => page.getByText(INITIAL_PROMPT, { exact: true }).count(),
-      { timeout: 15_000 },
+      { timeout: scaledTimeout(15_000) },
     ).toBe(1)
     if (scaffold.ctx.agents.get(childId) !== undefined) {
       throw new Error(`viewing the child activated it; API calls: ${apiCalls.join(', ')}`)
@@ -352,7 +353,8 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
       const timer = setTimeout(() => {
         off()
         reject(new Error('subagent follow-up did not reach turn/end'))
-      }, 30_000)
+      }, scaledTimeout(30_000))
+
       const off = scaffold.ctx.on('session/event', (session: { id: SessionId }, event: SessionEvent) => {
         if (session.id !== childId || event.type !== 'turn/end') return
         clearTimeout(timer)
@@ -365,11 +367,11 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
     await input.press('Enter')
     await expect.poll(
       () => scaffold.ctx.agents.get(childId)?.status,
-      { timeout: 10_000 },
+      { timeout: scaledTimeout(10_000) },
     ).toBe('running')
     await ended
-    await expect.poll(() => page.getByText(FOLLOWUP, { exact: true }).count(), { timeout: 10_000 }).toBe(1)
-    await expect.poll(() => scaffold.ctx.agents.get(childId), { timeout: 10_000 }).toBeUndefined()
+    await expect.poll(() => page.getByText(FOLLOWUP, { exact: true }).count(), { timeout: scaledTimeout(10_000) }).toBe(1)
+    await expect.poll(() => scaffold.ctx.agents.get(childId), { timeout: scaledTimeout(10_000) }).toBeUndefined()
     expect(await page.getByRole('button', { name: 'Stop generating' }).count()).toBe(0)
   })
 
@@ -450,7 +452,7 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
     expect(forkReceipt.result).toMatchObject({ ok: true })
     await expect.poll(
       () => page.getByRole('tree', { name: 'Sessions' }).getByRole('treeitem').count(),
-      { timeout: 15_000 },
+      { timeout: scaledTimeout(15_000) },
     ).toBe(3)
     expect(await page.getByText('Ungrouped', { exact: true }).count()).toBe(0)
     const hierarchy = page.getByRole('navigation', { name: 'Session hierarchy' })
@@ -502,8 +504,8 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
       const messageIndex = loaded.events.findIndex(event => event.type === 'user/message'
         && event.data.content.some(block => block.type === 'text' && block.text === POST_FORK_FOLLOWUP))
       return messageIndex >= 0 && loaded.events.slice(messageIndex + 1).some(event => event.type === 'turn/end')
-    }, { timeout: 30_000 }).toBe(true)
+    }, { timeout: scaledTimeout(30_000) }).toBe(true)
     expect(scaffold.ctx.agents.get(forkId)).not.toBeUndefined()
-    await expect.poll(() => scaffold.ctx.agents.get(childId), { timeout: 10_000 }).toBeUndefined()
+    await expect.poll(() => scaffold.ctx.agents.get(childId), { timeout: scaledTimeout(10_000) }).toBeUndefined()
   })
 })

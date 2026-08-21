@@ -12,7 +12,7 @@ import {
   fixtureUserPrompts, launchWebScaffold, seedSession, watchConsole, webSnapshotMode,
   type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/details-session-lifecycle', import.meta.url))
 const HANDLES_EXPECTED = join(SNAPSHOT_DIR, 'handles.expected.md')
@@ -79,9 +79,10 @@ describe.skipIf(MODE === 'record')('web e2e: details panel follows the current S
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await appFrame(page).waitFor({ timeout: 30_000 })
+    await appFrame(page).waitFor({ timeout: scaledTimeout(30_000) })
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
-  }, 120_000)
+  }, scaledTimeout(120_000))
+
 
   afterAll(async () => {
     await browser?.close()
@@ -95,9 +96,9 @@ describe.skipIf(MODE === 'record')('web e2e: details panel follows the current S
     await input.fill(PROMPT)
     await input.press('Enter')
     await settled
-    await page.getByText('LIGHTHOUSE', { exact: true }).waitFor({ timeout: 15_000 })
+    await page.getByText('LIGHTHOUSE', { exact: true }).waitFor({ timeout: scaledTimeout(15_000) })
 
-    await expect.poll(() => detailsTrack(page), { timeout: 5_000 }).toBe(0)
+    await expect.poll(() => detailsTrack(page), { timeout: scaledTimeout(5_000) }).toBe(0)
     expect(await page.getByText('Details', { exact: true }).isVisible()).toBe(false)
     await compareOrRefreshGolden(HANDLES_EXPECTED, await handleSnapshot(page), MODE)
 
@@ -110,25 +111,25 @@ describe.skipIf(MODE === 'record')('web e2e: details panel follows the current S
     await page.mouse.down()
     await page.mouse.move(dragStartX + 70, sidebarBox!.y + 200, { steps: 6 })
     await page.mouse.up()
-    await expect.poll(() => sidebarTrack(page), { timeout: 5_000 }).toBe(sidebarBefore + 70)
+    await expect.poll(() => sidebarTrack(page), { timeout: scaledTimeout(5_000) }).toBe(sidebarBefore + 70)
 
     const warningStart = tripwire.warnings.length
     await page.reload({ waitUntil: 'load' })
     acknowledgeReloadConnectionLoss(tripwire, warningStart)
-    await appFrame(page).waitFor({ timeout: 30_000 })
-    await page.getByText('LIGHTHOUSE', { exact: true }).waitFor({ timeout: 15_000 })
-    await expect.poll(() => detailsTrack(page), { timeout: 5_000 }).toBe(0)
+    await appFrame(page).waitFor({ timeout: scaledTimeout(30_000) })
+    await page.getByText('LIGHTHOUSE', { exact: true }).waitFor({ timeout: scaledTimeout(15_000) })
+    await expect.poll(() => detailsTrack(page), { timeout: scaledTimeout(5_000) }).toBe(0)
     expect(await page.getByText('Details', { exact: true }).isVisible()).toBe(false)
 
     await page.getByRole('button', { name: /^(?:New session|新.*会话)$/ }).last().click()
-    await page.getByText('Into the Unknown', { exact: false }).waitFor({ timeout: 15_000 })
-    await expect.poll(() => detailsTrack(page), { timeout: 5_000 }).toBe(0)
+    await page.getByText('Into the Unknown', { exact: false }).waitFor({ timeout: scaledTimeout(15_000) })
+    await expect.poll(() => detailsTrack(page), { timeout: scaledTimeout(5_000) }).toBe(0)
     expect(await page.getByText('Details', { exact: true }).isVisible()).toBe(false)
 
     const original = page.locator('[role=treeitem]').filter({ hasText: 'Reply with the single word' }).first()
     await original.click()
-    await page.getByText('LIGHTHOUSE', { exact: true }).waitFor({ timeout: 15_000 })
-    await expect.poll(() => detailsTrack(page), { timeout: 5_000 }).toBe(0)
+    await page.getByText('LIGHTHOUSE', { exact: true }).waitFor({ timeout: scaledTimeout(15_000) })
+    await expect.poll(() => detailsTrack(page), { timeout: scaledTimeout(5_000) }).toBe(0)
     expect(await page.getByText('Details', { exact: true }).isVisible()).toBe(false)
 
     const ungrouped = page.getByText('Ungrouped', { exact: true })
@@ -140,13 +141,14 @@ describe.skipIf(MODE === 'record')('web e2e: details panel follows the current S
         await page.waitForTimeout(50)
       }
       return await ungroupedRow.getAttribute('aria-expanded')
-    }, { timeout: 5_000 }).toBe('true')
+    }, { timeout: scaledTimeout(5_000) }).toBe('true')
     const seeded = ungroupedSection.locator('[role="treeitem"]').nth(1)
     await seeded.click()
-    await page.getByText('DONE', { exact: true }).waitFor({ timeout: 15_000 })
-    await expect.poll(() => detailsTrack(page), { timeout: 5_000 }).toBe(0)
+    await page.getByText('DONE', { exact: true }).waitFor({ timeout: scaledTimeout(15_000) })
+    await expect.poll(() => detailsTrack(page), { timeout: scaledTimeout(5_000) }).toBe(0)
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
     await assertFixtureInventory(SNAPSHOT_DIR, ['handles.expected.md'])
-  }, 90_000)
+  }, scaledTimeout(90_000))
+
 })

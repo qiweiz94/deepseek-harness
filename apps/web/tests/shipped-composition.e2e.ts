@@ -19,6 +19,7 @@ import type {} from '@deepseek-ai/dsh-agent-presets'
 import type {} from '@deepseek-ai/dsh-commands'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import { launchWebScaffold, type WebScaffold } from './scaffold.ts'
+import { scaledTimeout } from './support.ts'
 
 const FILE_REFERENCE_PROMPT = fileURLToPath(new URL(
   './snapshots/web-runtime-context/file-reference-prompt.expected.md', import.meta.url,
@@ -124,7 +125,7 @@ it('assembles the shipped Web catalog, file-reference guidance, and confined acc
   } finally {
     await commandHandle.dispose()
   }
-}, 120_000)
+}, scaledTimeout(120_000))
 
 it('lets a preset producer reach the background-job registry', async () => {
   scaffold = await launchWebScaffold()
@@ -185,4 +186,4 @@ it('lets a preset producer reach the background-job registry', async () => {
   } finally {
     await handle.dispose()
   }
-}, 120_000)
+}, scaledTimeout(120_000))

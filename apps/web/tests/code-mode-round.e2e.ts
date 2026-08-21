@@ -18,7 +18,7 @@ import {
   captureStableAria, compareOrRefreshGolden, fixtureUserPrompts,
   launchWebScaffold, recordFixture, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const FIXTURE = fileURLToPath(new URL('./snapshots/code-mode-round/session.jsonl', import.meta.url))
 const UI_EXPECTED = fileURLToPath(new URL('./snapshots/code-mode-round/ui.expected.md', import.meta.url))
@@ -47,10 +47,11 @@ describe('web e2e: Code Mode round renders nested sub-calls', () => {
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     // Fresh world: connect a Workspace so the composer scenarios start live.
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
-  }, 120_000)
+  }, scaledTimeout(120_000))
+
 
   afterAll(async () => {
     await browser?.close()
@@ -64,7 +65,7 @@ describe('web e2e: Code Mode round renders nested sub-calls', () => {
       expect(fixtureUserPrompts(await readFile(FIXTURE, 'utf8'))).toEqual([PROMPT])
     }
     const input = page.locator('textarea').first()
-    await input.waitFor({ timeout: 10_000 })
+    await input.waitFor({ timeout: scaledTimeout(10_000) })
     const settled = scaffold.whenTurnSettled()
     await input.fill(PROMPT)
     await input.press('Enter')
@@ -72,7 +73,8 @@ describe('web e2e: Code Mode round renders nested sub-calls', () => {
     if (MODE === 'record') {
       await recordFixture(scaffold, sessionId, FIXTURE)
     }
-  }, 200_000)
+  }, scaledTimeout(200_000))
+
 
   it.skipIf(MODE === 'record')('the durable log carries run_code with full-content sub-dispatches', () => {
     // Wire discipline: code mode collapsed the call surface to run_code.
@@ -102,21 +104,22 @@ describe('web e2e: Code Mode round renders nested sub-calls', () => {
 
   it.skipIf(MODE === 'record')('renders the code parent row with always-visible nested sub-rows', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-code-mode-rows'))
-    await expect.poll(() => page.getByText('DONE', { exact: true }).count(), { timeout: 15_000 }).toBeGreaterThanOrEqual(1)
+    await expect.poll(() => page.getByText('DONE', { exact: true }).count(), { timeout: scaledTimeout(15_000) }).toBeGreaterThanOrEqual(1)
     // The parent run_code row wears the code variant with the model-authored
     // description as its summary (the presentCall contract).
     const codeRow = page.locator('[data-variant="code"]').first()
-    await codeRow.waitFor({ timeout: 10_000 })
+    await codeRow.waitFor({ timeout: scaledTimeout(10_000) })
     // Nested rows are visible WITHOUT any expand interaction, inside the
     // sub-call nest, each rendered by the same components as native rows:
     // the bash sub-call landed in the bash sample registration.
     const nest = page.locator('[data-subcalls]').first()
-    await nest.waitFor({ timeout: 10_000 })
+    await nest.waitFor({ timeout: scaledTimeout(10_000) })
     expect(await nest.locator('[data-sample="bash"]').count()).toBeGreaterThanOrEqual(1)
     // The failing read sub-call wears the same error state a native failed
     // row wears (the recorded program tolerates a read of missing.txt).
     expect(await nest.locator('[data-state="error"]').count()).toBeGreaterThanOrEqual(1)
-  }, 60_000)
+  }, scaledTimeout(60_000))
+
 
   it.skipIf(MODE === 'record')('a bash sub-row click leaves the default details panel closed', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-code-mode-details'))
@@ -125,7 +128,7 @@ describe('web e2e: Code Mode round renders nested sub-calls', () => {
     expect(await frame.getAttribute('data-details-collapsed')).toBe('true')
     await nest.locator('[data-sample="bash"]').first().click()
     // Tool rows do not drive layout geometry; the Session's default panel stays closed.
-    await expect.poll(() => frame.getAttribute('data-details-collapsed'), { timeout: 5_000 }).toBe('true')
+    await expect.poll(() => frame.getAttribute('data-details-collapsed'), { timeout: scaledTimeout(5_000) }).toBe('true')
   })
 
   it.skipIf(MODE === 'record')('matches the conversation aria golden with stable anchors', async () => {

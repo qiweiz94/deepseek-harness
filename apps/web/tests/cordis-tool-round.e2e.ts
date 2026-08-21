@@ -18,7 +18,7 @@ import {
   captureStableAria, compareOrRefreshGolden, fixtureUserPrompts,
   launchWebScaffold, recordFixture, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const FIXTURE = fileURLToPath(new URL('./snapshots/cordis-tool-round/session.jsonl', import.meta.url))
 const UI_EXPECTED = fileURLToPath(new URL('./snapshots/cordis-tool-round/ui.expected.md', import.meta.url))
@@ -81,9 +81,10 @@ describe('web e2e: Cordis tools use their owned cards', () => {
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
-  }, 120_000)
+  }, scaledTimeout(120_000))
+
 
   afterAll(async () => {
     await browser?.close()
@@ -96,7 +97,7 @@ describe('web e2e: Cordis tools use their owned cards', () => {
       expect(fixtureUserPrompts(await readFile(FIXTURE, 'utf8'))).toEqual([PROMPT, STOP_PROMPT])
     }
     const input = page.locator('textarea').first()
-    await input.waitFor({ timeout: 10_000 })
+    await input.waitFor({ timeout: scaledTimeout(10_000) })
     const runTurnSettled = scaffold.whenTurnSettled()
     await input.fill(PROMPT)
     await input.press('Enter')
@@ -104,13 +105,13 @@ describe('web e2e: Cordis tools use their owned cards', () => {
     // The approval is the TEST's action in every mode: the fixture pins what the
     // model said, and the gate is a real round trip through the real panel.
     const approve = page.locator('[data-cordis-approve]').first()
-    await approve.waitFor({ timeout: 90_000 })
+    await approve.waitFor({ timeout: scaledTimeout(90_000) })
     // The one assertion this scenario cannot give up: the model asking to run is
     // NOT the plugin running. Until a person answers, the browser half has not
     // been fetched, evaluated, or mounted anywhere on this page.
     expect(await page.locator('[data-snapshot-probe]').count()).toBe(0)
     await approve.click()
-    await expect.poll(() => page.locator('[data-snapshot-probe]').count(), { timeout: 30_000 }).toBe(1)
+    await expect.poll(() => page.locator('[data-snapshot-probe]').count(), { timeout: scaledTimeout(30_000) }).toBe(1)
 
     const sessionId = await runTurnSettled
     const stopTurnSettled = scaffold.whenTurnSettled()
@@ -119,11 +120,12 @@ describe('web e2e: Cordis tools use their owned cards', () => {
     await stopTurnSettled
     if (MODE === 'record') {
       assertCompleteCordisLifecycle(sessionEvents)
-      await expect.poll(() => page.getByText('CORDIS_UI_DONE', { exact: true }).count(), { timeout: 15_000 })
+      await expect.poll(() => page.getByText('CORDIS_UI_DONE', { exact: true }).count(), { timeout: scaledTimeout(15_000) })
         .toBeGreaterThanOrEqual(1)
       await recordFixture(scaffold, sessionId, FIXTURE)
     }
-  }, 200_000)
+  }, scaledTimeout(200_000))
+
 
   it.skipIf(MODE === 'record')('the durable log carries one complete Cordis lifecycle', () => {
     assertCompleteCordisLifecycle(sessionEvents)
@@ -131,34 +133,34 @@ describe('web e2e: Cordis tools use their owned cards', () => {
 
   it.skipIf(MODE === 'record')('renders localized Cordis lifecycle cards', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-cordis-rows'))
-    await expect.poll(() => page.getByText('CORDIS_UI_DONE', { exact: true }).count(), { timeout: 15_000 })
+    await expect.poll(() => page.getByText('CORDIS_UI_DONE', { exact: true }).count(), { timeout: scaledTimeout(15_000) })
       .toBeGreaterThanOrEqual(1)
 
     const inspectRow = page.locator('[data-tool="cordis_inspect_self"]').filter({ hasText: 'Inspect' }).first()
-    await inspectRow.waitFor({ timeout: 10_000 })
+    await inspectRow.waitFor({ timeout: scaledTimeout(10_000) })
 
     // cordis_define does NOT go through the generic row: ui-cordis registers a
     // keyed toolview for it, and a keyed hit replaces the generic card. So the
     // title here is the CARD's ("Cordis Plugin"), and the expanded body is the
     // card's own two code sections rather than a generic args dump.
     const defineRow = page.locator('[data-tool="cordis_define"]').filter({ hasText: 'Cordis Plugin' }).first()
-    await defineRow.waitFor({ timeout: 10_000 })
+    await defineRow.waitFor({ timeout: scaledTimeout(10_000) })
     // The whole summary row is the expand toggle (unified tool-row interaction).
     await defineRow.locator('[aria-expanded]').first().click()
-    await expect.poll(() => defineRow.textContent(), { timeout: 10_000 }).toContain('data-snapshot-probe')
+    await expect.poll(() => defineRow.textContent(), { timeout: scaledTimeout(10_000) }).toContain('data-snapshot-probe')
     await defineRow.getByRole('tab', { name: 'Host' }).click()
     await expect.poll(() => defineRow.textContent()).toContain(PACKAGE_CODE)
 
     const runRow = page.locator('[data-tool="cordis_run"]').filter({ hasText: 'Run Cordis Plugin' }).first()
-    await runRow.waitFor({ timeout: 10_000 })
+    await runRow.waitFor({ timeout: scaledTimeout(10_000) })
     await expect.poll(() => runRow.textContent()).toContain('snap-')
 
     const stopRow = page.locator('[data-tool="cordis_stop"]').filter({ hasText: 'Stop Cordis Plugin' }).first()
-    await stopRow.waitFor({ timeout: 10_000 })
+    await stopRow.waitFor({ timeout: scaledTimeout(10_000) })
     await expect.poll(() => stopRow.textContent()).toContain('snap-')
     await expect(stopRow.getAttribute('data-state')).resolves.toBe('ok')
     // Stopping withdraws the browser half from every page, probe included.
-    await expect.poll(() => page.locator('[data-snapshot-probe]').count(), { timeout: 15_000 }).toBe(0)
+    await expect.poll(() => page.locator('[data-snapshot-probe]').count(), { timeout: scaledTimeout(15_000) }).toBe(0)
   })
 
   it.skipIf(MODE === 'record')('matches the conversation aria golden', async () => {

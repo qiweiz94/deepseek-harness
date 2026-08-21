@@ -16,7 +16,7 @@ import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden, fixtureUserPrompts,
   launchWebScaffold, recordFixture, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/web-search-round', import.meta.url))
 const FIXTURE = fileURLToPath(new URL('./snapshots/web-search-round/session.jsonl', import.meta.url))
@@ -139,9 +139,10 @@ describe('web e2e: shipped default web search', () => {
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
-  }, 120_000)
+  }, scaledTimeout(120_000))
+
 
   afterAll(async () => {
     await browser?.close()
@@ -164,13 +165,14 @@ describe('web e2e: shipped default web search', () => {
       expect(fixtureUserPrompts(await readFile(FIXTURE, 'utf8'))).toEqual([PROMPT])
     }
     const input = page.locator('textarea').first()
-    await input.waitFor({ timeout: 10_000 })
+    await input.waitFor({ timeout: scaledTimeout(10_000) })
     const settled = scaffold.whenTurnSettled()
     await input.fill(PROMPT)
     await input.press('Enter')
     const sessionId = await settled
     if (MODE === 'record') await recordFixture(scaffold, sessionId, FIXTURE)
-  }, 200_000)
+  }, scaledTimeout(200_000))
+
 
   it.skipIf(MODE === 'record')('uses the real provider and persists the capped structured result', () => {
     expect(searchRequests).toHaveLength(1)
@@ -234,9 +236,9 @@ describe('web e2e: shipped default web search', () => {
 
   it.skipIf(MODE === 'record')('matches the settled search card aria golden', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-search-aria'))
-    await expect.poll(() => page.getByText('SEARCH_DONE', { exact: true }).count(), { timeout: 15_000 })
+    await expect.poll(() => page.getByText('SEARCH_DONE', { exact: true }).count(), { timeout: scaledTimeout(15_000) })
       .toBeGreaterThanOrEqual(1)
-    await page.locator('[data-tool="web_search"]').waitFor({ timeout: 10_000 })
+    await page.locator('[data-tool="web_search"]').waitFor({ timeout: scaledTimeout(10_000) })
     const snapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(UI_EXPECTED, snapshot, MODE)
   })
@@ -245,11 +247,11 @@ describe('web e2e: shipped default web search', () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-search-sources-scroll'))
     const row = page.locator('[data-tool="web_search"] [data-expandable]').first()
     await row.click()
-    await expect.poll(() => row.getAttribute('aria-expanded'), { timeout: 5_000 }).toBe('true')
+    await expect.poll(() => row.getAttribute('aria-expanded'), { timeout: scaledTimeout(5_000) }).toBe('true')
 
     const card = page.locator('[data-web="search"]')
     const sources = card.locator('ol')
-    await sources.waitFor({ timeout: 10_000 })
+    await sources.waitFor({ timeout: scaledTimeout(10_000) })
     // The card draws exactly the sources the model saw: the seam's cap, not the
     // provider's list length.
     expect(await sources.locator('li').count()).toBe(WEB_SEARCH_MAX_RESULTS)

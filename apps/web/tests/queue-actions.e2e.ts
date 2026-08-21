@@ -16,7 +16,7 @@ import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden,
   launchWebScaffold, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/queue-actions', import.meta.url))
 const FIXTURE = fileURLToPath(new URL('./snapshots/live-interactions/session.jsonl', import.meta.url))
@@ -82,7 +82,7 @@ describe('web e2e: queue row actions', () => {
     page = await newEnglishPage(browser)
     const tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
     onTestFailed(() => saveFailureShot(page, 'web-e2e-queue-actions'))
 
@@ -90,14 +90,14 @@ describe('web e2e: queue row actions', () => {
     const firstSettled = scaffold.whenTurnSettled()
     await input.fill(ACTIVE_PROMPT)
     await input.press('Enter')
-    await expect.poll(() => existsSync(readyFile), { timeout: 15_000 }).toBe(true)
+    await expect.poll(() => existsSync(readyFile), { timeout: scaledTimeout(15_000) }).toBe(true)
 
     for (const text of [REMOVE, EDIT]) {
       await input.fill(text)
       await input.press('Enter')
     }
     const queueHeader = page.getByRole('button', { name: '2 queued messages' })
-    await expect.poll(() => queueHeader.getAttribute('aria-expanded'), { timeout: 10_000 })
+    await expect.poll(() => queueHeader.getAttribute('aria-expanded'), { timeout: scaledTimeout(10_000) })
       .toBe('false')
     const collapsedSnapshot = await captureStableAria(
       page,
@@ -108,7 +108,7 @@ describe('web e2e: queue row actions', () => {
     await queueHeader.click()
     await expect.poll(
       () => page.getByRole('button', { name: 'Remove queued message' }).count(),
-      { timeout: 10_000 },
+      { timeout: scaledTimeout(10_000) },
     ).toBe(2)
 
     await page.setViewportSize({ width: 640, height: 1000 })
@@ -154,7 +154,7 @@ describe('web e2e: queue row actions', () => {
     await input.press('Enter')
     await expect.poll(
       () => page.getByRole('button', { name: 'Remove queued message' }).count(),
-      { timeout: 10_000 },
+      { timeout: scaledTimeout(10_000) },
     ).toBe(2)
 
     await page.getByRole('button', { name: 'Stop generating' }).click()
@@ -171,13 +171,14 @@ describe('web e2e: queue row actions', () => {
     await input.fill(WAKE)
     await input.press('Enter')
     await settled
-    await expect.poll(() => turnEndReasons(sessionEvents), { timeout: 15_000 })
+    await expect.poll(() => turnEndReasons(sessionEvents), { timeout: scaledTimeout(15_000) })
       .toEqual(['aborted', 'completed', 'completed', 'completed'])
     expect(sessionEvents.flatMap(event => event.type === 'user/message' && event.data.source.kind === 'user'
       ? event.data.content.flatMap(block => block.type === 'text' ? [block.text] : [])
       : [])).toEqual([ACTIVE_PROMPT, EDITED, TAIL, WAKE])
     await expect.poll(() => page.locator('[data-queue-dock]').count()).toBe(0)
-  }, 120_000)
+  }, scaledTimeout(120_000))
+
 
   it.skipIf(MODE === 'record')('orders Todo before Goal and Queue on one responsive card column', async () => {
     overrideDir = await mkdtemp(join(tmpdir(), 'dsh-web-context-layout-'))
@@ -192,7 +193,7 @@ describe('web e2e: queue row actions', () => {
     page = await newEnglishPage(browser)
     const tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
     onTestFailed(() => saveFailureShot(page, 'web-e2e-context-layout'))
 
@@ -200,8 +201,8 @@ describe('web e2e: queue row actions', () => {
     const settled = scaffold.whenTurnSettled()
     await input.fill('/goal Keep the composer context panels aligned')
     await input.press('Enter')
-    await expect.poll(() => existsSync(readyFile), { timeout: 15_000 }).toBe(true)
-    await page.locator('[data-goal-bar]').waitFor({ timeout: 10_000 })
+    await expect.poll(() => existsSync(readyFile), { timeout: scaledTimeout(15_000) }).toBe(true)
+    await page.locator('[data-goal-bar]').waitFor({ timeout: scaledTimeout(10_000) })
 
     const sessions = scaffold.ctx.sessions.list()
     expect(sessions).toHaveLength(1)
@@ -211,14 +212,14 @@ describe('web e2e: queue row actions', () => {
         { content: 'Align the panel widths', status: 'in_progress' },
       ],
     })
-    await page.locator('[data-testid="todo-panel"]').waitFor({ timeout: 10_000 })
+    await page.locator('[data-testid="todo-panel"]').waitFor({ timeout: scaledTimeout(10_000) })
 
     for (const text of ['Layout queue first', 'Layout queue second']) {
       await input.fill(text)
       await input.press('Enter')
     }
     const queueHeader = page.getByRole('button', { name: '2 queued messages' })
-    await expect.poll(() => queueHeader.getAttribute('aria-expanded'), { timeout: 10_000 })
+    await expect.poll(() => queueHeader.getAttribute('aria-expanded'), { timeout: scaledTimeout(10_000) })
       .toBe('false')
 
     const layoutSnapshot = await captureStableAria(
@@ -249,20 +250,21 @@ describe('web e2e: queue row actions', () => {
 
     await queueHeader.click()
     const removeButtons = page.getByRole('button', { name: 'Remove queued message' })
-    await expect.poll(() => removeButtons.count(), { timeout: 10_000 }).toBe(2)
+    await expect.poll(() => removeButtons.count(), { timeout: scaledTimeout(10_000) }).toBe(2)
     await removeButtons.first().click()
-    await expect.poll(() => removeButtons.count(), { timeout: 10_000 }).toBe(1)
+    await expect.poll(() => removeButtons.count(), { timeout: scaledTimeout(10_000) }).toBe(1)
     await removeButtons.first().click()
-    await expect.poll(() => page.locator('[data-queue-dock]').count(), { timeout: 10_000 }).toBe(0)
+    await expect.poll(() => page.locator('[data-queue-dock]').count(), { timeout: scaledTimeout(10_000) }).toBe(0)
     await page.getByRole('button', { name: 'Clear goal' }).click()
-    await expect.poll(() => page.locator('[data-goal-bar]').count(), { timeout: 10_000 }).toBe(0)
+    await expect.poll(() => page.locator('[data-goal-bar]').count(), { timeout: scaledTimeout(10_000) }).toBe(0)
     await page.getByRole('button', { name: 'Stop generating' }).click()
     await settled
 
     expect(turnEndReasons(sessionEvents)).toEqual(['aborted'])
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
-  }, 120_000)
+  }, scaledTimeout(120_000))
+
 
   it.skipIf(MODE === 'record')('keeps its snapshot inventory closed', async () => {
     await assertFixtureInventory(

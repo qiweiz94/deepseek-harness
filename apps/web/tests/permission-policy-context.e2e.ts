@@ -15,7 +15,7 @@ import {
   assertFixtureInventory, fixtureUserPrompts, launchWebScaffold, recordFixture,
   watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/permission-policy-context', import.meta.url))
 const FIXTURE = fileURLToPath(new URL('./snapshots/permission-policy-context/session.jsonl', import.meta.url))
@@ -78,9 +78,10 @@ describe('web e2e: current sandbox policy reaches the model before tools', () =>
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
-  }, 120_000)
+  }, scaledTimeout(120_000))
+
 
   afterAll(async () => {
     await browser?.close()
@@ -100,18 +101,18 @@ describe('web e2e: current sandbox policy reaches the model before tools', () =>
       await input.fill(`/permission ${preset}`)
       await input.press('Enter')
       await page.getByRole('button', { name: `Access mode, current: ${PRESET_LABELS[index]}` })
-        .waitFor({ timeout: 10_000 })
+        .waitFor({ timeout: scaledTimeout(10_000) })
 
       const settled = scaffold.whenTurnSettled()
       await input.fill(PROMPTS[index] as string)
       await input.press('Enter')
       sessionId = await settled
-      await expect.poll(() => input.isEnabled(), { timeout: 10_000 }).toBe(true)
+      await expect.poll(() => input.isEnabled(), { timeout: scaledTimeout(10_000) }).toBe(true)
     }
 
     await input.fill('/permission read-only')
     await input.press('Enter')
-    await page.getByRole('button', { name: 'Access mode, current: Read Only' }).waitFor({ timeout: 10_000 })
+    await page.getByRole('button', { name: 'Access mode, current: Read Only' }).waitFor({ timeout: scaledTimeout(10_000) })
     const settled = scaffold.whenTurnSettled()
     await input.fill(PROMPTS[3])
     await input.press('Enter')
@@ -119,7 +120,8 @@ describe('web e2e: current sandbox policy reaches the model before tools', () =>
 
     if (sessionId === undefined) throw new Error('permission-policy scenario completed no model turn')
     if (MODE === 'record') await recordFixture(scaffold, sessionId, FIXTURE)
-  }, 240_000)
+  }, scaledTimeout(240_000))
+
 
   it.skipIf(MODE === 'record')('records cache-safe current policy before the corresponding model behavior', async () => {
     const systems = requestSystems(sessionEvents)

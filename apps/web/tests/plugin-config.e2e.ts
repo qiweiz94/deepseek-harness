@@ -14,7 +14,7 @@ import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden,
   launchWebScaffold, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { ZH_BROWSER_LOCALE, saveFailureShot } from './support.ts'
+import { ZH_BROWSER_LOCALE, saveFailureShot, scaledTimeout } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/plugin-config', import.meta.url))
 const SECTION_EXPECTED = join(SNAPSHOT_DIR, 'section.expected.md')
@@ -34,8 +34,9 @@ describe('web e2e: plugin configuration section', () => {
     page = await browser.newPage({ viewport: { width: 1680, height: 1000 }, locale: ZH_BROWSER_LOCALE })
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
-  }, 120_000)
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
+  }, scaledTimeout(120_000))
+
 
   afterAll(async () => {
     await browser?.close()
@@ -51,17 +52,17 @@ describe('web e2e: plugin configuration section', () => {
   async function openPlugins() {
     if (await page.getByRole('dialog', { name: '设置' }).count() > 0) {
       await page.keyboard.press('Escape')
-      await expect.poll(() => page.getByRole('dialog', { name: '设置' }).count(), { timeout: 5_000 }).toBe(0)
+      await expect.poll(() => page.getByRole('dialog', { name: '设置' }).count(), { timeout: scaledTimeout(5_000) }).toBe(0)
     }
     await page.getByRole('button', { name: '设置', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: '设置' })
-    await dialog.waitFor({ timeout: 10_000 })
+    await dialog.waitFor({ timeout: scaledTimeout(10_000) })
     await dialog.getByRole('button', { name: '插件', exact: true }).click()
     await expect
-      .poll(() => dialog.getByRole('button', { name: '插件', exact: true }).getAttribute('aria-current'), { timeout: 5_000 })
+      .poll(() => dialog.getByRole('button', { name: '插件', exact: true }).getAttribute('aria-current'), { timeout: scaledTimeout(5_000) })
       .toBe('true')
     await expect
-      .poll(() => dialog.getByRole('tab', { name: '插件配置', exact: true }).getAttribute('aria-selected'), { timeout: 5_000 })
+      .poll(() => dialog.getByRole('tab', { name: '插件配置', exact: true }).getAttribute('aria-selected'), { timeout: scaledTimeout(5_000) })
       .toBe('true')
     return dialog
   }
@@ -77,7 +78,7 @@ describe('web e2e: plugin configuration section', () => {
 
     // Every card the shipped web composition exposes: the shell executor, the
     // agent loop, and the DeepSeek search provider.
-    await dialog.getByText('终端', { exact: true }).waitFor({ timeout: 10_000 })
+    await dialog.getByText('终端', { exact: true }).waitFor({ timeout: scaledTimeout(10_000) })
     expect(await dialog.getByText('Agent 循环', { exact: true }).count()).toBe(1)
     expect(await dialog.getByText('网页搜索', { exact: true }).count()).toBe(1)
     // Collapsed: a card's fields appear only once it is expanded.
@@ -86,7 +87,8 @@ describe('web e2e: plugin configuration section', () => {
     const snapshot = await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(SECTION_EXPECTED, snapshot, MODE)
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
+
 
   it('stages an edit and writes it only when saved', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-plugin-config-write'))
@@ -94,7 +96,7 @@ describe('web e2e: plugin configuration section', () => {
     await dialog.getByText('终端', { exact: true }).click()
 
     const timeout = dialog.getByLabel('命令超时（毫秒）')
-    await timeout.waitFor({ timeout: 10_000 })
+    await timeout.waitFor({ timeout: scaledTimeout(10_000) })
     // The composed default this deployment ships, before any user layer.
     expect(await timeout.inputValue()).toBe('60000')
     await timeout.fill('12000')
@@ -104,73 +106,77 @@ describe('web e2e: plugin configuration section', () => {
     // not a decision to store the value.
     expect(await settingsDocument()).not.toContain('timeoutMs')
     const save = dialog.getByRole('button', { name: '保存', exact: true })
-    await expect.poll(() => save.isEnabled(), { timeout: 5_000 }).toBe(true)
+    await expect.poll(() => save.isEnabled(), { timeout: scaledTimeout(5_000) }).toBe(true)
     await save.click()
 
-    await expect.poll(async () => (await settingsDocument()).includes('timeoutMs: 12000'), { timeout: 10_000 })
+    await expect.poll(async () => (await settingsDocument()).includes('timeoutMs: 12000'), { timeout: scaledTimeout(10_000) })
       .toBe(true)
     // Presence in the user layer is what the badge reports, and the reset is
     // offered only for a field that has one.
-    await expect.poll(() => dialog.getByText('已覆盖').count(), { timeout: 5_000 }).toBe(1)
+    await expect.poll(() => dialog.getByText('已覆盖').count(), { timeout: scaledTimeout(5_000) }).toBe(1)
     expect(await dialog.getByRole('button', { name: '恢复默认' }).count()).toBe(1)
     // A settled form offers no save to repeat.
-    await expect.poll(() => save.isDisabled(), { timeout: 5_000 }).toBe(true)
+    await expect.poll(() => save.isDisabled(), { timeout: scaledTimeout(5_000) }).toBe(true)
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
+
 
   it('drops a staged edit on discard without touching the document', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-plugin-config-discard'))
     const dialog = await openPlugins()
     await dialog.getByText('终端', { exact: true }).click()
     const timeout = dialog.getByLabel('命令超时（毫秒）')
-    await timeout.waitFor({ timeout: 10_000 })
+    await timeout.waitFor({ timeout: scaledTimeout(10_000) })
 
     await timeout.fill('7000')
     await dialog.getByRole('button', { name: '放弃修改' }).click()
 
-    await expect.poll(() => timeout.inputValue(), { timeout: 5_000 }).toBe('12000')
+    await expect.poll(() => timeout.inputValue(), { timeout: scaledTimeout(5_000) }).toBe('12000')
     expect(await settingsDocument()).toContain('timeoutMs: 12000')
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
+
 
   it('refuses to save a draft that is not a number', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-plugin-config-invalid'))
     const dialog = await openPlugins()
     await dialog.getByText('终端', { exact: true }).click()
     const timeout = dialog.getByLabel('命令超时（毫秒）')
-    await timeout.waitFor({ timeout: 10_000 })
+    await timeout.waitFor({ timeout: scaledTimeout(10_000) })
 
     await timeout.fill('soon')
 
     const save = dialog.getByRole('button', { name: '保存', exact: true })
-    await expect.poll(() => save.isDisabled(), { timeout: 5_000 }).toBe(true)
+    await expect.poll(() => save.isDisabled(), { timeout: scaledTimeout(5_000) }).toBe(true)
     expect(await dialog.getByText('请填数字；留空表示使用默认值。').count()).toBe(1)
     await dialog.getByRole('button', { name: '放弃修改' }).click()
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
+
 
   it('clears the field back to the composed default on reset', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-plugin-config-reset'))
     const dialog = await openPlugins()
     await dialog.getByText('终端', { exact: true }).click()
     const timeout = dialog.getByLabel('命令超时（毫秒）')
-    await timeout.waitFor({ timeout: 10_000 })
+    await timeout.waitFor({ timeout: scaledTimeout(10_000) })
     expect(await timeout.inputValue()).toBe('12000')
 
     // The reset stages the composed default; the document still carries the
     // override until the save lands.
     await dialog.getByRole('button', { name: '恢复默认' }).click()
-    await expect.poll(() => timeout.inputValue(), { timeout: 5_000 }).toBe('60000')
+    await expect.poll(() => timeout.inputValue(), { timeout: scaledTimeout(5_000) }).toBe('60000')
     expect(await settingsDocument()).toContain('timeoutMs: 12000')
 
     await dialog.getByRole('button', { name: '保存', exact: true }).click()
 
-    await expect.poll(async () => (await settingsDocument()).includes('timeoutMs'), { timeout: 10_000 })
+    await expect.poll(async () => (await settingsDocument()).includes('timeoutMs'), { timeout: scaledTimeout(10_000) })
       .toBe(false)
     expect(await timeout.inputValue()).toBe('60000')
     expect(await dialog.getByText('已覆盖').count()).toBe(0)
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
+
 
   it.skipIf(MODE === 'record')('keeps the fixture inventory closed', async () => {
     expect(tripwire.warnings).toEqual([])

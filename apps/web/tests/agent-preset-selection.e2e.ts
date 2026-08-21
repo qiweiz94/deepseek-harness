@@ -24,7 +24,7 @@ import {
   captureStableAria, compareOrRefreshGolden, launchWebScaffold, seedSession, watchConsole,
   webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/agent-preset-selection', import.meta.url))
 const HERO_EXPECTED = join(SNAPSHOT_DIR, 'hero.expected.md')
@@ -161,7 +161,7 @@ async function livePreset(baseUrl: string): Promise<string | undefined> {
 /** Every option label the trigger menu currently lists. */
 async function menuOptions(page: Page): Promise<string[]> {
   const menu = page.getByRole('listbox', { name: 'Trigger suggestions' })
-  await menu.waitFor({ timeout: 10_000 })
+  await menu.waitFor({ timeout: scaledTimeout(10_000) })
   return await menu.getByRole('option').allTextContents()
 }
 
@@ -185,8 +185,9 @@ describe('web e2e: agent-preset selection', () => {
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
-  }, 120_000)
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
+  }, scaledTimeout(120_000))
+
 
   afterAll(async () => {
     await browser?.close()
@@ -209,7 +210,7 @@ describe('web e2e: agent-preset selection', () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-agent-preset-menu'))
     await page.getByRole('button', { name: 'Standard mode' }).click()
     const menu = page.getByRole('menu')
-    await menu.waitFor({ timeout: 10_000 })
+    await menu.waitFor({ timeout: scaledTimeout(10_000) })
 
     const snapshot = await captureStableAria(page, '[role="menu"]', scaffold.workspaceCwd)
 
@@ -228,7 +229,7 @@ describe('web e2e: agent-preset selection', () => {
 
     // The chip stages; the blank session the workspace connect produced is
     // what the stage lands on. The host's own answer is what comes back.
-    await expect.poll(() => livePreset(scaffold.baseUrl), { timeout: 15_000 }).toBe('minimal')
+    await expect.poll(() => livePreset(scaffold.baseUrl), { timeout: scaledTimeout(15_000) }).toBe('minimal')
   })
 
   it('re-reads the slash catalog through the composition the switch installed', async () => {
@@ -241,7 +242,7 @@ describe('web e2e: agent-preset selection', () => {
     // skill discovery, so the catalog the composer warmed under the
     // deployment default must not survive the switch.
     await composer.fill('/')
-    await expect.poll(() => menuOptions(page), { timeout: 15_000 })
+    await expect.poll(() => menuOptions(page), { timeout: scaledTimeout(15_000) })
       .not.toEqual(expect.arrayContaining([expect.stringContaining(SKILL_NAME)]))
     const onMinimal = await menuOptions(page)
     expect(onMinimal.some(option => option.startsWith('compact'))).toBe(false)
@@ -258,16 +259,17 @@ describe('web e2e: agent-preset selection', () => {
     // instead of leaving the session reading the narrower composition.
     await page.getByRole('button', { name: 'Minimal mode' }).click()
     await page.getByRole('menuitem', { name: /^Standard mode/ }).first().click()
-    await expect.poll(() => livePreset(scaffold.baseUrl), { timeout: 15_000 }).toBe('standard')
+    await expect.poll(() => livePreset(scaffold.baseUrl), { timeout: scaledTimeout(15_000) }).toBe('standard')
 
     await composer.fill('/')
-    await expect.poll(() => menuOptions(page), { timeout: 15_000 })
+    await expect.poll(() => menuOptions(page), { timeout: scaledTimeout(15_000) })
       .toEqual(expect.arrayContaining([expect.stringContaining(SKILL_NAME)]))
     const onStandard = await menuOptions(page)
     expect(onStandard.some(option => option.startsWith('compact'))).toBe(true)
     expect(onStandard.some(option => option.startsWith('plan'))).toBe(true)
     await composer.fill('')
-  }, 90_000)
+  }, scaledTimeout(90_000))
+
 
   it('labels a resumed session with the preset it was created under', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-agent-preset-header'))
@@ -275,7 +277,7 @@ describe('web e2e: agent-preset selection', () => {
     // workspace, so it lists under Ungrouped; the group collapses by default.
     await page.getByRole('treeitem', { name: /^Ungrouped/ }).click()
     await page.locator('[role="treeitem"]').last().click()
-    await page.getByText('Seeded turn.').waitFor({ timeout: 15_000 })
+    await page.getByText('Seeded turn.').waitFor({ timeout: scaledTimeout(15_000) })
 
     const snapshot = await captureStableAria(page, '[class*="titleRow"]', scaffold.workspaceCwd)
 

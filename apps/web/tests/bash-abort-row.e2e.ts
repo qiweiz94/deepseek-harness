@@ -11,7 +11,7 @@ import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden, fixtureUserPrompts,
   launchWebScaffold, seedSession, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { newEnglishPage, saveFailureShot } from './support.ts'
+import { newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const FIXTURE = fileURLToPath(new URL('../../../examples/acp-agent/tests/snapshots/cancel-tool-calls/session.jsonl', import.meta.url))
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/bash-abort-row', import.meta.url))
@@ -35,16 +35,17 @@ describe.skipIf(MODE === 'record')('web e2e: cancelled Bash row disclosure', () 
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
 
     const groupRow = page.locator('[role="treeitem"]').first()
-    await groupRow.waitFor({ timeout: 15_000 })
+    await groupRow.waitFor({ timeout: scaledTimeout(15_000) })
     await groupRow.click()
     const sessionRow = page.locator('[role="treeitem"]').nth(1)
-    await sessionRow.waitFor({ timeout: 10_000 })
+    await sessionRow.waitFor({ timeout: scaledTimeout(10_000) })
     await sessionRow.click()
-    await page.locator('[data-sample="bash"]').nth(1).waitFor({ timeout: 15_000 })
-  }, 120_000)
+    await page.locator('[data-sample="bash"]').nth(1).waitFor({ timeout: scaledTimeout(15_000) })
+  }, scaledTimeout(120_000))
+
 
   afterAll(async () => {
     await browser?.close()
@@ -74,7 +75,8 @@ describe.skipIf(MODE === 'record')('web e2e: cancelled Bash row disclosure', () 
     await compareOrRefreshGolden(UI_EXPECTED, snapshot, MODE)
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
+
 
   it('keeps its snapshot inventory closed', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, ['ui.expected.md'])

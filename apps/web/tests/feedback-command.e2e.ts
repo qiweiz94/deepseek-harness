@@ -18,7 +18,7 @@ import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden, fixtureUserPrompts,
   launchWebScaffold, recordFixture, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/feedback-command', import.meta.url))
 const FIXTURE = join(SNAPSHOT_DIR, 'session.jsonl')
@@ -45,11 +45,12 @@ describe('web e2e: /feedback command acknowledgement', () => {
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     // Fresh world: connecting a workspace births the blank session whose
     // live composer accepts the slash line.
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
-  }, 120_000)
+  }, scaledTimeout(120_000))
+
 
   afterAll(async () => {
     await browser?.close()
@@ -63,7 +64,7 @@ describe('web e2e: /feedback command acknowledgement', () => {
       expect(fixtureUserPrompts(await readFile(FIXTURE, 'utf8'))).toEqual([PROMPT])
     }
     const input = page.locator('textarea').first()
-    await input.waitFor({ timeout: 10_000 })
+    await input.waitFor({ timeout: scaledTimeout(10_000) })
     // Arm the turn-boundary waiter BEFORE sending, so a burst replay cannot
     // miss the turn/end that settles the recorded turn.
     const settled = scaffold.whenTurnSettled()
@@ -73,27 +74,29 @@ describe('web e2e: /feedback command acknowledgement', () => {
     if (MODE === 'record') {
       await recordFixture(scaffold, sessionId, FIXTURE)
     }
-  }, 60_000)
+  }, scaledTimeout(60_000))
+
 
   it.skipIf(MODE === 'record')('records feedback and renders the acknowledgement with session id and sharing status', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-feedback-command'))
     // The drive test settled the recorded turn: the transcript is active (a
     // command row does not render while a fresh session is still blank) and
     // the replayed reply is on screen.
-    await page.getByText('LIGHTHOUSE', { exact: true }).waitFor({ timeout: 15_000 })
+    await page.getByText('LIGHTHOUSE', { exact: true }).waitFor({ timeout: scaledTimeout(15_000) })
     const input = page.locator('textarea').first()
     await input.fill('/feedback the diff view is unreadable')
     await input.press('Enter')
     // The command plane settles without a model turn: the ack row names the
     // recorded session and the mounted FULL backend's disclosure.
-    await page.getByText(/Feedback recorded for session/).waitFor({ timeout: 10_000 })
+    await page.getByText(/Feedback recorded for session/).waitFor({ timeout: scaledTimeout(10_000) })
     expect(await page.getByText(/Session sharing is enabled/).count()).toBe(1)
     const snapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(ACK_EXPECTED, snapshot, MODE)
 
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
+
 
   it.skipIf(MODE === 'record')('keeps the fixture inventory closed', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, ['session.jsonl', 'ack.expected.md'])

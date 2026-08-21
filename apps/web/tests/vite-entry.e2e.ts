@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os'
 import { createServer } from 'node:net'
 import { execa } from 'execa'
 import { describe, expect, it } from 'vitest'
+import { scaledTimeout } from './support.ts'
 
 const WEB_ROOT = fileURLToPath(new URL('..', import.meta.url))
 
@@ -43,7 +44,7 @@ describe('Web development entry', () => {
       const result = await execa(join(WEB_ROOT, 'node_modules/.bin/vite'), ['--host', '127.0.0.1', '--port', String(port)], {
         cwd: WEB_ROOT,
         reject: false,
-        timeout: 10_000,
+        timeout: scaledTimeout(10_000),
         env: {
           ...process.env,
           DSH_LISTEN_PROBE_MARKER: marker,

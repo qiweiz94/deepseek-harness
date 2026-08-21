@@ -25,14 +25,14 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import type { Browser, Page } from 'playwright'
 import { chromium } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
-import { REPO_ROOT, connectFreshWorkspace, newEnglishPage, probeFreePort, requireDist, saveFailureShot } from './support.ts'
+import { REPO_ROOT, connectFreshWorkspace, newEnglishPage, probeFreePort, requireDist, saveFailureShot, scaledTimeout } from './support.ts'
 
 const WEB_SURFACE_PROMPT = fileURLToPath(new URL('./snapshots/web-runtime-context/web-surface-prompt.expected.md', import.meta.url))
 
 function waitForReadyLine(child: ChildProcess): Promise<string> {
   return new Promise((resolveReady, reject) => {
     let out = ''
-    const timer = setTimeout(() => { reject(new Error(`dsh web not ready in 90s; output:\n${out}`)) }, 90_000)
+    const timer = setTimeout(() => { reject(new Error(`dsh web not ready in 90s; output:\n${out}`)) }, scaledTimeout(90_000))
     const onData = (chunk: Buffer): void => {
       out += chunk.toString()
       const match = /dsh web: (http:\/\/[^\s]+)/.exec(out)
@@ -109,14 +109,14 @@ async function waitForProviderTitle(baseUrl: string, sessionId: string): Promise
   await expect.poll(async () => {
     observed = providerTitle(await history(baseUrl, sessionId))
     return observed
-  }, { timeout: 90_000 }).toEqual(expect.any(String))
+  }, { timeout: scaledTimeout(90_000) }).toEqual(expect.any(String))
   if (observed === undefined) throw new Error('provider-backed session title was not observed')
   return observed
 }
 
 async function waitForAssistantMarker(baseUrl: string, sessionId: string, marker: string): Promise<void> {
   await expect.poll(async () => hasAssistantMarker(await history(baseUrl, sessionId), marker), {
-    timeout: 120_000,
+    timeout: scaledTimeout(120_000),
   }).toBe(true)
 }
 
@@ -364,7 +364,7 @@ describe('dsh web keyless CLI smoke', () => {
       await expect.poll(async () => {
         page = await history(baseUrl, created.sessionId)
         return hasAssistantMarker(page, recoveredMarker)
-      }, { timeout: 20_000 }).toBe(true)
+      }, { timeout: scaledTimeout(20_000) }).toBe(true)
       if (page === undefined) throw new Error('retry history was not observed')
       const retry = page.events.find(({ event }) => event.type === 'llm/retry')?.event
       expect(mainAttempts).toBe(2)
@@ -385,7 +385,8 @@ describe('dsh web keyless CLI smoke', () => {
       await new Promise<void>(resolveClose => provider.close(() => { resolveClose() }))
       rmSync(workspace, { recursive: true, force: true })
     }
-  }, 30_000)
+  }, scaledTimeout(30_000))
+
 
   it('DSH_TOOLS_MODE=code collapses the provider wire tools to run_code with the SDK prompt section', async () => {
     requireDist()
@@ -509,7 +510,8 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY || notReady.length > 0)('web smoke
     page = await newEnglishPage(browser)
     page.on('pageerror', e => pageErrors.push(String(e)))
     await page.goto(baseUrl, { waitUntil: 'load' })
-  }, 120_000)
+  }, scaledTimeout(120_000))
+
 
   afterAll(async () => {
     await browser?.close()
@@ -524,7 +526,7 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY || notReady.length > 0)('web smoke
 
   it('cold start: loading page settles into the three-column frame', async () => {
     onTestFailed(() => saveFailureShot(page, 'w5-cold-start'))
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     expect(await page.locator('text=Failed to load plugins').count()).toBe(0)
     const template = await page.locator('[class*="frame"]').evaluate(el => getComputedStyle(el).gridTemplateColumns)
     expect(template.split(' ').length).toBe(3)
@@ -539,22 +541,22 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY || notReady.length > 0)('web smoke
     // Fresh world: connect a Workspace so the composer starts live.
     await connectFreshWorkspace(page, sessionsDir)
     const input = page.locator('textarea').first()
-    await input.waitFor({ timeout: 10_000 })
+    await input.waitFor({ timeout: scaledTimeout(10_000) })
     await screen(page, '02-empty-state')
     const prompt = `Please answer this request carefully: explain event sourcing in two sentences, ending with exactly ${ROUND_DONE_MARKER}.`
     await input.fill(prompt)
     await input.press('Enter')
     // The first send must keep the session tree mounted; a near-empty body
     // reveals a duplicate runtime bundle with incompatible scope tags.
-    await page.waitForFunction(() => document.body.innerText.length > 50, undefined, { timeout: 15_000 })
+    await page.waitForFunction(() => document.body.innerText.length > 50, undefined, { timeout: scaledTimeout(15_000) })
     expect(pageErrors).toEqual([])
     await page.waitForFunction(
       () => document.title !== 'DeepSeek Harness' && document.title.endsWith(' — DeepSeek Harness'),
       undefined,
-      { timeout: 15_000 },
+      { timeout: scaledTimeout(15_000) },
     )
     await expect.poll(async () => (await rpc<{ items: { sessionId: string }[] }>(baseUrl, 'session.list', {})).items.length, {
-      timeout: 15_000,
+      timeout: scaledTimeout(15_000),
     }).toBe(1)
     const sessions = await rpc<{ items: { sessionId: string }[] }>(baseUrl, 'session.list', {})
     const sessionId = sessions.items[0]?.sessionId
@@ -563,19 +565,20 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY || notReady.length > 0)('web smoke
     await page.waitForFunction(
       expected => document.title === `${expected} — DeepSeek Harness`,
       durableTitle,
-      { timeout: 15_000 },
+      { timeout: scaledTimeout(15_000) },
     )
     const sessionTree = page.getByRole('tree', { name: 'Sessions' })
     const projectRow = sessionTree.getByRole('treeitem').first()
     if (await projectRow.getAttribute('aria-expanded') === 'false') await projectRow.click()
     await Promise.all([
-      sessionTree.getByText(durableTitle, { exact: true }).waitFor({ timeout: 10_000 }),
-      page.getByRole('navigation').getByText(durableTitle, { exact: true }).waitFor({ timeout: 10_000 }),
+      sessionTree.getByText(durableTitle, { exact: true }).waitFor({ timeout: scaledTimeout(10_000) }),
+      page.getByRole('navigation').getByText(durableTitle, { exact: true }).waitFor({ timeout: scaledTimeout(10_000) }),
     ])
     await waitForAssistantMarker(baseUrl, sessionId, ROUND_DONE_MARKER)
-    await page.locator('p').filter({ hasText: ROUND_DONE_MARKER }).waitFor({ timeout: 10_000 })
+    await page.locator('p').filter({ hasText: ROUND_DONE_MARKER }).waitFor({ timeout: scaledTimeout(10_000) })
     await screen(page, '04-round-complete')
-  }, 150_000)
+  }, scaledTimeout(150_000))
+
 
   it('view tabs: Chat and Trajectory switch', async () => {
     onTestFailed(() => saveFailureShot(page, 'w5-tabs'))
@@ -597,14 +600,15 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY || notReady.length > 0)('web smoke
     // exact row: other clickable variants (for example Think disclosure)
     // may precede the tool call in document order.
     const toolRow = page.locator('[data-sample="bash"]')
-    await toolRow.waitFor({ timeout: 120_000 })
+    await toolRow.waitFor({ timeout: scaledTimeout(120_000) })
     await screen(page, '08-bash-round')
     expect(await detailsTrack(page)).toBe(0)
     await toolRow.click()
     // Tool rows do not drive layout.openDetails; the default column stays closed.
     expect(await detailsTrack(page)).toBe(0)
     await screen(page, '09-details-closed')
-  }, 150_000)
+  }, scaledTimeout(150_000))
+
 
   it('sidebar drag widens the column and resets across reload', async () => {
     onTestFailed(() => saveFailureShot(page, 'w5-drag'))
@@ -620,7 +624,7 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY || notReady.length > 0)('web smoke
     expect(after).not.toBe(before)
     await screen(page, '10-sidebar-dragged')
     await page.reload({ waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     expect(await firstTrack(page)).toBe(before)
   })
 
@@ -644,8 +648,8 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY || notReady.length > 0)('web smoke
   it('reload recovery: history replays after a fresh boot', async () => {
     onTestFailed(() => saveFailureShot(page, 'w5-reload'))
     await page.reload({ waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
-    await page.locator('p').filter({ hasText: ROUND_DONE_MARKER }).waitFor({ timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
+    await page.locator('p').filter({ hasText: ROUND_DONE_MARKER }).waitFor({ timeout: scaledTimeout(30_000) })
     await screen(page, '12-reload-recovery')
   })
 

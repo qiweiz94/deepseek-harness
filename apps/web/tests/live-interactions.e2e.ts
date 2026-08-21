@@ -23,7 +23,7 @@ import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden, fixtureUserPrompts,
   launchWebScaffold, recordFixture, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/live-interactions', import.meta.url))
 const FIXTURE = join(SNAPSHOT_DIR, 'session.jsonl')
@@ -94,7 +94,7 @@ describe('web e2e: live-turn interactions (cancel / error / retry)', () => {
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     // Fresh world: connect a Workspace so the composer scenarios start live.
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
   }
@@ -107,7 +107,7 @@ describe('web e2e: live-turn interactions (cancel / error / retry)', () => {
    */
   async function sendPrompt(timeoutMs?: number): Promise<{ settled: ReturnType<WebScaffold['whenTurnSettled']> }> {
     const input = page.locator('textarea').first()
-    await input.waitFor({ timeout: 10_000 })
+    await input.waitFor({ timeout: scaledTimeout(10_000) })
     const settled = scaffold!.whenTurnSettled(timeoutMs)
     await input.fill(PROMPT)
     await input.press('Enter')
@@ -117,10 +117,11 @@ describe('web e2e: live-turn interactions (cancel / error / retry)', () => {
   it.skipIf(MODE !== 'record')('records the base fixture live through the composer', async () => {
     await launch()
     onTestFailed(() => saveFailureShot(page, 'web-e2e-interactions-record'))
-    const { settled } = await sendPrompt(180_000)
+    const { settled } = await sendPrompt(scaledTimeout(180_000))
     const sessionId = await settled
     await recordFixture(scaffold!, sessionId, FIXTURE)
-  }, 200_000)
+  }, scaledTimeout(200_000))
+
 
   it.skipIf(MODE === 'record')('cancels a hung stream deterministically via the readyFile marker', async () => {
     expect(fixtureUserPrompts(await readFile(FIXTURE, 'utf8'))).toEqual([PROMPT])
@@ -133,10 +134,10 @@ describe('web e2e: live-turn interactions (cancel / error / retry)', () => {
     const { settled } = await sendPrompt()
     // The marker IS the synchronization: the stream is provably parked in the
     // hang (prefix chunks delivered to the loop) before the stop click.
-    await expect.poll(() => existsSync(marker), { timeout: 15_000 }).toBe(true)
+    await expect.poll(() => existsSync(marker), { timeout: scaledTimeout(15_000) }).toBe(true)
     await expect.poll(
       () => page.getByRole('status').filter({ hasText: 'Deep diving...' }).isVisible(),
-      { timeout: 10_000 },
+      { timeout: scaledTimeout(10_000) },
     ).toBe(true)
     const loadingSnapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold!.workspaceCwd)
     await compareOrRefreshGolden(LOADING_EXPECTED, loadingSnapshot, MODE)
@@ -146,15 +147,16 @@ describe('web e2e: live-turn interactions (cancel / error / retry)', () => {
     // Composer recovered; no streaming node lingers. The host settled first
     // (awaited above), but the abort frame reaches the browser over SSE — the
     // frozen-partial swap is eventually consistent, so poll rather than count.
-    await expect.poll(() => page.locator('textarea').first().isEnabled(), { timeout: 10_000 }).toBe(true)
-    await expect.poll(() => page.locator('[data-streaming="true"]').count(), { timeout: 10_000 }).toBe(0)
+    await expect.poll(() => page.locator('textarea').first().isEnabled(), { timeout: scaledTimeout(10_000) }).toBe(true)
+    await expect.poll(() => page.locator('[data-streaming="true"]').count(), { timeout: scaledTimeout(10_000) }).toBe(0)
     // Golden of the aborted end-state: the prompt bubble plus the frozen
     // partial ('partial' is the hang entry's replayed prefix) and no more.
     const snapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold!.workspaceCwd)
     await compareOrRefreshGolden(CANCEL_EXPECTED, snapshot, MODE)
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
-  }, 120_000)
+  }, scaledTimeout(120_000))
+
 
   it.skipIf(MODE === 'record')('surfaces a non-retryable AUTH failure without retrying', async () => {
     await launch(() => ({
@@ -166,10 +168,10 @@ describe('web e2e: live-turn interactions (cancel / error / retry)', () => {
     expect(turnEndReasons(sessionEvents).at(-1)).toBe('error')
     // AUTH is outside llm-retry's retryable set: no retry record.
     expect(sessionEvents.filter(e => e.type === 'llm/retry').length).toBe(0)
-    await expect.poll(() => page.locator('textarea').first().isEnabled(), { timeout: 10_000 }).toBe(true)
+    await expect.poll(() => page.locator('textarea').first().isEnabled(), { timeout: scaledTimeout(10_000) }).toBe(true)
     expect(await page.locator('[data-streaming="true"]').count()).toBe(0)
     const errorStatus = page.getByRole('status').filter({ hasText: 'This turn failed' })
-    await errorStatus.waitFor({ timeout: 10_000 })
+    await errorStatus.waitFor({ timeout: scaledTimeout(10_000) })
     expect(await errorStatus.textContent()).toContain('API key is invalid')
     expect(await errorStatus.textContent()).toContain('AUTH')
     expect(await page.locator('body').textContent()).not.toContain('sk-preview-secret')
@@ -179,11 +181,12 @@ describe('web e2e: live-turn interactions (cancel / error / retry)', () => {
     const requestMarker = page.locator('tr[data-request-only="true"]').last()
       .getByRole('button', { name: /Request #/ })
     await requestMarker.click()
-    await page.getByText('API key is invalid', { exact: true }).waitFor({ timeout: 10_000 })
+    await page.getByText('API key is invalid', { exact: true }).waitFor({ timeout: scaledTimeout(10_000) })
     expect(await page.locator('body').textContent()).not.toContain('sk-preview-secret')
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
-  }, 120_000)
+  }, scaledTimeout(120_000))
+
 
   it.skipIf(MODE === 'record')('keeps a terminal request marker inside the trajectory table', async () => {
     await launch(() => ({
@@ -197,7 +200,7 @@ describe('web e2e: live-turn interactions (cancel / error / retry)', () => {
     // visible, so wait on it directly.
     const tailRequest = page.locator('tr[data-request-only="true"]').last()
     const requestMarker = tailRequest.getByRole('button', { name: /Request #/ })
-    await requestMarker.waitFor({ timeout: 10_000 })
+    await requestMarker.waitFor({ timeout: scaledTimeout(10_000) })
 
     const markerWithinTable = await requestMarker.evaluate((element) => {
       const marker = element.getBoundingClientRect()
@@ -209,7 +212,8 @@ describe('web e2e: live-turn interactions (cancel / error / retry)', () => {
     expect(markerWithinTable).toBe(true)
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
-  }, 120_000)
+  }, scaledTimeout(120_000))
+
 
   it.skipIf(MODE === 'record')('recovers a transient SERVER failure through llm-retry and completes', async () => {
     const derived = deriveReplayScript(parseSessionLog(await readFile(FIXTURE, 'utf8')))
@@ -224,20 +228,21 @@ describe('web e2e: live-turn interactions (cancel / error / retry)', () => {
     }))
     onTestFailed(() => saveFailureShot(page, 'web-e2e-retry'))
     // llm-retry backs off ~500ms before the second attempt.
-    const { settled } = await sendPrompt(60_000)
+    const { settled } = await sendPrompt(scaledTimeout(60_000))
     await settled
     expect(turnEndReasons(sessionEvents).at(-1)).toBe('completed')
     // The durable retry record proves the second attempt (request/header logs
     // only on change, so attempt count is invisible there).
     expect(sessionEvents.filter(e => e.type === 'llm/retry').length).toBeGreaterThanOrEqual(1)
-    await expect.poll(() => page.getByText('event sourcing', { exact: false }).count(), { timeout: 10_000 }).toBeGreaterThan(0)
+    await expect.poll(() => page.getByText('event sourcing', { exact: false }).count(), { timeout: scaledTimeout(10_000) }).toBeGreaterThan(0)
     // Golden of the recovered end-state: the discarded partial stays absent,
     // while the settled retry row remains as durable recovery context.
     const snapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold!.workspaceCwd)
     await compareOrRefreshGolden(RETRY_EXPECTED, snapshot, MODE)
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
-  }, 120_000)
+  }, scaledTimeout(120_000))
+
 
   it.skipIf(MODE === 'record')('keeps the fixture inventory closed', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, [

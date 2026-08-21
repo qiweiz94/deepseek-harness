@@ -8,7 +8,7 @@ import {
   WELCOME_NOTICE_COPY,
   type WebScaffold,
 } from './scaffold.ts'
-import { ZH_BROWSER_LOCALE } from './support.ts'
+import { ZH_BROWSER_LOCALE, scaledTimeout } from './support.ts'
 
 const MODE = webSnapshotMode()
 
@@ -30,8 +30,9 @@ describe.skipIf(MODE === 'record')('web e2e: remote welcome notice', () => {
     })
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('#root', { timeout: 30_000 })
-  }, 120_000)
+    await page.waitForSelector('#root', { timeout: scaledTimeout(30_000) })
+  }, scaledTimeout(120_000))
+
 
   afterAll(async () => {
     await browser?.close()
@@ -40,21 +41,22 @@ describe.skipIf(MODE === 'record')('web e2e: remote welcome notice', () => {
 
   it('advances process-locally and presents the notice again after reload', async () => {
     const welcome = page.getByRole('dialog', { name: WELCOME_NOTICE_COPY.zh.title })
-    await welcome.waitFor({ timeout: 15_000 })
+    await welcome.waitFor({ timeout: scaledTimeout(15_000) })
     expect(await page.locator('#root').evaluate(root => (root as HTMLElement).inert)).toBe(true)
 
     await welcome.getByRole('button', { name: WELCOME_NOTICE_COPY.zh.continueLabel }).click()
-    await welcome.waitFor({ state: 'detached', timeout: 15_000 })
+    await welcome.waitFor({ state: 'detached', timeout: scaledTimeout(15_000) })
     await expect.poll(
       () => page.locator('#root').evaluate(root => (root as HTMLElement).inert),
-      { timeout: 15_000 },
+      { timeout: scaledTimeout(15_000) },
     ).toBe(false)
 
     const reloadWarnings = tripwire.warnings.length
     await page.reload({ waitUntil: 'load' })
     acknowledgeReloadConnectionLoss(tripwire, reloadWarnings)
-    await welcome.waitFor({ timeout: 15_000 })
+    await welcome.waitFor({ timeout: scaledTimeout(15_000) })
     expect(tripwire.warnings).toEqual([])
     expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
+  }, scaledTimeout(60_000))
+
 })

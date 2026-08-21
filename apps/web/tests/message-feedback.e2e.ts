@@ -11,7 +11,7 @@ import {
   acknowledgeReloadConnectionLoss, launchWebScaffold,
   seedSession, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { newEnglishPage, saveFailureShot } from './support.ts'
+import { newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 // Borrowed read-only: this scenario needs any settled assistant message to
 // address, not a new recording (message-actions / sidebar-scrollbar pattern).
@@ -33,8 +33,9 @@ describe('web e2e: durable per-message feedback', () => {
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
-  }, 120_000)
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
+  }, scaledTimeout(120_000))
+
 
   afterAll(async () => {
     await browser?.close()
@@ -49,10 +50,10 @@ describe('web e2e: durable per-message feedback', () => {
    */
   async function openSeededSession(): Promise<void> {
     const groupRow = page.locator('[role="treeitem"]').first()
-    await groupRow.waitFor({ timeout: 15_000 })
+    await groupRow.waitFor({ timeout: scaledTimeout(15_000) })
     if (await groupRow.getAttribute('aria-expanded') !== 'true') await groupRow.click()
     const sessionRow = page.locator('[role="treeitem"]').nth(1)
-    await sessionRow.waitFor({ timeout: 15_000 })
+    await sessionRow.waitFor({ timeout: scaledTimeout(15_000) })
     await sessionRow.click()
   }
 
@@ -63,56 +64,57 @@ describe('web e2e: durable per-message feedback', () => {
     // The controls live in the assistant message's IconActions row, which the
     // transcript reveals on hover/focus like copy and branch. Wait for the
     // settled closing text first: the strip mounts with that turn's tail.
-    await page.getByText('DONE', { exact: true }).waitFor({ timeout: 30_000 })
+    await page.getByText('DONE', { exact: true }).waitFor({ timeout: scaledTimeout(30_000) })
     const like = page.getByRole('button', { name: 'Good response' }).first()
-    await like.waitFor({ timeout: 30_000 })
+    await like.waitFor({ timeout: scaledTimeout(30_000) })
     await like.scrollIntoViewIfNeeded()
     await like.hover()
     await like.click()
     // A recorded rating relabels the button to what the next click would do,
     // so the pressed control is addressed by the retract label from here on.
     const rated = page.getByRole('button', { name: 'Remove rating' }).first()
-    await expect.poll(() => rated.getAttribute('aria-pressed'), { timeout: 10_000 }).toBe('true')
+    await expect.poll(() => rated.getAttribute('aria-pressed'), { timeout: scaledTimeout(10_000) }).toBe('true')
 
     // A rated message offers the note editor; an unrated one does not.
     await page.getByRole('button', { name: 'Add a note' }).first().click()
     const editor = page.getByRole('textbox', { name: 'Feedback note' })
     await editor.fill(NOTE)
     await page.getByRole('button', { name: 'Save', exact: true }).click()
-    await expect.poll(() => editor.count(), { timeout: 10_000 }).toBe(0)
-    await page.getByText(NOTE, { exact: true }).waitFor({ timeout: 10_000 })
+    await expect.poll(() => editor.count(), { timeout: scaledTimeout(10_000) }).toBe(0)
+    await page.getByText(NOTE, { exact: true }).waitFor({ timeout: scaledTimeout(10_000) })
 
     // The durable assertion: a cold browser re-reads the sidecar over the wire.
     const warningStart = tripwire.warnings.length
     await page.reload({ waitUntil: 'load' })
     acknowledgeReloadConnectionLoss(tripwire, warningStart)
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     await openSeededSession()
-    await page.getByText('DONE', { exact: true }).waitFor({ timeout: 30_000 })
+    await page.getByText('DONE', { exact: true }).waitFor({ timeout: scaledTimeout(30_000) })
 
     // The controller defers its list read to the first hover or focus, so a
     // cold reload shows the unrated label until the strip is touched. Hovering
     // the unrated control is what triggers the authoritative re-read.
     const cold = page.getByRole('button', { name: 'Good response' }).first()
-    await cold.waitFor({ timeout: 30_000 })
+    await cold.waitFor({ timeout: scaledTimeout(30_000) })
     await cold.scrollIntoViewIfNeeded()
     await cold.hover()
 
     const restored = page.getByRole('button', { name: 'Remove rating' }).first()
-    await restored.waitFor({ timeout: 30_000 })
+    await restored.waitFor({ timeout: scaledTimeout(30_000) })
     await restored.scrollIntoViewIfNeeded()
     await restored.hover()
-    await expect.poll(() => restored.getAttribute('aria-pressed'), { timeout: 15_000 }).toBe('true')
-    await page.getByText(NOTE, { exact: true }).waitFor({ timeout: 10_000 })
+    await expect.poll(() => restored.getAttribute('aria-pressed'), { timeout: scaledTimeout(15_000) }).toBe('true')
+    await page.getByText(NOTE, { exact: true }).waitFor({ timeout: scaledTimeout(10_000) })
 
     // Re-clicking the active rating retracts it, and the note goes with it.
     await restored.click()
     await expect.poll(
       () => page.getByRole('button', { name: 'Good response' }).first().getAttribute('aria-pressed'),
-      { timeout: 10_000 },
+      { timeout: scaledTimeout(10_000) },
     ).toBe('false')
-    await expect.poll(() => page.getByText(NOTE, { exact: true }).count(), { timeout: 10_000 }).toBe(0)
-  }, 90_000)
+    await expect.poll(() => page.getByText(NOTE, { exact: true }).count(), { timeout: scaledTimeout(10_000) }).toBe(0)
+  }, scaledTimeout(90_000))
+
 
   it.skipIf(MODE === 'record')('kept the console clean', () => {
     expect(tripwire.pageErrors).toEqual([])

@@ -25,7 +25,7 @@ import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden, fixtureUserPrompts,
   launchWebScaffold, realizeSeedFixture, recordFixture, seedSession, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { newEnglishPage, saveFailureShot } from './support.ts'
+import { newEnglishPage, saveFailureShot, scaledTimeout } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/seeded-history', import.meta.url))
 const SEED = fileURLToPath(new URL('./snapshots/seeded-history/seed.jsonl', import.meta.url))
@@ -205,8 +205,9 @@ describe('web e2e: seeded history renders through cold resume', () => {
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
-  }, 120_000)
+    await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
+  }, scaledTimeout(120_000))
+
 
   afterAll(async () => {
     await browser?.close()
@@ -216,13 +217,14 @@ describe('web e2e: seeded history renders through cold resume', () => {
   it.skipIf(MODE !== 'record')('records the seed turn live through the composer', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-seeded-record'))
     const input = page.locator('textarea').first()
-    await input.waitFor({ timeout: 10_000 })
+    await input.waitFor({ timeout: scaledTimeout(10_000) })
     const settled = scaffold.whenTurnSettled()
     await input.fill(PROMPT)
     await input.press('Enter')
     const sessionId = await settled
     await recordFixture(scaffold, sessionId, SEED)
-  }, 200_000)
+  }, scaledTimeout(200_000))
+
 
   it.skipIf(MODE === 'record')('serves the projections baseline on the real composition tail page', async () => {
     // Composition regression tripwire: the projection registry must be a row
@@ -269,22 +271,22 @@ describe('web e2e: seeded history renders through cold resume', () => {
     // The sidebar tree collapses workspace groups by default: click the group
     // row (treeitem 0) to expand, then the revealed session row.
     const groupRow = page.locator('[role="treeitem"]').first()
-    await groupRow.waitFor({ timeout: 15_000 })
+    await groupRow.waitFor({ timeout: scaledTimeout(15_000) })
     await groupRow.click()
     const sessionRow = page.locator('[role="treeitem"]').nth(1)
-    await sessionRow.waitFor({ timeout: 10_000 })
+    await sessionRow.waitFor({ timeout: scaledTimeout(10_000) })
     await sessionRow.click()
     // Settled barrier for history: the recorded final assistant text renders.
-    await expect.poll(() => page.getByText('DONE', { exact: true }).count(), { timeout: 15_000 }).toBe(1)
-    await expect.poll(() => page.getByText('compact', { exact: true }).count(), { timeout: 10_000 }).toBe(1)
+    await expect.poll(() => page.getByText('DONE', { exact: true }).count(), { timeout: scaledTimeout(15_000) }).toBe(1)
+    await expect.poll(() => page.getByText('compact', { exact: true }).count(), { timeout: scaledTimeout(10_000) }).toBe(1)
     await expect.poll(() => page.getByText(/^Compacted \d+ history items \(~\d+ tokens\)$/).count(), {
-      timeout: 10_000,
+      timeout: scaledTimeout(10_000),
     }).toBe(1)
     expect(await page.getByText('Context compacted', { exact: true }).count()).toBe(0)
     // Tool cards render from logged tool/call + tool/result alone (views are
     // host-recomputed per page; the generic card is the documented default).
     const toolRows = page.locator('[data-variant], [data-sample]')
-    await expect.poll(() => toolRows.count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(2)
+    await expect.poll(() => toolRows.count(), { timeout: scaledTimeout(10_000) }).toBeGreaterThanOrEqual(2)
     expect(await page.getByText('a.txt', { exact: false }).count()).toBeGreaterThan(0)
     // The pinned hazard: compaction shadows the surface on the model side
     // only — the prompt and full tool output must stay on screen.
@@ -316,8 +318,9 @@ describe('web e2e: seeded history renders through cold resume', () => {
     // The header names the producer the durable source records, so the
     // reconciled instruction file is readable without expanding the row.
     await page.getByRole('button', { name: 'Context injection AGENTS.md', exact: true })
-      .waitFor({ timeout: 10_000 })
-  }, 60_000)
+      .waitFor({ timeout: scaledTimeout(10_000) })
+  }, scaledTimeout(60_000))
+
 
   it.skipIf(MODE === 'record')('matches the historical conversation aria golden', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-seeded-aria'))
@@ -325,7 +328,7 @@ describe('web e2e: seeded history renders through cold resume', () => {
     // adapter serves the catalog and refuses to stream — so history restores
     // the routed id and the seat resolves it against an advertised row.
     await page.getByRole('button', { name: /^Select model, current/ })
-      .waitFor({ timeout: 10_000 })
+      .waitFor({ timeout: scaledTimeout(10_000) })
     const snapshot = (await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd))
       .split(SEED_ID).join('{{seededId}}')
     await compareOrRefreshGolden(UI_EXPECTED, snapshot, MODE)
@@ -343,7 +346,7 @@ describe('web e2e: seeded history renders through cold resume', () => {
     await disclosure.click()
     await expect.poll(() => disclosure.getAttribute('aria-expanded')).toBe('true')
     const body = page.locator('[data-context-injection-body]')
-    await body.waitFor({ timeout: 5_000 })
+    await body.waitFor({ timeout: scaledTimeout(5_000) })
     // The instructions form names the file it reconciled above the text, and
     // the text keeps the framing the model read rather than a cleaned excerpt.
     expect(await body.locator('[data-context-files] li').allInnerTexts()).toEqual(['AGENTS.md\nloaded'])
@@ -393,29 +396,29 @@ describe('web e2e: seeded history renders through cold resume', () => {
     // file links (not expand-in-place / not details). Runs after the golden
     // capture; still zero model calls.
     const fileLink = page.locator('[data-variant="read"] button').first()
-    await fileLink.waitFor({ timeout: 10_000 })
+    await fileLink.waitFor({ timeout: scaledTimeout(10_000) })
     const frame = page.locator('[style*="grid-template-columns"]').first()
     expect(await frame.getAttribute('data-details-collapsed')).toBe('true')
     await fileLink.click()
-    await expect.poll(() => frame.getAttribute('data-details-collapsed'), { timeout: 5_000 }).toBe('true')
+    await expect.poll(() => frame.getAttribute('data-details-collapsed'), { timeout: scaledTimeout(5_000) }).toBe('true')
     // Path label survives from the recorded args (a.txt).
-    await expect.poll(() => page.getByText('a.txt', { exact: false }).count(), { timeout: 5_000 }).toBeGreaterThan(0)
+    await expect.poll(() => page.getByText('a.txt', { exact: false }).count(), { timeout: scaledTimeout(5_000) }).toBeGreaterThan(0)
   })
 
   it.skipIf(MODE === 'record')('expands the cold-resumed compact summary', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-seeded-compaction'))
     const marker = page.getByRole('button', { name: /compact Compacted \d+ history items/ })
-    await marker.waitFor({ timeout: 10_000 })
+    await marker.waitFor({ timeout: scaledTimeout(10_000) })
     expect(await marker.getAttribute('aria-expanded')).toBe('false')
     await marker.click()
-    await expect.poll(() => marker.getAttribute('aria-expanded'), { timeout: 5_000 }).toBe('true')
+    await expect.poll(() => marker.getAttribute('aria-expanded'), { timeout: scaledTimeout(5_000) }).toBe('true')
     await expect.poll(() => page.getByRole('heading', { name: 'Cold resume compact summary' }).count(), {
-      timeout: 5_000,
+      timeout: scaledTimeout(5_000),
     }).toBe(1)
     expect(await page.getByText('The exact summary remains available.', { exact: false }).count()).toBeGreaterThan(0)
     // Restore the shared page state for any later case.
     await marker.click()
-    await expect.poll(() => marker.getAttribute('aria-expanded'), { timeout: 5_000 }).toBe('false')
+    await expect.poll(() => marker.getAttribute('aria-expanded'), { timeout: scaledTimeout(5_000) }).toBe('false')
   })
 
   it.skipIf(MODE === 'record')('an Access-chip switch lands one command row: bare name, non-repeating settlement text', async () => {
@@ -428,17 +431,18 @@ describe('web e2e: seeded history renders through cold resume', () => {
     // the command's own name).
     await page.getByRole('button', { name: 'Access mode, current: Workspace Write' }).click()
     await page.getByRole('menuitem', { name: 'Read Only' }).click()
-    await page.getByRole('button', { name: 'Access mode, current: Read Only' }).waitFor({ timeout: 10_000 })
+    await page.getByRole('button', { name: 'Access mode, current: Read Only' }).waitFor({ timeout: scaledTimeout(10_000) })
     // Scoped to the row itself, so unrelated page text that happens to read
     // `permission` (a future resident slash menu) cannot satisfy or break it.
     const row = page.locator('[data-variant="others"]').filter({ hasText: 'preset read-only' })
-    await expect.poll(() => row.count(), { timeout: 10_000 }).toBe(1)
+    await expect.poll(() => row.count(), { timeout: scaledTimeout(10_000) }).toBe(1)
     expect(await row.getByText('permission', { exact: true }).count()).toBe(1)
     expect(await row.getByText('/permission read-only', { exact: true }).count()).toBe(0)
     const snapshot = (await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd))
       .split(SEED_ID).join('{{seededId}}')
     await compareOrRefreshGolden(COMMAND_ROW_EXPECTED, snapshot, MODE)
-  }, 60_000)
+  }, scaledTimeout(60_000))
+
 
   it.skipIf(MODE === 'record')('reports full feedback correlation ids in an expandable two-line row', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-seeded-feedback-row'))
@@ -451,7 +455,7 @@ describe('web e2e: seeded history renders through cold resume', () => {
       const row = page.locator('[data-variant="others"]').filter({
         hasText: `Feedback recorded for session ${SEED_ID}`,
       })
-      await row.waitFor({ timeout: 10_000 })
+      await row.waitFor({ timeout: scaledTimeout(10_000) })
       const disclosure = row.locator('[data-expandable]')
       expect(await disclosure.getAttribute('aria-expanded')).toBe('false')
       await disclosure.click()
@@ -476,7 +480,8 @@ describe('web e2e: seeded history renders through cold resume', () => {
       if (previousDshHome === undefined) delete process.env.DSH_HOME
       else process.env.DSH_HOME = previousDshHome
     }
-  }, 60_000)
+  }, scaledTimeout(60_000))
+
 
   it.skipIf(MODE === 'record')('fits short logged context without a scrollport', async () => {
     const agent = scaffold.ctx.agents.get(SessionId(SEED_ID))
@@ -487,7 +492,7 @@ describe('web e2e: seeded history renders through cold resume', () => {
     }), { surfaceOp: 'append' })
 
     const disclosure = page.getByRole('button', { name: 'Context injection fixture', exact: true })
-    await disclosure.waitFor({ timeout: 10_000 })
+    await disclosure.waitFor({ timeout: scaledTimeout(10_000) })
     await disclosure.click()
     await expect.poll(() => disclosure.getAttribute('aria-expanded')).toBe('true')
 
