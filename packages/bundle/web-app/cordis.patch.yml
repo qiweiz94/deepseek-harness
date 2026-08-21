@@ -404,6 +404,12 @@
 - id: tool-todo
   disabled: true
 
+# The outline tools move behind presets like the model-facing tools above; the
+# base bundle enables plugin-ast-context globally, but on the web plane a session
+# gets its tools from the preset it mounts, so the global row is disabled here.
+- id: plugin-ast-context
+  disabled: true
+
 - id: tool-web
   disabled: true
 
