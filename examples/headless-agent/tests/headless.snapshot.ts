@@ -89,7 +89,11 @@ async function deepseekDefaultsServer(): Promise<DeepSeekDefaultsServer> {
       const write = (): void => {
         if (keepAlives-- > 0) {
           response.write(': keep-alive\n\n')
-          setTimeout(write, 60)
+          // 240ms keep-alive cadence stays under the fixture's 600ms streamIdleTimeoutMs
+          // while the +960ms payload sits above it, so the keep-alives are what hold the
+          // stream open; the margin absorbs runner scheduling jitter that a tighter budget
+          // (armed before the first byte) turns into a spurious idle-timeout retry.
+          setTimeout(write, 240)
           return
         }
         response.end([
@@ -99,7 +103,7 @@ async function deepseekDefaultsServer(): Promise<DeepSeekDefaultsServer> {
           '',
         ].join('\n\n'))
       }
-      setTimeout(write, 60)
+      setTimeout(write, 240)
     })
   })
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))

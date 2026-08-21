@@ -7,7 +7,12 @@
         config:
           baseURL: !!js process.env.DSH_SNAPSHOT_BASE_URL
           thinking: disabled
-          streamIdleTimeoutMs: 150
+          # The keep-alive scenario streams comments every 240ms and the payload at
+          # +960ms (headless.snapshot deepseekDefaultsServer); this idle budget sits
+          # between them so keep-alives are required to hold the stream open, with
+          # ~360ms of slack above the 240ms cadence to absorb runner scheduling jitter
+          # (a tighter value armed before time-to-first-byte flakes under CI CPU load).
+          streamIdleTimeoutMs: 600
       - id: agent-spine
         config:
           agents:
