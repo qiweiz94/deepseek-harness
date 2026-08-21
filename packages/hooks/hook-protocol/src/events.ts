@@ -7,6 +7,7 @@
  */
 
 import type { Session } from '@deepseek-ai/dsh-session'
+import { codePointLength, truncateCodePoints } from '@deepseek-ai/dsh-output-retention'
 import type { HookDialect, HookOutput } from './types.ts'
 
 /** What identifies a hook invocation across its invoked/result pair. */
@@ -54,17 +55,19 @@ export const DEFAULT_STDERR_SUMMARY_MAX_CHARS = 500
 
 /**
  * Truncate a hook's stderr for {@link HookResultRecord.stderrSummary}: trimmed,
- * `undefined` when empty, cut at `maxChars` with an ellipsis when over. The
- * bound is a parameter — like `runHook`'s `defaultTimeoutMs`, each bridge owns
- * the config default and passes it in.
+ * `undefined` when empty, cut at `maxChars` Unicode code points (never UTF-16
+ * code units, so a cut never lands inside a surrogate pair and persists a
+ * lone surrogate) with an ellipsis when over. The bound is a parameter — like
+ * `runHook`'s `defaultTimeoutMs`, each bridge owns the config default and
+ * passes it in.
  * @param stderr - the hook's raw captured stderr.
- * @param maxChars - the character cap for the summary (the bridge's config value).
+ * @param maxChars - the code-point cap for the summary (the bridge's config value).
  * @returns the trimmed, capped summary, or `undefined` when stderr is blank.
  */
 export function summarizeStderr(stderr: string, maxChars: number): string | undefined {
   const t = stderr.trim()
   if (t.length === 0) return undefined
-  return t.length > maxChars ? t.slice(0, maxChars) + '…' : t
+  return codePointLength(t) > maxChars ? truncateCodePoints(t, maxChars) + '…' : t
 }
 
 /**

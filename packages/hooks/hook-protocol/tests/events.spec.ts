@@ -120,4 +120,21 @@ describe('summarizeStderr', () => {
     expect(summarizeStderr('abcdef', 4)).toBe('abcd…')
     expect(summarizeStderr('x'.repeat(600), 500)).toBe('x'.repeat(500) + '…')
   })
+
+  it('cuts on a code-point boundary, never leaving a lone surrogate when an emoji straddles the cap', () => {
+    // '\u{1F600}' (😀) is an astral character: two UTF-16 code units ('😀'),
+    // one code point. `stderr` is 'a😀bc' — a cap of 2 code points lands
+    // between the emoji's two UTF-16 units (index 1 vs 2), the exact boundary a
+    // UTF-16 `.slice` would cut through.
+    const stderr = 'a\u{1F600}bc'
+    const summary = summarizeStderr(stderr, 2)
+    // A well-formed string round-trips through `toWellFormed()` unchanged; a lone
+    // surrogate does not (it gets replaced with U+FFFD). This fails on the old
+    // `t.slice(0, maxChars) + '…'` implementation, which cuts to 'a\uD83D…'.
+    expect(summary).toBe(summary!.toWellFormed())
+    // The emoji is kept whole rather than split.
+    expect(summary).toBe('a\u{1F600}…')
+    // Ordinary (non-astral) truncation is unaffected.
+    expect(summarizeStderr('abcdef', 4)).toBe('abcd…')
+  })
 })
