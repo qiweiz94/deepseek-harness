@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-21-lsp-typescript-inprocess-provider.md
+2026-08-21-lsp-typescript-inprocess-provider.md: 8f01a2161df4c9f55570ae0e01516552966655f2
+2026-08-21-lsp-typescript-inprocess-provider.zh.md: 3afddea0a5d329d6e85ed12946db364daa10dd5b

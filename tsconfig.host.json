@@ -304,6 +304,7 @@
     { "path": "./packages/sdk/protocol" },
     { "path": "./packages/lsp/lsp" },
     { "path": "./packages/lsp/lsp-stdio" },
+    { "path": "./packages/lsp/lsp-typescript-inprocess" },
     { "path": "./packages/lsp/tool-lsp" },
     { "path": "./apps/cli" }
   ]
