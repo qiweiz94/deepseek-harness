@@ -21,6 +21,7 @@ import type { Config } from '@deepseek-ai/dsh-hooks-codex'
 const config: Config = {
   configPath: '/path/to/.codex/hooks.json', // required
   sessionConfigFile: '.codex/hooks.json',    // optional: per-session project-local discovery, resolved against each session's cwd
+  trustedWorkspaceRoots: ['/path/to/trusted/project'], // optional: workspace roots whose sessionConfigFile hooks may run; default [] denies every workspace
   model: 'deepseek-v4',                      // optional: stamped on every payload (Codex includes `model`)
   defaultTimeoutMs: 600_000,                 // optional: per-hook timeout when a hook sets none
   stderrSummaryMaxChars: 500,                // optional: char cap on the hook/result event's persisted stderr summary
@@ -34,10 +35,12 @@ const config: Config = {
 - dsh-hooks-codex:
     configPath: ./.codex/hooks.json
     sessionConfigFile: .codex/hooks.json
+    trustedWorkspaceRoots:
+      - .
     model: deepseek-v4
 ```
 
-进程级 `configPath` 只在加载时解析**一次**——相对路径在加载时根据进程启动 cwd 解析，因此一份配置应用于整个进程。可选的 `sessionConfigFile` 增加每会话项目本地发现——路径相对于每个 agent 会话的工作区（`session/new.cwd`）解析，在每个会话首次使用 hook 时解析并缓存一次；其分组会在每个点上**晚于**进程级分组运行，没有该文件的会话工作区则没有会话级 hook。`configPath` 的读取／解析失败会被隔离处理；实际消费 matcher 的事件所带的无效 matcher 正则属于此类失败，并报告其 pattern 与事件。未配置 `sessionConfigFile` 时，该失败会被记录且不注册任何内容；否则桥接会继续仅依靠会话级发现运行，会话级文件自身的读取／解析失败会以同样方式被隔离，且只影响该会话。只运行同步 `type: 'command'` hook；非 command 或 `async: true` hook 会被解析并跳过，同时记录警告。hook 接受 `timeout` 或 `timeoutSec` alias；两者都未设置时，使用协议参考默认值 `DEFAULT_HOOK_TIMEOUT_MS`（来自 `dsh-hook-protocol`，10 分钟）。五个桥接支持点之外的事件会在解析时丢弃。
+进程级 `configPath` 只在加载时解析**一次**——相对路径在加载时根据进程启动 cwd 解析，因此一份配置应用于整个进程。可选的 `sessionConfigFile` 增加每会话项目本地发现——路径相对于每个 agent 会话的工作区（`session/new.cwd`）解析，在每个会话首次使用 hook 时解析并缓存一次；其分组会在每个点上**晚于**进程级分组运行，没有该文件的会话工作区则没有会话级 hook。由于 `sessionConfigFile` 会在任何用户操作之前从会话自身的目录树运行任意 shell，发现采用**默认拒绝**：只有当会话的工作区 cwd 是 `trustedWorkspaceRoots` 之一（绝对路径，或相对于进程启动 cwd），或嵌套在其之下时，才会读取并运行该会话的文件；其他任何工作区都会被跳过，并记录一次性警告，不贡献任何内容。空或未设置的 `trustedWorkspaceRoots` 不信任任何工作区，因此新克隆的不受信任仓库无法植入会执行的 `sessionConfigFile`。根按解析后的路径匹配，不做符号链接解析，因此请以会话报告其 cwd 的相同形式列出根（例如在 macOS 上用 `/private/tmp/proj`，而非 `/tmp/proj`）；相对根根据加载时读取的进程启动 cwd 解析，因此当启动 cwd 为环境隐含值时，优先使用绝对根。`configPath` 的读取／解析失败会被隔离处理；实际消费 matcher 的事件所带的无效 matcher 正则属于此类失败，并报告其 pattern 与事件。未配置 `sessionConfigFile` 时，该失败会被记录且不注册任何内容；否则桥接会继续仅依靠会话级发现运行，会话级文件自身的读取／解析失败会以同样方式被隔离，且只影响该会话。只运行同步 `type: 'command'` hook；非 command 或 `async: true` hook 会被解析并跳过，同时记录警告。hook 接受 `timeout` 或 `timeoutSec` alias；两者都未设置时，使用协议参考默认值 `DEFAULT_HOOK_TIMEOUT_MS`（来自 `dsh-hook-protocol`，10 分钟）。五个桥接支持点之外的事件会在解析时丢弃。
 
 hook 本身会在 agent（智能体）的会话工作区中运行：对 agent scope 点，桥接会将会话 `cwd` 作为 hook 进程工作目录，因此 hook 作用于用户项目树，而非服务器启动目录。
 

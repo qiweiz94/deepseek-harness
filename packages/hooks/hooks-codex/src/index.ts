@@ -91,6 +91,7 @@ export interface Config {
   maxConsecutiveStopBlocks?: number
 }
 
+/* jscpd:ignore-start */ // the two bridges' Config schemas share the same limit/timeout fields by design
 export const Config: z<Config> = z.object({
   configPath: z.string().required(),
   sessionConfigFile: z.string(),
@@ -100,6 +101,7 @@ export const Config: z<Config> = z.object({
   stderrSummaryMaxChars: z.number().default(DEFAULT_STDERR_SUMMARY_MAX_CHARS),
   maxConsecutiveStopBlocks: z.number().default(DEFAULT_MAX_CONSECUTIVE_STOP_BLOCKS),
 })
+/* jscpd:ignore-end */
 
 let handlerCounter = 0
 function nextHandlerId(point: string): string {
