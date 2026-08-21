@@ -243,6 +243,7 @@ flowchart TD
     pkg_plugin_diagnostic_sifter["plugin-diagnostic-sifter"]
     pkg_plugin_pinned_scratchpad["plugin-pinned-scratchpad"]
     pkg_plugin_subagent_router["plugin-subagent-router"]
+    pkg_plugin_telemetry_recorder["plugin-telemetry-recorder"]
     pkg_plugin_worktree_sandbox["plugin-worktree-sandbox"]
   end
   subgraph group_preset["packages/preset"]
@@ -1079,6 +1080,12 @@ flowchart TD
   pkg_plugin_subagent_router --> pkg_llm
   pkg_plugin_subagent_router --> pkg_subagent
   pkg_plugin_subagent_router --> pkg_tools
+  pkg_plugin_telemetry_recorder --> pkg_agent
+  pkg_plugin_telemetry_recorder --> pkg_invariants
+  pkg_plugin_telemetry_recorder --> pkg_llm
+  pkg_plugin_telemetry_recorder --> pkg_session
+  pkg_plugin_telemetry_recorder --> pkg_subagent
+  pkg_plugin_telemetry_recorder --> pkg_tools
   pkg_sdk_protocol --> pkg_invariants
   pkg_sdk_protocol --> pkg_llm
   pkg_sdk_protocol --> pkg_session
@@ -1646,6 +1653,7 @@ flowchart TD
 | [`budget-governor`](../packages/guard/budget-governor) | `guard` | [`agent`](../packages/core/agent), [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`token-meter`](../packages/llm/token-meter) |
 | [`host-apiproxy`](../packages/host/apiproxy) | `host` | [`agent-presets`](../packages/preset/agent-presets), [`cordis-host-runner`](../packages/extensions/cordis-host-runner), [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`plugin-subagent-router`](../packages/plugins/plugin-subagent-router) | `plugins` | [`agent`](../packages/core/agent), [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`subagent`](../packages/subagent/subagent), [`tools`](../packages/core/tools) |
+| [`plugin-telemetry-recorder`](../packages/plugins/plugin-telemetry-recorder) | `plugins` | [`agent`](../packages/core/agent), [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`tools`](../packages/core/tools) |
 | [`sdk-protocol`](../packages/sdk/protocol) | `sdk` | [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent) |
 | [`tool-bash`](../packages/shell/tool-bash) | `shell` | [`agent`](../packages/core/agent), [`invariants`](../packages/runtime-diagnostics/invariants), [`jobs`](../packages/jobs/jobs), [`llm`](../packages/llm/llm), [`sandbox`](../packages/sandbox/sandbox), [`sandbox-policy`](../packages/sandbox/sandbox-policy), [`shell`](../packages/shell/shell), [`shell-env`](../packages/shell/shell-env), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools), [`user-approval`](../packages/interaction/user-approval) |
 | [`tool-pwsh`](../packages/shell/tool-pwsh) | `shell` | [`agent`](../packages/core/agent), [`invariants`](../packages/runtime-diagnostics/invariants), [`jobs`](../packages/jobs/jobs), [`llm`](../packages/llm/llm), [`sandbox`](../packages/sandbox/sandbox), [`sandbox-policy`](../packages/sandbox/sandbox-policy), [`shell`](../packages/shell/shell), [`shell-env`](../packages/shell/shell-env), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools), [`user-approval`](../packages/interaction/user-approval) |

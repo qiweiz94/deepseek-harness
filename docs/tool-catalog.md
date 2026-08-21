@@ -20,6 +20,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-plan-mode` | `exit_plan_mode` | `ctx.tools`, `ctx.systemPrompt`, `ctx.userQuestions (execution time, opportunistic)` | `tool/call`, `plan/mode inactive on an approved review`, `tool/result` | - | exit_plan_mode stays in the model-facing schema while planning is inactive so transitions add no tool-catalog churn on top of the plan-policy change. Its execute path rejects calls outside plan mode; in plan mode it presents the plan over the user-questions seam (approve / keep planning with feedback), and approval logs plan mode inactive at the step boundary. |
 | `@deepseek-ai/dsh-plugin-ast-context` | `get_directory_outline`, `get_file_outline` | `ctx.tools` | `tool/call`, `tool/result` | - | get_file_outline reads a repo-relative source file and returns its top-level TypeScript symbols; a parse failure or missing file surfaces as an error result rather than a partial outline. |
 | `@deepseek-ai/dsh-plugin-pinned-scratchpad` | `scratchpad_update` | `ctx.tools`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `scratchpad/write` | - | scratchpad_update upserts or deletes one key/value entry in the calling agent's per-session store; the scratchpad:pinned prompt section renders the current store into every request as a bounded <agent_scratchpad> block that survives context compaction. |
+| `@deepseek-ai/dsh-plugin-telemetry-recorder` | `get_session_telemetry` | `ctx.tools` | `tool/call`, `tool/result` | - | get_session_telemetry folds the calling session's own operating figures — token velocity, prompt-cache hit rate, context headroom, turn latency, subagent counts — over a rolling window of closed turns from the durable log; it registers no session events of its own. |
 | `@deepseek-ai/dsh-plugin-subagent-router` | `subagent` | `ctx.tools`, `ctx.subagents` | `tool/call`, `tool/result`, `child session events through the chosen provider` | - | A single delegation entry routes a task to a capable subagent provider selected by config-owned policy; the model names only the task (description + prompt), never a provider or transport. |
 | `@deepseek-ai/dsh-plugin-diagnostic-sifter` | `run_diagnostic_check` | `ctx.tools`, `ctx.subprocess` | `tool/call`, `tool/result` | - | run_diagnostic_check runs the repository typecheck or a scoped vitest suite, suppresses downstream import cascades and passing noise, and returns a bounded root-cause list with the suppressed-cascade count. |
 | `@deepseek-ai/dsh-plugin-worktree-sandbox` | `sandbox_exec` | `ctx.tools`, `ctx.subprocess` | `tool/call`, `tool/result`, `a disposable git worktree under .dsh/worktrees` | - | sandbox_exec runs a command in an isolated detached git worktree and returns the bounded structured diff and exit status; the worktree is removed after the call. |
@@ -269,6 +270,25 @@ Pin a fact to your scratchpad, or remove one. The scratchpad renders in every re
 Source: [`packages/plugins/plugin-pinned-scratchpad/src/index.ts`](../packages/plugins/plugin-pinned-scratchpad/src/index.ts)
 
 scratchpad_update upserts or deletes one key/value entry in the calling agent's per-session store; the scratchpad:pinned prompt section renders the current store into every request as a bounded <agent_scratchpad> block that survives context compaction.
+
+<a id="deepseek-aidsh-plugin-telemetry-recorder"></a>
+
+## `@deepseek-ai/dsh-plugin-telemetry-recorder`
+
+### `get_session_telemetry`
+
+Report this conversation's own operating figures: mean tokens per turn and turn wall-clock latency over the most recent closed turns, the prompt-cache hit ratio, how much of the model's context window the latest request occupied, and how many subagent delegations this conversation started, settled, and still has running. Use it to decide whether to compact, shorten the context, or stop delegating. A figure the conversation has not produced evidence for is omitted rather than reported as zero.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/plugins/plugin-telemetry-recorder/src/index.ts`](../packages/plugins/plugin-telemetry-recorder/src/index.ts)
+
+get_session_telemetry folds the calling session's own operating figures — token velocity, prompt-cache hit rate, context headroom, turn latency, subagent counts — over a rolling window of closed turns from the durable log; it registers no session events of its own.
 
 <a id="deepseek-aidsh-plugin-subagent-router"></a>
 

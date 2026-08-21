@@ -56,6 +56,7 @@ import Lsp from '@deepseek-ai/dsh-lsp'
 import * as ToolAstContext from '@deepseek-ai/dsh-plugin-ast-context'
 import * as ToolDiagnosticSifter from '@deepseek-ai/dsh-plugin-diagnostic-sifter'
 import * as ToolPinnedScratchpad from '@deepseek-ai/dsh-plugin-pinned-scratchpad'
+import * as ToolTelemetryRecorder from '@deepseek-ai/dsh-plugin-telemetry-recorder'
 import * as ToolSubagentRouter from '@deepseek-ai/dsh-plugin-subagent-router'
 import * as ToolWorktreeSandbox from '@deepseek-ai/dsh-plugin-worktree-sandbox'
 import * as ToolLsp from '@deepseek-ai/dsh-tool-lsp'
@@ -251,6 +252,18 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'scratchpad_update upserts or deletes one key/value entry in the calling agent\'s per-session store; the scratchpad:pinned prompt section renders the current store into every request as a bounded <agent_scratchpad> block that survives context compaction.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-plugin-telemetry-recorder',
+    dir: 'plugin-telemetry-recorder',
+    source: 'packages/plugins/plugin-telemetry-recorder/src/index.ts',
+    requires: ['ctx.tools'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(ToolTelemetryRecorder)
+    },
+    note:
+      'get_session_telemetry folds the calling session\'s own operating figures — token velocity, prompt-cache hit rate, context headroom, turn latency, subagent counts — over a rolling window of closed turns from the durable log; it registers no session events of its own.',
   },
   {
     pkg: '@deepseek-ai/dsh-plugin-subagent-router',

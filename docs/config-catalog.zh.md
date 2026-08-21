@@ -1592,6 +1592,22 @@ export interface RoutePolicy {
 
 来源：[`packages/plugins/plugin-subagent-router/src/index.ts:42`](../packages/plugins/plugin-subagent-router/src/index.ts)
 
+<a id="deepseek-aidsh-plugin-telemetry-recorder"></a>
+
+## `@deepseek-ai/dsh-plugin-telemetry-recorder`
+
+依赖：`tools`
+
+```ts config-catalog
+/** Configuration for the telemetry recorder. */
+export interface Config {
+  /** Closed turns retained by the rolling window (default 10). */
+  windowTurns?: number
+}
+```
+
+来源：[`packages/plugins/plugin-telemetry-recorder/src/index.ts:29`](../packages/plugins/plugin-telemetry-recorder/src/index.ts)
+
 <a id="deepseek-aidsh-plugin-worktree-sandbox"></a>
 
 ## `@deepseek-ai/dsh-plugin-worktree-sandbox`
