@@ -54,6 +54,7 @@ import * as ToolGoal from '@deepseek-ai/dsh-tool-goal'
 import * as ToolSchedule from '@deepseek-ai/dsh-schedule'
 import Lsp from '@deepseek-ai/dsh-lsp'
 import * as ToolAstContext from '@deepseek-ai/dsh-plugin-ast-context'
+import * as ToolArchGuard from '@deepseek-ai/dsh-plugin-arch-guard'
 import * as ToolDiagnosticSifter from '@deepseek-ai/dsh-plugin-diagnostic-sifter'
 import * as ToolPinnedScratchpad from '@deepseek-ai/dsh-plugin-pinned-scratchpad'
 import * as ToolTelemetryRecorder from '@deepseek-ai/dsh-plugin-telemetry-recorder'
@@ -278,6 +279,18 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'A single delegation entry routes a task to a capable subagent provider selected by config-owned policy; the model names only the task (description + prompt), never a provider or transport.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-plugin-arch-guard',
+    dir: 'plugin-arch-guard',
+    source: 'packages/plugins/plugin-arch-guard/src/index.ts',
+    requires: ['ctx.tools'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(ToolArchGuard, { root })
+    },
+    note:
+      'check_module_boundary judges whether one package importing another is legal under the monorepo layering rules (tier direction, the plugins-do-not-import-each-other rule, acyclicity, exports map); the workspace graph is scanned once at mount.',
   },
   {
     pkg: '@deepseek-ai/dsh-plugin-diagnostic-sifter',

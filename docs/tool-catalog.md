@@ -22,6 +22,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-plugin-pinned-scratchpad` | `scratchpad_update` | `ctx.tools`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `scratchpad/write` | - | scratchpad_update upserts or deletes one key/value entry in the calling agent's per-session store; the scratchpad:pinned prompt section renders the current store into every request as a bounded <agent_scratchpad> block that survives context compaction. |
 | `@deepseek-ai/dsh-plugin-telemetry-recorder` | `get_session_telemetry` | `ctx.tools` | `tool/call`, `tool/result` | - | get_session_telemetry folds the calling session's own operating figures — token velocity, prompt-cache hit rate, context headroom, turn latency, subagent counts — over a rolling window of closed turns from the durable log; it registers no session events of its own. |
 | `@deepseek-ai/dsh-plugin-subagent-router` | `subagent` | `ctx.tools`, `ctx.subagents` | `tool/call`, `tool/result`, `child session events through the chosen provider` | - | A single delegation entry routes a task to a capable subagent provider selected by config-owned policy; the model names only the task (description + prompt), never a provider or transport. |
+| `@deepseek-ai/dsh-plugin-arch-guard` | `check_module_boundary` | `ctx.tools` | `tool/call`, `tool/result` | - | check_module_boundary judges whether one package importing another is legal under the monorepo layering rules (tier direction, the plugins-do-not-import-each-other rule, acyclicity, exports map); the workspace graph is scanned once at mount. |
 | `@deepseek-ai/dsh-plugin-diagnostic-sifter` | `run_diagnostic_check` | `ctx.tools`, `ctx.subprocess` | `tool/call`, `tool/result` | - | run_diagnostic_check runs the repository typecheck or a scoped vitest suite, suppresses downstream import cascades and passing noise, and returns a bounded root-cause list with the suppressed-cascade count. |
 | `@deepseek-ai/dsh-plugin-worktree-sandbox` | `sandbox_exec` | `ctx.tools`, `ctx.subprocess` | `tool/call`, `tool/result`, `a disposable git worktree under .dsh/worktrees` | - | sandbox_exec runs a command in an isolated detached git worktree and returns the bounded structured diff and exit status; the worktree is removed after the call. |
 | `@deepseek-ai/dsh-tool-bash` | `bash` | `ctx.tools`, `ctx.shell`, `ctx.systemPrompt`, `ctx.shellEnv`, `ctx.jobs at call time for run_in_background` | `tool/call`, `tool/result` | - | The bash tool is the model-facing consumer of the bash executor seam. A `run_in_background` run registers with the generic `ctx.jobs` runtime and is collected/stopped through the `job_*` tools from `@deepseek-ai/dsh-tool-jobs`; the `enableRunInBackground` config (default true) removes the parameter entirely when disabled. |
@@ -321,6 +322,38 @@ Delegate a self-contained task to a subagent and wait for its result. The runtim
 Source: [`packages/plugins/plugin-subagent-router/src/index.ts`](../packages/plugins/plugin-subagent-router/src/index.ts)
 
 A single delegation entry routes a task to a capable subagent provider selected by config-owned policy; the model names only the task (description + prompt), never a provider or transport.
+
+<a id="deepseek-aidsh-plugin-arch-guard"></a>
+
+## `@deepseek-ai/dsh-plugin-arch-guard`
+
+### `check_module_boundary`
+
+Check whether importing targetImport from sourcePath is legal under the monorepo's package-layering rules: architectural tier direction (foundation packages < capability packages < surface/plugin packages), the plugins-may-not-import-each-other-unless-declared rule, package-graph acyclicity, and the target package's exports map. Use it before adding a new cross-package import.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sourcePath": {
+      "type": "string",
+      "description": "Repo-relative path of the file the import would be written in (e.g. packages/plugins/plugin-arch-guard/src/guard.ts)."
+    },
+    "targetImport": {
+      "type": "string",
+      "description": "The import specifier as it would be written at the source site (e.g. \"@deepseek-ai/dsh-tools\" or \"./helpers.ts\")."
+    }
+  },
+  "required": [
+    "sourcePath",
+    "targetImport"
+  ]
+}
+```
+
+Source: [`packages/plugins/plugin-arch-guard/src/index.ts`](../packages/plugins/plugin-arch-guard/src/index.ts)
+
+check_module_boundary judges whether one package importing another is legal under the monorepo layering rules (tier direction, the plugins-do-not-import-each-other rule, acyclicity, exports map); the workspace graph is scanned once at mount.
 
 <a id="deepseek-aidsh-plugin-diagnostic-sifter"></a>
 
