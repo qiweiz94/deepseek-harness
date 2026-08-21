@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-20-plugin-arch-guard.md
+2026-08-20-plugin-arch-guard.md: b340bccf983e92942540057338f9337328b02ddb
+2026-08-20-plugin-arch-guard.zh.md: 7602f439024a5f46c34bf25eae666f3054b10f29

@@ -1462,6 +1462,22 @@ export interface PlanModeConfig {
 
 Source: [`packages/plan/plan-mode/src/index.ts:70`](../packages/plan/plan-mode/src/index.ts)
 
+<a id="deepseek-aidsh-plugin-arch-guard"></a>
+
+## `@deepseek-ai/dsh-plugin-arch-guard`
+
+Requires: `tools`
+
+```ts config-catalog
+/** Runtime configuration for the module-boundary guard. */
+export interface Config {
+  /** Repository root the workspace package graph is scanned from; defaults to the process cwd. */
+  root?: string
+}
+```
+
+Source: [`packages/plugins/plugin-arch-guard/src/index.ts:21`](../packages/plugins/plugin-arch-guard/src/index.ts)
+
 <a id="deepseek-aidsh-plugin-ast-context"></a>
 
 ## `@deepseek-ai/dsh-plugin-ast-context`

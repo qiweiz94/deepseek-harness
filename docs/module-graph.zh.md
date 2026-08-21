@@ -239,6 +239,7 @@ flowchart TD
     pkg_mcp_client["mcp-client"]
   end
   subgraph group_plugins["packages/plugins"]
+    pkg_plugin_arch_guard["plugin-arch-guard"]
     pkg_plugin_ast_context["plugin-ast-context"]
     pkg_plugin_diagnostic_sifter["plugin-diagnostic-sifter"]
     pkg_plugin_pinned_scratchpad["plugin-pinned-scratchpad"]
@@ -900,6 +901,8 @@ flowchart TD
   pkg_mcp_client --> pkg_subprocess
   pkg_mcp_client --> pkg_timeout
   pkg_mcp_client --> pkg_tools
+  pkg_plugin_arch_guard --> pkg_invariants
+  pkg_plugin_arch_guard --> pkg_tools
   pkg_plugin_ast_context --> pkg_invariants
   pkg_plugin_ast_context --> pkg_tools
   pkg_plugin_diagnostic_sifter --> pkg_invariants
@@ -1622,6 +1625,7 @@ flowchart TD
 | [`tool-jobs`](../packages/jobs/tool-jobs) | `jobs` | [`agent`](../packages/core/agent), [`invariants`](../packages/runtime-diagnostics/invariants), [`jobs`](../packages/jobs/jobs), [`llm`](../packages/llm/llm), [`output-retention`](../packages/util/output-retention), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools) |
 | [`tool-lsp`](../packages/lsp/tool-lsp) | `lsp` | [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`lsp`](../packages/lsp/lsp), [`system-prompt`](../packages/core/system-prompt), [`timeout`](../packages/util/timeout), [`tools`](../packages/core/tools) |
 | [`mcp-client`](../packages/mcp/mcp-client) | `mcp` | [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`subprocess`](../packages/subprocess/subprocess), [`timeout`](../packages/util/timeout), [`tools`](../packages/core/tools) |
+| [`plugin-arch-guard`](../packages/plugins/plugin-arch-guard) | `plugins` | [`invariants`](../packages/runtime-diagnostics/invariants), [`tools`](../packages/core/tools) |
 | [`plugin-ast-context`](../packages/plugins/plugin-ast-context) | `plugins` | [`invariants`](../packages/runtime-diagnostics/invariants), [`tools`](../packages/core/tools) |
 | [`plugin-diagnostic-sifter`](../packages/plugins/plugin-diagnostic-sifter) | `plugins` | [`invariants`](../packages/runtime-diagnostics/invariants), [`output-retention`](../packages/util/output-retention), [`subprocess`](../packages/subprocess/subprocess), [`tools`](../packages/core/tools) |
 | [`plugin-pinned-scratchpad`](../packages/plugins/plugin-pinned-scratchpad) | `plugins` | [`agent`](../packages/core/agent), [`invariants`](../packages/runtime-diagnostics/invariants), [`session`](../packages/core/session), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools) |

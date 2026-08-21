@@ -21,6 +21,7 @@
 | `@deepseek-ai/dsh-plugin-pinned-scratchpad` | `scratchpad_update` | `ctx.tools`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `scratchpad/write` | - | scratchpad_update upserts or deletes one key/value entry in the calling agent's per-session store; the scratchpad:pinned prompt section renders the current store into every request as a bounded <agent_scratchpad> block that survives context compaction. |
 | `@deepseek-ai/dsh-plugin-telemetry-recorder` | `get_session_telemetry` | `ctx.tools` | `tool/call`, `tool/result` | - | get_session_telemetry folds the calling session's own operating figures — token velocity, prompt-cache hit rate, context headroom, turn latency, subagent counts — over a rolling window of closed turns from the durable log; it registers no session events of its own. |
 | `@deepseek-ai/dsh-plugin-subagent-router` | `subagent` | `ctx.tools`, `ctx.subagents` | `tool/call`, `tool/result`, `child session events through the chosen provider` | - | A single delegation entry routes a task to a capable subagent provider selected by config-owned policy; the model names only the task (description + prompt), never a provider or transport. |
+| `@deepseek-ai/dsh-plugin-arch-guard` | `check_module_boundary` | `ctx.tools` | `tool/call`, `tool/result` | - | check_module_boundary judges whether one package importing another is legal under the monorepo layering rules (tier direction, the plugins-do-not-import-each-other rule, acyclicity, exports map); the workspace graph is scanned once at mount. |
 | `@deepseek-ai/dsh-plugin-diagnostic-sifter` | `run_diagnostic_check` | `ctx.tools`, `ctx.subprocess` | `tool/call`, `tool/result` | - | run_diagnostic_check runs the repository typecheck or a scoped vitest suite, suppresses downstream import cascades and passing noise, and returns a bounded root-cause list with the suppressed-cascade count. |
 | `@deepseek-ai/dsh-plugin-worktree-sandbox` | `sandbox_exec` | `ctx.tools`, `ctx.subprocess` | `tool/call`, `tool/result`, `a disposable git worktree under .dsh/worktrees` | - | sandbox_exec runs a command in an isolated detached git worktree and returns the bounded structured diff and exit status; the worktree is removed after the call. |
 | `@deepseek-ai/dsh-tool-ask-user` | `ask_user_question` | `ctx.tools`, `ctx.userQuestions` | `tool/call`, `tool/result after a UI/provider answers the question` | - | ask_user_question pauses the tool call until the active UI provider returns a human answer. |
@@ -323,6 +324,38 @@ get_session_telemetry 从持久日志中，在最近若干已结束转轮的滚�
 来源：[`packages/plugins/plugin-subagent-router/src/index.ts`](../packages/plugins/plugin-subagent-router/src/index.ts)
 
 单个委托入口把任务路由到由配置所拥有的策略选出的具备能力的子代理 provider；模型只描述任务（description + prompt），从不指名 provider 或传输方式。
+
+<a id="deepseek-aidsh-plugin-arch-guard"></a>
+
+## `@deepseek-ai/dsh-plugin-arch-guard`
+
+### `check_module_boundary`
+
+检查从 sourcePath 导入 targetImport 在本 monorepo 的包分层规则下是否合法：架构层级方向（基础包 < 能力包 < 表层/插件包）、"插件之间未声明不得互相导入"规则、包图无环性，以及目标包的 exports 映射。在新增跨包导入之前使用它。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "sourcePath": {
+      "type": "string",
+      "description": "Repo-relative path of the file the import would be written in (e.g. packages/plugins/plugin-arch-guard/src/guard.ts)."
+    },
+    "targetImport": {
+      "type": "string",
+      "description": "The import specifier as it would be written at the source site (e.g. \"@deepseek-ai/dsh-tools\" or \"./helpers.ts\")."
+    }
+  },
+  "required": [
+    "sourcePath",
+    "targetImport"
+  ]
+}
+```
+
+来源：[`packages/plugins/plugin-arch-guard/src/index.ts`](../packages/plugins/plugin-arch-guard/src/index.ts)
+
+check_module_boundary 判断一个包导入另一个包在 monorepo 分层规则下是否合法（层级方向、插件互不导入规则、无环性、exports 映射）；工作区图在挂载时扫描一次。
 
 <a id="deepseek-aidsh-plugin-diagnostic-sifter"></a>
 
