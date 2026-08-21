@@ -24,6 +24,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-plugin-subagent-router` | `subagent` | `ctx.tools`, `ctx.subagents` | `tool/call`, `tool/result`, `child session events through the chosen provider` | - | A single delegation entry routes a task to a capable subagent provider selected by config-owned policy; the model names only the task (description + prompt), never a provider or transport. |
 | `@deepseek-ai/dsh-plugin-arch-guard` | `check_module_boundary` | `ctx.tools` | `tool/call`, `tool/result` | - | check_module_boundary judges whether one package importing another is legal under the monorepo layering rules (tier direction, the plugins-do-not-import-each-other rule, acyclicity, exports map); the workspace graph is scanned once at mount. |
 | `@deepseek-ai/dsh-plugin-doc-sync-automator` | `sync_bilingual_pair` | `ctx.tools` | `tool/call`, `tool/result` | - | sync_bilingual_pair splices a changed English doc section into its .zh.md mirror, updates the .i18n.yaml consistency record, and reports whether the mirror stays within its doc budget; the mirror then carries NEEDS-TRANSLATION debt for the spliced section. |
+| `@deepseek-ai/dsh-plugin-impacted-tests` | `run_impacted_tests` | `ctx.tools`, `ctx.subprocess` | `tool/call`, `tool/result` | - | run_impacted_tests selects the test suites reachable from a set of changed files through the workspace reverse import-DAG and runs exactly those through the configured vitest, returning the bounded runner output; the graph is derived from the tsconfig paths. |
 | `@deepseek-ai/dsh-plugin-diagnostic-sifter` | `run_diagnostic_check` | `ctx.tools`, `ctx.subprocess` | `tool/call`, `tool/result` | - | run_diagnostic_check runs the repository typecheck or a scoped vitest suite, suppresses downstream import cascades and passing noise, and returns a bounded root-cause list with the suppressed-cascade count. |
 | `@deepseek-ai/dsh-plugin-worktree-sandbox` | `sandbox_exec` | `ctx.tools`, `ctx.subprocess` | `tool/call`, `tool/result`, `a disposable git worktree under .dsh/worktrees` | - | sandbox_exec runs a command in an isolated detached git worktree and returns the bounded structured diff and exit status; the worktree is removed after the call. |
 | `@deepseek-ai/dsh-tool-bash` | `bash` | `ctx.tools`, `ctx.shell`, `ctx.systemPrompt`, `ctx.shellEnv`, `ctx.jobs at call time for run_in_background` | `tool/call`, `tool/result` | - | The bash tool is the model-facing consumer of the bash executor seam. A `run_in_background` run registers with the generic `ctx.jobs` runtime and is collected/stopped through the `job_*` tools from `@deepseek-ai/dsh-tool-jobs`; the `enableRunInBackground` config (default true) removes the parameter entirely when disabled. |
@@ -397,6 +398,34 @@ Propagate a changed section of an English Markdown document into its paired Simp
 Source: [`packages/plugins/plugin-doc-sync-automator/src/index.ts`](../packages/plugins/plugin-doc-sync-automator/src/index.ts)
 
 sync_bilingual_pair splices a changed English doc section into its .zh.md mirror, updates the .i18n.yaml consistency record, and reports whether the mirror stays within its doc budget; the mirror then carries NEEDS-TRANSLATION debt for the spliced section.
+
+<a id="deepseek-aidsh-plugin-impacted-tests"></a>
+
+## `@deepseek-ai/dsh-plugin-impacted-tests`
+
+### `run_impacted_tests`
+
+Run only the test suites that a set of changed files can actually break. Builds the repository's import graph, finds every test suite that transitively imports a changed file, and runs strictly those suites. Omit `files` to use the uncommitted changes in the working tree. When nothing is changed, or when a changed file (a Markdown document, say) is imported by no suite, nothing is run — that is the answer, not a failure. Use it after editing source to get a fast, targeted verdict instead of the whole suite.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "files": {
+      "type": "array",
+      "description": "The changed files to analyse. Omit to use the uncommitted modified files in the working tree.",
+      "items": {
+        "type": "string",
+        "description": "A repo-relative path."
+      }
+    }
+  }
+}
+```
+
+Source: [`packages/plugins/plugin-impacted-tests/src/index.ts`](../packages/plugins/plugin-impacted-tests/src/index.ts)
+
+run_impacted_tests selects the test suites reachable from a set of changed files through the workspace reverse import-DAG and runs exactly those through the configured vitest, returning the bounded runner output; the graph is derived from the tsconfig paths.
 
 <a id="deepseek-aidsh-plugin-diagnostic-sifter"></a>
 

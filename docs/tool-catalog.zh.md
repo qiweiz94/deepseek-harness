@@ -23,6 +23,7 @@
 | `@deepseek-ai/dsh-plugin-subagent-router` | `subagent` | `ctx.tools`, `ctx.subagents` | `tool/call`, `tool/result`, `child session events through the chosen provider` | - | A single delegation entry routes a task to a capable subagent provider selected by config-owned policy; the model names only the task (description + prompt), never a provider or transport. |
 | `@deepseek-ai/dsh-plugin-arch-guard` | `check_module_boundary` | `ctx.tools` | `tool/call`, `tool/result` | - | check_module_boundary judges whether one package importing another is legal under the monorepo layering rules (tier direction, the plugins-do-not-import-each-other rule, acyclicity, exports map); the workspace graph is scanned once at mount. |
 | `@deepseek-ai/dsh-plugin-doc-sync-automator` | `sync_bilingual_pair` | `ctx.tools` | `tool/call`, `tool/result` | - | sync_bilingual_pair splices a changed English doc section into its .zh.md mirror, updates the .i18n.yaml consistency record, and reports whether the mirror stays within its doc budget; the mirror then carries NEEDS-TRANSLATION debt for the spliced section. |
+| `@deepseek-ai/dsh-plugin-impacted-tests` | `run_impacted_tests` | `ctx.tools`, `ctx.subprocess` | `tool/call`, `tool/result` | - | run_impacted_tests selects the test suites reachable from a set of changed files through the workspace reverse import-DAG and runs exactly those through the configured vitest, returning the bounded runner output; the graph is derived from the tsconfig paths. |
 | `@deepseek-ai/dsh-plugin-diagnostic-sifter` | `run_diagnostic_check` | `ctx.tools`, `ctx.subprocess` | `tool/call`, `tool/result` | - | run_diagnostic_check runs the repository typecheck or a scoped vitest suite, suppresses downstream import cascades and passing noise, and returns a bounded root-cause list with the suppressed-cascade count. |
 | `@deepseek-ai/dsh-plugin-worktree-sandbox` | `sandbox_exec` | `ctx.tools`, `ctx.subprocess` | `tool/call`, `tool/result`, `a disposable git worktree under .dsh/worktrees` | - | sandbox_exec runs a command in an isolated detached git worktree and returns the bounded structured diff and exit status; the worktree is removed after the call. |
 | `@deepseek-ai/dsh-tool-ask-user` | `ask_user_question` | `ctx.tools`, `ctx.userQuestions` | `tool/call`, `tool/result after a UI/provider answers the question` | - | ask_user_question pauses the tool call until the active UI provider returns a human answer. |
@@ -399,6 +400,34 @@ check_module_boundary 判断一个包导入另一个包在 monorepo 分层规则
 来源：[`packages/plugins/plugin-doc-sync-automator/src/index.ts`](../packages/plugins/plugin-doc-sync-automator/src/index.ts)
 
 sync_bilingual_pair 把英文文档中被改动的一节拼接进其 .zh.md 镜像，更新 .i18n.yaml 一致性记录，并报告镜像是否仍在其文档预算内；镜像随后为被拼接的一节携带 NEEDS-TRANSLATION 债务。
+
+<a id="deepseek-aidsh-plugin-impacted-tests"></a>
+
+## `@deepseek-ai/dsh-plugin-impacted-tests`
+
+### `run_impacted_tests`
+
+只运行一组改动文件真正可能破坏的测试套件。构建仓库的导入图，找出每个传递地导入了某个改动文件的测试套件，并严格只运行这些套件。省略 `files` 则使用工作树中未提交的改动。当没有改动、或某个改动文件（例如一个 Markdown 文档）没有任何套件导入时，什么都不运行——这就是答案，而非失败。在编辑源码后用它获得快速、精准的判定，而不必跑整个套件。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "files": {
+      "type": "array",
+      "description": "The changed files to analyse. Omit to use the uncommitted modified files in the working tree.",
+      "items": {
+        "type": "string",
+        "description": "A repo-relative path."
+      }
+    }
+  }
+}
+```
+
+来源：[`packages/plugins/plugin-impacted-tests/src/index.ts`](../packages/plugins/plugin-impacted-tests/src/index.ts)
+
+run_impacted_tests 通过工作区反向导入 DAG 选出从一组改动文件可达的测试套件，并经配置的 vitest 恰好运行这些套件，返回有界的运行输出；该图由 tsconfig paths 派生。
 
 <a id="deepseek-aidsh-plugin-diagnostic-sifter"></a>
 

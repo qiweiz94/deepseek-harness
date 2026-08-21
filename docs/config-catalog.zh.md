@@ -1556,6 +1556,38 @@ export interface Config {
 
 来源：[`packages/plugins/plugin-doc-sync-automator/src/index.ts:20`](../packages/plugins/plugin-doc-sync-automator/src/index.ts)
 
+<a id="deepseek-aidsh-plugin-impacted-tests"></a>
+
+## `@deepseek-ai/dsh-plugin-impacted-tests`
+
+依赖：`tools` · `subprocess`
+
+```ts config-catalog
+/** Runtime configuration for the impacted-tests tool. */
+export interface Config {
+  /** Repository root; defaults to the process cwd. */
+  cwd?: string
+  /** The tsconfig whose `paths` drive module resolution; defaults to `tsconfig.base.json`. */
+  tsconfigPath?: string
+  /** Root-relative globs naming the selectable suites. */
+  testPatterns?: string[]
+  /** Argv prefix the selected suites are appended to; defaults to the repo's vitest. */
+  runnerCommand?: string[]
+  /** Refuse to run more than this many suites in one call; defaults to 200. */
+  maxSuites?: number
+  /** Output-retention envelope in bytes; defaults to 15_000 (15 KB). */
+  maxOutputBytes?: number
+  /** Runner timeout in milliseconds; defaults to 600_000. */
+  timeoutMs?: number
+  /** Model-facing tool name; defaults to `run_impacted_tests`. */
+  toolName?: string
+  /** Path to the git binary; defaults to `git`. */
+  gitBinary?: string
+}
+```
+
+来源：[`packages/plugins/plugin-impacted-tests/src/index.ts:25`](../packages/plugins/plugin-impacted-tests/src/index.ts)
+
 <a id="deepseek-aidsh-plugin-pinned-scratchpad"></a>
 
 ## `@deepseek-ai/dsh-plugin-pinned-scratchpad`
