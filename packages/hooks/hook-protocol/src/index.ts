@@ -31,6 +31,6 @@ export { createStopLoopGuard, DEFAULT_MAX_CONSECUTIVE_STOP_BLOCKS } from './stop
 export type { StopLoopGuard } from './stop-guard.ts'
 export { bindStartContext, createStartGate, foldStartContext } from './start-gate.ts'
 export type { PreStepGateDecision, StartGate } from './start-gate.ts'
-export { combineHookGroups, createSessionHookConfigCache, loadProcessHookConfig } from './session-config.ts'
+export { combineHookGroups, createSessionHookConfigCache, loadProcessHookConfig, workspaceTrustPredicate } from './session-config.ts'
 export type { SessionWorkspace } from './session-config.ts'
 export { assertPositiveInteger, resolveSharedHookLimits } from './config-limits.ts'

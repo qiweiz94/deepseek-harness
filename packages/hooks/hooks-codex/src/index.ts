@@ -38,6 +38,7 @@ import {
   mergeHookOutputs,
   resolveSharedHookLimits,
   runHook,
+  workspaceTrustPredicate,
   type HookOutput,
   type MatcherGroup,
   type MergedHookOutcome,
@@ -62,9 +63,20 @@ export interface Config {
    * `.codex/hooks.json`. Read and parsed once per session at first hook use;
    * its groups run after the process-level groups on each point. Unset ⇒ no
    * discovery. A workspace without the file has no session hooks; an unreadable
-   * or invalid file logs a warning and contributes nothing.
+   * or invalid file logs a warning and contributes nothing. Discovery runs a
+   * workspace's hooks only when the workspace is listed in
+   * {@link trustedWorkspaceRoots}; an untrusted workspace contributes nothing.
    */
   sessionConfigFile?: string
+  /**
+   * Workspace roots the deployment trusts to supply project-local hooks
+   * (absolute, or relative to the process launch cwd). A session whose cwd is
+   * one of these roots, or nested under one, may run its `sessionConfigFile`
+   * hooks; every other workspace is denied. Empty/unset ⇒ no workspace is
+   * trusted, so `sessionConfigFile` discovery never runs a command — a freshly
+   * cloned untrusted repo cannot plant a hook that executes before any user action.
+   */
+  trustedWorkspaceRoots?: string[]
   /** The model name stamped on every payload (Codex includes `model` on each event). */
   model?: string
   /** Default per-hook timeout in ms when a hook sets none (Codex default: 600000). */
@@ -82,6 +94,7 @@ export interface Config {
 export const Config: z<Config> = z.object({
   configPath: z.string().required(),
   sessionConfigFile: z.string(),
+  trustedWorkspaceRoots: z.array(z.string()).default([]),
   model: z.string().default(''),
   defaultTimeoutMs: z.number().default(DEFAULT_HOOK_TIMEOUT_MS),
   stderrSummaryMaxChars: z.number().default(DEFAULT_STDERR_SUMMARY_MAX_CHARS),
@@ -122,8 +135,15 @@ export function apply(ctx: Context, config: Config): void {
   const parsed: CodexHookConfig = loadedConfig
 
   // Per-session project-local discovery: read once per session at first hook use.
+  const trustedRoots = workspaceTrustPredicate(config.trustedWorkspaceRoots, process.cwd())
   const sessionHookConfig = createSessionHookConfigCache({
     sessionConfigFile: config.sessionConfigFile,
+    ...trustedRoots !== undefined ? { isWorkspaceTrusted: trustedRoots } : {},
+    warnUntrusted: (cwd, agentId) => {
+      // Reached only after discovery confirmed `sessionConfigFile` is set (the
+      // cache warns before reading), so it is always defined here.
+      ctx.logger.warn(`hooks-codex: workspace ${cwd} is not a trusted workspace root; its ${config.sessionConfigFile} hooks are not run for ${agentId} (add it to trustedWorkspaceRoots to enable)`)
+    },
     empty: {},
     parse: (raw, _cwd) => parseCodexConfig(raw),
     warnSkipped,
