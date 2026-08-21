@@ -44,10 +44,17 @@ export default defineConfig({
   test: {
     execArgv: vitestExecArgv,
     setupFiles: ['./scripts/test-invariants.ts'],
+    // Fail loud with an actionable message when the built host libraries the
+    // example/CLI compositions import (`<pkg>/typert` → `lib/typert.host.js`, a
+    // build artifact with no source form) are absent, instead of a cryptic
+    // ERR_MODULE_NOT_FOUND from a spawned child.
+    globalSetup: ['./scripts/snapshot-build-preflight.ts'],
     include: [
       'scripts/**/*.snapshot.ts',
-      // The assembled Web snapshot executes generated client bundles; source
-      // mode remains the zero-build path, while lib mode requires a prior build.
+      // The assembled Web snapshot executes generated client bundles, so it is
+      // included only in lib mode. The example/CLI lanes below also load the
+      // build-only typert host registry, so this config needs a prior build
+      // regardless of mode (enforced by the globalSetup preflight above).
       ...(process.env.DSH_EXAMPLE_MODE === 'lib' ? ['apps/web/tests/**/*.snapshot.ts'] : []),
       'apps/cli/tests/**/*.snapshot.ts',
       'examples/*/tests/**/*.snapshot.ts',
