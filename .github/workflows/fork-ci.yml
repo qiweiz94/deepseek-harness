@@ -78,10 +78,18 @@ jobs:
       # suite and the coverage-exempt heavy suite; 4 is the hosted core count.
       DSH_COVERAGE_MAX_WORKERS: '4'
       DSH_GATE_CONCURRENCY: '2'
-      # Hosted 4-core runners overrun locally-tuned test timeouts by up to
-      # ~1.3x under gate contention; 4 gives proportional headroom without
-      # loosening any local default (vitest.shared.ts scaledTimeout).
-      DSH_TEST_TIMEOUT_FACTOR: '4'
+      # Hosted 4-core runners overrun locally-tuned test timeouts under gate
+      # contention: heavy suites exceed the 4x (20s) bound on this lane (#23).
+      # No CI failure log is available to name the offending suite(s); the
+      # most PLAUSIBLE (unconfirmed) candidates are the real-process suites
+      # this repo already tracks as expensive — scripts/coverage-exempt.ts's
+      # compiler-heavy typert/generator and child-process scripts/*.spec.ts
+      # fixtures, plus the process-bound vitest project (subprocess,
+      # subagent-acp, workflow-worker-thread, app-boot, time-context,
+      # llm-pi-ai). Raised to 6 (30s) for headroom without loosening the
+      # un-factored local default (vitest.shared.ts scaledTimeout) — a
+      # conservative, lane-scoped bump pending the next fork CI run.
+      DSH_TEST_TIMEOUT_FACTOR: '6'
     steps:
       - uses: actions/checkout@v6
         with:
@@ -109,7 +117,12 @@ jobs:
     if: github.repository_owner != 'deepseek-ai'
     runs-on: ubuntu-latest
     name: fork / build, snapshots, artifacts
-    timeout-minutes: 90
+    # Raised from 90: DSH_SNAPSHOT_MAX_CONCURRENCY=1 below serializes every
+    # snapshot test file plus every scenario within them, adding job-level
+    # wall time on top of the per-test headroom fixed elsewhere in this job.
+    # Unmeasured against a real fork run; widen further if this job now hits
+    # ITS OWN ceiling instead of the test-level one.
+    timeout-minutes: 120
     env:
       # ci-consumers defaults its gate concurrency to the gate count (~11),
       # which thrashes a 4-core hosted runner.
@@ -118,18 +131,31 @@ jobs:
       DSH_NODE_COMPAT_SKIP_TYPECHECK: '1'
       DSH_OXLINT_THREADS: '4'
       DSH_PUBLINT_CONCURRENCY: '4'
-      # Lowered from 4 to 2: the subagent-continuable-inheritance scenario spawns
-      # multiple real agent subprocesses, so running fewer scenarios at once on
-      # the 4-core runner leaves each more CPU and cuts the contention that made
-      # them exceed their wait bound — attacking the root cause rather than only
-      # widening the timeout below.
-      DSH_SNAPSHOT_MAX_CONCURRENCY: '2'
-      # Scales vitest test timeouts and the acp-snapshot harness persistence
-      # waits (internal waits are 10s * this factor). Higher than the coverage
-      # lane's factor because the subagent-continuable-inheritance scenario
-      # spawns competing agent subprocesses: 4x timed out at 40s in a live run,
-      # 8x was a first widening; raised to 12x (120s waits) for headroom on top
-      # of the reduced DSH_SNAPSHOT_MAX_CONCURRENCY above.
+      # Lowered from 2 to 1: at 2, the subagent-continuable-inheritance scenario
+      # (which spawns multiple real agent subprocesses) still timed out at the
+      # fixed 120s vitest test-level ceiling (vitest.snapshot.config.ts
+      # testTimeout) under 4-core contention. 1 also disables in-file scenario
+      # concurrency (vitest.snapshot.config.ts wires maxConcurrency and
+      # fileParallelism off this same value), so the heavy scenario runs alone
+      # with the runner's full 4 cores instead of sharing them with a
+      # concurrent scenario — attacking the contention itself rather than only
+      # widening the timeout. The 120s ceiling itself is widened separately in
+      # vitest.snapshot.config.ts, since that bound is NOT scaled by
+      # DSH_TEST_TIMEOUT_FACTOR below.
+      # Trade-off: fileParallelism off means every snapshot test file (not just
+      # the heavy scenario's neighbors) now runs serially, on top of the 78
+      # scenarios inside examples/acp-agent/tests/acp.snapshot.ts also running
+      # one at a time — total lane wall time rises accordingly (this job's
+      # timeout-minutes is widened below for margin).
+      DSH_SNAPSHOT_MAX_CONCURRENCY: '1'
+      # Scales vitest test timeouts elsewhere (via scaledTimeout) and the
+      # acp-snapshot harness's own internal persistence waits (10s * this
+      # factor) — NOT the fixed 120s vitest.snapshot.config.ts testTimeout,
+      # which the DSH_SNAPSHOT_MAX_CONCURRENCY drop above and the
+      # vitest.snapshot.config.ts widening address instead. Kept at 12x
+      # (already raised from 4x/8x for the subagent-continuable-inheritance
+      # scenario's competing agent subprocesses); unrelated to this timeout,
+      # so left unchanged.
       DSH_TEST_TIMEOUT_FACTOR: '12'
     steps:
       - uses: actions/checkout@v6
