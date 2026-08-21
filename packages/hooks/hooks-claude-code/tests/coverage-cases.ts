@@ -335,6 +335,27 @@ export function defineCoverageCases(group: CoverageGroup): void {
         .toEqual(['turn/start', 'hook/invoked', 'hook/result', 'turn/end'])
     })
 
+    it('a steered continuation (non-prompt pre-step) does NOT fire UserPromptSubmit', async () => {
+      // `agent/pre-step` also fires for a steered continuation and injected
+      // context, neither a genuine prompt submission — only a claimed batch
+      // holding a `source.kind === 'user'` message should run the hook.
+      const d = dir()
+      const marker = join(d, 'fired')
+      const s = sh(d, 'ps.sh', `#!/usr/bin/env bash\ntouch "${marker}"\necho '{}'\n`)
+      const path = hooks(d, { UserPromptSubmit: [{ hooks: [{ type: 'command', command: s }] }] })
+      const adapter = new MockAdapter([textResponse('ok')])
+      const ctx = await harness(path, adapter)
+      const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+      agent.steer(createUserMessage({
+        content: [{ type: 'text', text: 'steered continuation' }],
+        source: { kind: 'plugin', plugin: 'test' },
+      }))
+      await waitForIdle(ctx, agent)
+      expect(existsSync(marker)).toBe(false) // UserPromptSubmit hook never ran
+      expect(adapter.requests).toHaveLength(1) // but the step still entered normally
+      expect(JSON.stringify(adapter.requests[0]!.messages)).toContain('steered continuation')
+    })
+
     it('a PreToolUse ask with NO reason omits the reason (false arm)', async () => {
       const d = dir()
       const s = sh(d, 'ask.sh', '#!/usr/bin/env bash\necho \'{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask"}}\'\n')
