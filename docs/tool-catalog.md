@@ -26,6 +26,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-plugin-arch-guard` | `check_module_boundary` | `ctx.tools` | `tool/call`, `tool/result` | - | check_module_boundary judges whether one package importing another is legal under the monorepo layering rules (tier direction, the plugins-do-not-import-each-other rule, acyclicity, exports map); the workspace graph is scanned once at mount. |
 | `@deepseek-ai/dsh-plugin-doc-sync-automator` | `sync_bilingual_pair` | `ctx.tools` | `tool/call`, `tool/result` | - | sync_bilingual_pair splices a changed English doc section into its .zh.md mirror, updates the .i18n.yaml consistency record, and reports whether the mirror stays within its doc budget; the mirror then carries NEEDS-TRANSLATION debt for the spliced section. |
 | `@deepseek-ai/dsh-plugin-impacted-tests` | `run_impacted_tests` | `ctx.tools`, `ctx.subprocess` | `tool/call`, `tool/result` | - | run_impacted_tests selects the test suites reachable from a set of changed files through the workspace reverse import-DAG and runs exactly those through the configured vitest, returning the bounded runner output; the graph is derived from the tsconfig paths. |
+| `@deepseek-ai/dsh-plugin-lsp-references` | `find_references`, `get_definition` | `ctx.tools` | `tool/call`, `tool/result` | - | find_references and get_definition answer from an in-process TypeScript language service over the transitive file set of the configured tsconfig (default tsconfig.host.json), so a reference in another package is found; the service is built on the first call and released with the fiber. Positions are 1-based line and 1-based UTF-16 character; an off-symbol position returns an empty result rather than an error, while a file outside the project file set is an error result. |
 | `@deepseek-ai/dsh-plugin-diagnostic-sifter` | `run_diagnostic_check` | `ctx.tools`, `ctx.subprocess` | `tool/call`, `tool/result` | - | run_diagnostic_check runs the repository typecheck or a scoped vitest suite, suppresses downstream import cascades and passing noise, and returns a bounded root-cause list with the suppressed-cascade count. |
 | `@deepseek-ai/dsh-plugin-worktree-sandbox` | `sandbox_exec` | `ctx.tools`, `ctx.subprocess` | `tool/call`, `tool/result`, `a disposable git worktree under .dsh/worktrees` | - | sandbox_exec runs a command in an isolated detached git worktree and returns the bounded structured diff and exit status; the worktree is removed after the call. |
 | `@deepseek-ai/dsh-tool-bash` | `bash` | `ctx.tools`, `ctx.shell`, `ctx.systemPrompt`, `ctx.shellEnv`, `ctx.jobs at call time for run_in_background` | `tool/call`, `tool/result` | - | The bash tool is the model-facing consumer of the bash executor seam. A `run_in_background` run registers with the generic `ctx.jobs` runtime and is collected/stopped through the `job_*` tools from `@deepseek-ai/dsh-tool-jobs`; the `enableRunInBackground` config (default true) removes the parameter entirely when disabled. |
@@ -465,6 +466,74 @@ Source: [`packages/plugins/plugin-impacted-tests/src/index.ts`](../packages/plug
 
 run_impacted_tests selects the test suites reachable from a set of changed files through the workspace reverse import-DAG and runs exactly those through the configured vitest, returning the bounded runner output; the graph is derived from the tsconfig paths.
 
+<a id="deepseek-aidsh-plugin-lsp-references"></a>
+
+## `@deepseek-ai/dsh-plugin-lsp-references`
+
+### `find_references`
+
+Find every reference to the TypeScript symbol under a cursor — callers, importers, and implementations — across the whole project file set, not just the file you name. Positions are 1-based line and 1-based UTF-16 character; the symbol's own declaration is included. Use it before changing a symbol, when a textual search would be ambiguous. An off-symbol position returns no references rather than failing.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "Path to a TypeScript file in the project, absolute or relative to the working directory."
+    },
+    "line": {
+      "type": "integer",
+      "description": "1-based line of the cursor."
+    },
+    "character": {
+      "type": "integer",
+      "description": "1-based UTF-16 column of the cursor."
+    }
+  },
+  "required": [
+    "path",
+    "line",
+    "character"
+  ]
+}
+```
+
+Source: [`packages/plugins/plugin-lsp-references/src/index.ts`](../packages/plugins/plugin-lsp-references/src/index.ts)
+
+### `get_definition`
+
+Resolve the TypeScript symbol under a cursor to its exact declaration anchor. Positions are 1-based line and 1-based UTF-16 character. An overloaded function or a merged interface reports one anchor per declaration; an off-symbol position returns none rather than failing.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "Path to a TypeScript file in the project, absolute or relative to the working directory."
+    },
+    "line": {
+      "type": "integer",
+      "description": "1-based line of the cursor."
+    },
+    "character": {
+      "type": "integer",
+      "description": "1-based UTF-16 column of the cursor."
+    }
+  },
+  "required": [
+    "path",
+    "line",
+    "character"
+  ]
+}
+```
+
+Source: [`packages/plugins/plugin-lsp-references/src/index.ts`](../packages/plugins/plugin-lsp-references/src/index.ts)
+
+find_references and get_definition answer from an in-process TypeScript language service over the transitive file set of the configured tsconfig (default tsconfig.host.json), so a reference in another package is found; the service is built on the first call and released with the fiber. Positions are 1-based line and 1-based UTF-16 character; an off-symbol position returns an empty result rather than an error, while a file outside the project file set is an error result.
+
 <a id="deepseek-aidsh-plugin-diagnostic-sifter"></a>
 
 ## `@deepseek-ai/dsh-plugin-diagnostic-sifter`
@@ -492,7 +561,7 @@ Run the repository typecheck or a scoped test run and return only the root-cause
     },
     "targetPath": {
       "type": "string",
-      "description": "Optional path scoping the check, relative to the configured working directory: a tsc project/directory for `typecheck`, a test file or directory for `test`. Omit to check everything."
+      "description": "Optional path scoping the check, relative to the configured working directory and contained within it: a tsc project/directory for `typecheck`, a test file or directory for `test`. Omit to check everything."
     }
   },
   "required": [

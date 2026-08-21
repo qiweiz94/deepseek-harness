@@ -71,7 +71,7 @@ export function loadProjectFileSet(tsconfigPath: string): ProjectFileSet {
  * @param entries - the list TypeScript returned, if any.
  * @returns the same list, or an empty one.
  */
-function listOf<T>(entries: readonly T[] | undefined): readonly T[] {
+export function listOf<T>(entries: readonly T[] | undefined): readonly T[] {
   return entries ?? []
 }
 
@@ -101,6 +101,22 @@ export function readSnapshot(
 interface DocumentSpan {
   readonly fileName: string
   readonly textSpan: ts.TextSpan
+}
+
+/**
+ * The language service's current program. A language service over a static,
+ * non-watching host always yields a program once constructed; the throw
+ * documents that invariant rather than handling a reachable failure.
+ * @param service - the language service to read.
+ * @returns the current program.
+ */
+export function requireProgram(service: ts.LanguageService): ts.Program {
+  const program = service.getProgram()
+  /* v8 ignore next 3 -- a language service over a static, non-watching host always yields a program. */
+  if (program === undefined) {
+    throw new Error('the TypeScript language service produced no program')
+  }
+  return program
 }
 
 /**
@@ -141,12 +157,7 @@ export class TypeScriptNavigationEngine {
   }
 
   #program(): ts.Program {
-    const program = this.#service.getProgram()
-    /* v8 ignore next 3 -- a language service over a static, non-watching host always yields a program. */
-    if (program === undefined) {
-      throw new Error('the TypeScript language service produced no program')
-    }
-    return program
+    return requireProgram(this.#service)
   }
 
   /**

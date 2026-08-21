@@ -1578,7 +1578,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/plugins/plugin-diagnostic-sifter/src/index.ts:25`](../packages/plugins/plugin-diagnostic-sifter/src/index.ts)
+来源：[`packages/plugins/plugin-diagnostic-sifter/src/index.ts:26`](../packages/plugins/plugin-diagnostic-sifter/src/index.ts)
 
 <a id="deepseek-aidsh-plugin-doc-sync-automator"></a>
 
@@ -1631,6 +1631,29 @@ export interface Config {
 ```
 
 来源：[`packages/plugins/plugin-impacted-tests/src/index.ts:25`](../packages/plugins/plugin-impacted-tests/src/index.ts)
+
+<a id="deepseek-aidsh-plugin-lsp-references"></a>
+
+## `@deepseek-ai/dsh-plugin-lsp-references`
+
+需要：`tools`
+
+```ts config-catalog
+/** Configuration for the symbol-navigation tools. */
+export interface Config {
+  /**
+   * Root tsconfig whose transitive file set defines what can be navigated
+   * (default `tsconfig.host.json`, resolved against the process cwd).
+   */
+  tsconfigPath?: string
+  /** Retain at most this many reference locations per call (default 200). */
+  maxReferences?: number
+  /** Cap each location's source-line preview at this many characters (default 200). */
+  maxLineChars?: number
+}
+```
+
+来源：[`packages/plugins/plugin-lsp-references/src/index.ts:45`](../packages/plugins/plugin-lsp-references/src/index.ts)
 
 <a id="deepseek-aidsh-plugin-pinned-scratchpad"></a>
 

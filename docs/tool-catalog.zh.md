@@ -25,6 +25,7 @@
 | `@deepseek-ai/dsh-plugin-arch-guard` | `check_module_boundary` | `ctx.tools` | `tool/call`, `tool/result` | - | check_module_boundary judges whether one package importing another is legal under the monorepo layering rules (tier direction, the plugins-do-not-import-each-other rule, acyclicity, exports map); the workspace graph is scanned once at mount. |
 | `@deepseek-ai/dsh-plugin-doc-sync-automator` | `sync_bilingual_pair` | `ctx.tools` | `tool/call`, `tool/result` | - | sync_bilingual_pair splices a changed English doc section into its .zh.md mirror, updates the .i18n.yaml consistency record, and reports whether the mirror stays within its doc budget; the mirror then carries NEEDS-TRANSLATION debt for the spliced section. |
 | `@deepseek-ai/dsh-plugin-impacted-tests` | `run_impacted_tests` | `ctx.tools`, `ctx.subprocess` | `tool/call`, `tool/result` | - | run_impacted_tests selects the test suites reachable from a set of changed files through the workspace reverse import-DAG and runs exactly those through the configured vitest, returning the bounded runner output; the graph is derived from the tsconfig paths. |
+| `@deepseek-ai/dsh-plugin-lsp-references` | `find_references`, `get_definition` | `ctx.tools` | `tool/call`, `tool/result` | - | find_references and get_definition answer from an in-process TypeScript language service over the transitive file set of the configured tsconfig (default tsconfig.host.json), so a reference in another package is found; the service is built on the first call and released with the fiber. Positions are 1-based line and 1-based UTF-16 character; an off-symbol position returns an empty result rather than an error, while a file outside the project file set is an error result. |
 | `@deepseek-ai/dsh-plugin-diagnostic-sifter` | `run_diagnostic_check` | `ctx.tools`, `ctx.subprocess` | `tool/call`, `tool/result` | - | run_diagnostic_check runs the repository typecheck or a scoped vitest suite, suppresses downstream import cascades and passing noise, and returns a bounded root-cause list with the suppressed-cascade count. |
 | `@deepseek-ai/dsh-plugin-worktree-sandbox` | `sandbox_exec` | `ctx.tools`, `ctx.subprocess` | `tool/call`, `tool/result`, `a disposable git worktree under .dsh/worktrees` | - | sandbox_exec runs a command in an isolated detached git worktree and returns the bounded structured diff and exit status; the worktree is removed after the call. |
 | `@deepseek-ai/dsh-tool-ask-user` | `ask_user_question` | `ctx.tools`, `ctx.userQuestions` | `tool/call`, `tool/result after a UI/provider answers the question` | - | ask_user_question pauses the tool call until the active UI provider returns a human answer. |
@@ -467,6 +468,74 @@ sync_bilingual_pair 把英文文档中被改动的一节拼接进其 .zh.md 镜�
 
 run_impacted_tests 通过工作区反向导入 DAG 选出从一组改动文件可达的测试套件，并经配置的 vitest 恰好运行这些套件，返回有界的运行输出；该图由 tsconfig paths 派生。
 
+<a id="deepseek-aidsh-plugin-lsp-references"></a>
+
+## `@deepseek-ai/dsh-plugin-lsp-references`
+
+### `find_references`
+
+查找光标所在 TypeScript 符号的每一处引用——调用方、导入方与实现——覆盖整个项目文件集，而不仅是你指定的文件。位置为从 1 开始的行与从 1 开始的 UTF-16 字符；结果包含符号自身的声明。在改动一个符号之前使用它，尤其是在文本搜索会产生歧义的场合。未指向任何符号的位置返回空引用列表，而非报错。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "Path to a TypeScript file in the project, absolute or relative to the working directory."
+    },
+    "line": {
+      "type": "integer",
+      "description": "1-based line of the cursor."
+    },
+    "character": {
+      "type": "integer",
+      "description": "1-based UTF-16 column of the cursor."
+    }
+  },
+  "required": [
+    "path",
+    "line",
+    "character"
+  ]
+}
+```
+
+来源：[`packages/plugins/plugin-lsp-references/src/index.ts`](../packages/plugins/plugin-lsp-references/src/index.ts)
+
+### `get_definition`
+
+将光标所在的 TypeScript 符号解析为其确切的声明锚点。位置为从 1 开始的行与从 1 开始的 UTF-16 字符。重载函数或合并接口会为每个声明报告一个锚点；未指向任何符号的位置返回空列表，而非报错。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "Path to a TypeScript file in the project, absolute or relative to the working directory."
+    },
+    "line": {
+      "type": "integer",
+      "description": "1-based line of the cursor."
+    },
+    "character": {
+      "type": "integer",
+      "description": "1-based UTF-16 column of the cursor."
+    }
+  },
+  "required": [
+    "path",
+    "line",
+    "character"
+  ]
+}
+```
+
+来源：[`packages/plugins/plugin-lsp-references/src/index.ts`](../packages/plugins/plugin-lsp-references/src/index.ts)
+
+find_references 与 get_definition 由一个进程内 TypeScript 语言服务在所配置 tsconfig（默认 tsconfig.host.json）的传递文件集上作答，因此另一个包中的引用也能被找到；该服务在首次调用时构建，并随 fiber 一起释放。位置为从 1 开始的行与从 1 开始的 UTF-16 字符；未指向任何符号的位置返回空结果而非错误，不在项目文件集内的文件则返回错误结果。
+
 <a id="deepseek-aidsh-plugin-diagnostic-sifter"></a>
 
 ## `@deepseek-ai/dsh-plugin-diagnostic-sifter`
@@ -494,7 +563,7 @@ run_impacted_tests 通过工作区反向导入 DAG 选出从一组改动文件�
     },
     "targetPath": {
       "type": "string",
-      "description": "Optional path scoping the check, relative to the configured working directory: a tsc project/directory for `typecheck`, a test file or directory for `test`. Omit to check everything."
+      "description": "Optional path scoping the check, relative to the configured working directory and contained within it: a tsc project/directory for `typecheck`, a test file or directory for `test`. Omit to check everything."
     }
   },
   "required": [

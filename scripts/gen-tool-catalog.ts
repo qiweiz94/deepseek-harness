@@ -57,6 +57,7 @@ import * as ToolAstContext from '@deepseek-ai/dsh-plugin-ast-context'
 import * as ToolArchGuard from '@deepseek-ai/dsh-plugin-arch-guard'
 import * as ToolDocSyncAutomator from '@deepseek-ai/dsh-plugin-doc-sync-automator'
 import * as ToolImpactedTests from '@deepseek-ai/dsh-plugin-impacted-tests'
+import * as ToolLspReferences from '@deepseek-ai/dsh-plugin-lsp-references'
 import * as ToolDiagnosticSifter from '@deepseek-ai/dsh-plugin-diagnostic-sifter'
 import * as ToolPinnedScratchpad from '@deepseek-ai/dsh-plugin-pinned-scratchpad'
 import * as ToolSemanticPatcher from '@deepseek-ai/dsh-plugin-semantic-patcher'
@@ -331,6 +332,18 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'run_impacted_tests selects the test suites reachable from a set of changed files through the workspace reverse import-DAG and runs exactly those through the configured vitest, returning the bounded runner output; the graph is derived from the tsconfig paths.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-plugin-lsp-references',
+    dir: 'plugin-lsp-references',
+    source: 'packages/plugins/plugin-lsp-references/src/index.ts',
+    requires: ['ctx.tools'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(ToolLspReferences)
+    },
+    note:
+      'find_references and get_definition answer from an in-process TypeScript language service over the transitive file set of the configured tsconfig (default tsconfig.host.json), so a reference in another package is found; the service is built on the first call and released with the fiber. Positions are 1-based line and 1-based UTF-16 character; an off-symbol position returns an empty result rather than an error, while a file outside the project file set is an error result.',
   },
   {
     pkg: '@deepseek-ai/dsh-plugin-diagnostic-sifter',
