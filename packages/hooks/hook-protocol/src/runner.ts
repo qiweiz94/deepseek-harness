@@ -71,7 +71,16 @@ export async function runHook(
   now: () => number,
 ): Promise<RunHookResult> {
   const started = now()
-  const timeoutMs = hook.timeoutSec !== undefined ? hook.timeoutSec * 1000 : options.defaultTimeoutMs
+  // A non-positive or non-finite per-hook `timeoutSec` (a hooks.json `timeout`
+  // of 0, negative, or NaN — a common "no timeout" idiom) would make `timeoutMs`
+  // invalid; the executor then rejects the run as an infrastructure fault and
+  // the catch below turns that into a non-blocking outcome — a PreToolUse guard
+  // that never runs and never denies. Fall back to the (validated) default so
+  // the hook always runs on a valid positive timeout.
+  const perHookMs = hook.timeoutSec !== undefined ? hook.timeoutSec * 1000 : undefined
+  const timeoutMs = perHookMs !== undefined && Number.isFinite(perHookMs) && perHookMs > 0
+    ? perHookMs
+    : options.defaultTimeoutMs
   const stdin = JSON.stringify(options.payload) + (options.trailingNewline ? '\n' : '')
 
   const request = {

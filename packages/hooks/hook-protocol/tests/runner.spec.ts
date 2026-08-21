@@ -100,6 +100,16 @@ describe('runHook — payload + env + stdin plumbing', () => {
     expect(DEFAULT_HOOK_TIMEOUT_MS).toBe(600_000) // the CC/Codex reference default (10 minutes)
   })
 
+  it.each([0, -1, Number.NaN, -100])('falls back to the default rather than disarming the hook on an invalid timeoutSec (%s)', async (timeoutSec) => {
+    // A non-positive/NaN timeout would make the executor reject the run as an
+    // infrastructure fault and skip the hook — a guard that never fires. The
+    // hook must still run, on the valid default timeout.
+    const { bash, specs } = recordingBash(async () => result())
+    await runHook(bash, { command: 'h', timeoutSec }, { payload: {}, signal: testSignal(), defaultTimeoutMs: 60000, trailingNewline: true }, clock())
+    expect(specs).toHaveLength(1)
+    expect(specs[0]!.timeoutMs).toBe(60000)
+  })
+
   it('passes the abort signal through', async () => {
     const controller = new AbortController()
     const { bash, specs } = recordingBash(async () => result())
