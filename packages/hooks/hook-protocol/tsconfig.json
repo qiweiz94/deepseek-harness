@@ -18,6 +18,9 @@
       "path": "../../shell/shell"
     },
     {
+      "path": "../../util/output-retention"
+    },
+    {
       "path": "../../core/session"
     },
     {
