@@ -129,12 +129,18 @@ export function undeliveredSubagentReports(
 function isRedeliverable(record: SubagentReportMailboxData): boolean {
   const delivery: unknown = record.delivery
   const message = record.message as unknown as Record<string, unknown> | null
+  const source = message?.['source']
+  const sourceRecord = typeof source === 'object' && source !== null && !Array.isArray(source)
+    ? source as Record<string, unknown>
+    : undefined
   return (delivery === 'wakeup' || delivery === 'quiet')
     && typeof message === 'object' && message !== null
     && typeof message.id === 'string'
     && message.role === 'user'
     && Array.isArray(message.content)
-    && typeof message.source === 'object'
+    && sourceRecord !== undefined
+    && typeof sourceRecord['kind'] === 'string'
+    && sourceRecord['kind'] !== ''
 }
 
 /**
