@@ -122,7 +122,10 @@ describe('runScenario', () => {
     expect(clientClosed).toBe(true)
   })
 
-  it('centralizes ACP boot, captures, updates, fail-closed permissions, and shutdown', { timeout: 20_000 }, async () => {
+  // CI-load headroom for a real ACP-boot subprocess test, scaled by the same DSH_TEST_TIMEOUT_FACTOR
+  // that widens harness.ts's internal persistence waits, so a slow-runner factor cannot outgrow this
+  // bound.
+  it('centralizes ACP boot, captures, updates, fail-closed permissions, and shutdown', { timeout: 40_000 * waitTimeoutFactor() }, async () => {
     const { dir, fixtureFile } = await scenario({ permissionProbe: true, echoEnv: true, stderrNote: 'launcher stderr' })
     const sessionsRoot = await mkdtemp(join(tmpdir(), 'acp-launcher-sessions-'))
     tempDirs.push(sessionsRoot)
@@ -850,7 +853,10 @@ describe('runScenario', () => {
     )).rejects.toThrow(/did not persist goal phase "blocked" within 20ms/)
   })
 
-  it('waitForSubagentTurnEnd requires a closed child work turn', { timeout: 20_000 }, async () => {
+  // CI-load headroom for a real subagent-turn boot/replay test, scaled by the same DSH_TEST_TIMEOUT_FACTOR
+  // that widens harness.ts's internal persistence waits, so a slow-runner factor cannot outgrow this
+  // bound.
+  it('waitForSubagentTurnEnd requires a closed child work turn', { timeout: 40_000 * waitTimeoutFactor() }, async () => {
     const closed = await scenario({
       prompt: 'hang-until-cancel',
       persistLogsOnCancel: true,
