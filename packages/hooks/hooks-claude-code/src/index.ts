@@ -277,10 +277,17 @@ export function apply(ctx: Context, config: Config): void {
 
   // --- UserPromptSubmit → PreStepDecision. The prompt text is the payload; no
   // matcher subject (CC ignores matchers for this event). The step also gates
-  // on a pending SessionStart run so its context reaches the first request. ---
+  // on a pending SessionStart run so its context reaches the first request.
+  // `agent/pre-step` also fires for a steered continuation, a plugin-injected
+  // context, and a subagent settlement report — none of those is a genuine
+  // prompt submission, so the hook fires only when the claimed batch holds a
+  // message whose `source.kind` is `'user'` (the same discriminator
+  // `dsh-tool-goal`'s `hasDirectHumanInput` uses for "was this direct human
+  // input", per `Agent.followup()`/`steer()`'s documented default). ---
   ctx.on('agent/pre-step', async ({ agent, messages, turn, signal }, next): Promise<PreStepDecision> => {
     const withStartContext = await bindStartContext(startGate, agent, (m) => { agent.inject(m) })
     if (messages.length === 0) return withStartContext(await next())
+    if (!messages.some(message => message.source.kind === 'user')) return withStartContext(await next())
     const content = messages.flatMap(message => message.content)
     const merged = await runPoint('UserPromptSubmit', '', promptPayload(ctx, agent, content), { agent, turn, signal })
     if (merged.stop) {
