@@ -82,7 +82,6 @@ describe('web e2e: current sandbox policy reaches the model before tools', () =>
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     await browser?.close()
     disposeApproval?.()
@@ -121,7 +120,6 @@ describe('web e2e: current sandbox policy reaches the model before tools', () =>
     if (sessionId === undefined) throw new Error('permission-policy scenario completed no model turn')
     if (MODE === 'record') await recordFixture(scaffold, sessionId, FIXTURE)
   }, scaledTimeout(240_000))
-
 
   it.skipIf(MODE === 'record')('records cache-safe current policy before the corresponding model behavior', async () => {
     const systems = requestSystems(sessionEvents)

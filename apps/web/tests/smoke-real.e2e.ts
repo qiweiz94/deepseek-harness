@@ -387,7 +387,6 @@ describe('dsh web keyless CLI smoke', () => {
     }
   }, scaledTimeout(30_000))
 
-
   it('DSH_TOOLS_MODE=code collapses the provider wire tools to run_code with the SDK prompt section', async () => {
     requireDist()
     const workspace = mkdtempSync(join(tmpdir(), 'dsh-web-code-mode-'))
@@ -512,7 +511,6 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY || notReady.length > 0)('web smoke
     await page.goto(baseUrl, { waitUntil: 'load' })
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     await browser?.close()
     if (child !== undefined && child.exitCode === null) {
@@ -579,7 +577,6 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY || notReady.length > 0)('web smoke
     await screen(page, '04-round-complete')
   }, scaledTimeout(150_000))
 
-
   it('view tabs: Chat and Trajectory switch', async () => {
     onTestFailed(() => saveFailureShot(page, 'w5-tabs'))
     await page.locator('button', { hasText: /Trajectory/i }).first().click()
@@ -608,7 +605,6 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY || notReady.length > 0)('web smoke
     expect(await detailsTrack(page)).toBe(0)
     await screen(page, '09-details-closed')
   }, scaledTimeout(150_000))
-
 
   it('sidebar drag widens the column and resets across reload', async () => {
     onTestFailed(() => saveFailureShot(page, 'w5-drag'))

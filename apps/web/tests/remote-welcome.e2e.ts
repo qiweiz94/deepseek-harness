@@ -33,7 +33,6 @@ describe.skipIf(MODE === 'record')('web e2e: remote welcome notice', () => {
     await page.waitForSelector('#root', { timeout: scaledTimeout(30_000) })
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -58,5 +57,4 @@ describe.skipIf(MODE === 'record')('web e2e: remote welcome notice', () => {
     expect(tripwire.warnings).toEqual([])
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
-
 })

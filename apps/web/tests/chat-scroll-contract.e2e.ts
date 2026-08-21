@@ -544,7 +544,6 @@ describe('web e2e: long Chat scroll contract', () => {
     })
   }, scaledTimeout(180_000))
 
-
   it.skipIf(MODE === 'record')('keeps streaming ownership and tool disclosure state across a long scroll-away cycle', async () => {
     await withScrollWorld({
       failureShot: 'web-e2e-chat-scroll-live-tool',
@@ -635,7 +634,6 @@ describe('web e2e: long Chat scroll contract', () => {
       assertClean(world)
     })
   }, scaledTimeout(180_000))
-
 
   it.skipIf(MODE === 'record')('restores tab/session position and keeps composer resizing on the correct scroll owner', async () => {
     await withScrollWorld({
@@ -735,7 +733,6 @@ describe('web e2e: long Chat scroll contract', () => {
     })
   }, scaledTimeout(180_000))
 
-
   // Keyboard is the only non-wheel device this lane's Chromium can drive for
   // real (see flingTranscript for the probe results on touch and scrollbars),
   // so it stands in for the whole hardware input pipeline here.
@@ -775,7 +772,6 @@ describe('web e2e: long Chat scroll contract', () => {
       assertClean(world)
     })
   }, scaledTimeout(180_000))
-
 
   it.skipIf(MODE === 'record')('touch-style fling scrolling owns streaming bottom-follow without wheel input', async () => {
     await withScrollWorld({
@@ -844,5 +840,4 @@ describe('web e2e: long Chat scroll contract', () => {
       assertClean(world)
     })
   }, scaledTimeout(180_000))
-
 })

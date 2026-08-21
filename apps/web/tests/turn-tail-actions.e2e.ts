@@ -99,7 +99,6 @@ describe('web e2e: assistant IconActions wait for the turn to end', () => {
     await recordFixture(scaffold!, sessionId, FIXTURE)
   }, scaledTimeout(200_000))
 
-
   it.skipIf(MODE === 'record')('withholds the footer while the turn runs and grants it at turn/end', async () => {
     expect(fixtureUserPrompts(await readFile(FIXTURE, 'utf8'))).toEqual([PROMPT])
     let marker = ''
@@ -146,7 +145,6 @@ describe('web e2e: assistant IconActions wait for the turn to end', () => {
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
   }, scaledTimeout(120_000))
-
 
   it.skipIf(MODE === 'record')('keeps a closed fixture inventory', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, ['running.expected.md', 'session.jsonl', 'settled.expected.md'])

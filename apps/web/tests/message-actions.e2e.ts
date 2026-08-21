@@ -90,7 +90,6 @@ describe('web e2e: message IconActions and clocks on settled history', () => {
     await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -124,7 +123,6 @@ describe('web e2e: message IconActions and clocks on settled history', () => {
       .toBe('Available only on the last message of a completed turn')
     await expect.poll(() => page.getByRole('button', { name: 'Edit' }).count(), { timeout: scaledTimeout(5_000) }).toBe(0)
   }, scaledTimeout(60_000))
-
 
   it.skipIf(MODE === 'record')('matches the conversation aria golden with IconActions and clocks', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-message-actions-aria'))

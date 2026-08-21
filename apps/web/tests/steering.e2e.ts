@@ -84,7 +84,6 @@ describe('web e2e: mid-turn steering lands durably and visibly', () => {
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -171,7 +170,6 @@ describe('web e2e: mid-turn steering lands durably and visibly', () => {
     expect(tripwire.warnings).toEqual([])
   }, scaledTimeout(200_000))
 
-
   it.skipIf(MODE === 'record')('keeps the fixture inventory closed', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, ['session.jsonl', 'mid-steer.expected.md', 'settled.expected.md'])
   })
@@ -194,7 +192,6 @@ describe('web e2e: composer shortcut steers directly', () => {
     await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
   }, scaledTimeout(120_000))
-
 
   afterAll(async () => {
     await browser?.close()
@@ -233,7 +230,6 @@ describe('web e2e: composer shortcut steers directly', () => {
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
   }, scaledTimeout(90_000))
-
 })
 
 describe('web e2e: composer shortcut follows the swapped busy behavior', () => {
@@ -253,7 +249,6 @@ describe('web e2e: composer shortcut follows the swapped busy behavior', () => {
     await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
   }, scaledTimeout(120_000))
-
 
   afterAll(async () => {
     await browser?.close()
@@ -294,7 +289,6 @@ describe('web e2e: composer shortcut follows the swapped busy behavior', () => {
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
   }, scaledTimeout(90_000))
-
 })
 
 describe('web e2e: empty-draft Cmd+Enter steers the whole queue', () => {
@@ -322,7 +316,6 @@ describe('web e2e: empty-draft Cmd+Enter steers the whole queue', () => {
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
     await page.getByText('Standard mode', { exact: true }).waitFor({ timeout: scaledTimeout(10_000) })
   }, scaledTimeout(120_000))
-
 
   afterAll(async () => {
     await browser?.close()
@@ -390,7 +383,6 @@ describe('web e2e: empty-draft Cmd+Enter steers the whole queue', () => {
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
   }, scaledTimeout(200_000))
-
 
   it.skipIf(MODE === 'record')('keeps the fixture inventory closed', async () => {
     await assertFixtureInventory(STEER_ALL_DIR, [

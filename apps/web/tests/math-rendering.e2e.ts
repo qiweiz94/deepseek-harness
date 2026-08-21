@@ -101,7 +101,6 @@ describe('web e2e: settled Markdown math rendering', () => {
     await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -132,5 +131,4 @@ describe('web e2e: settled Markdown math rendering', () => {
     expect(tripwire.warnings).toEqual([])
     await assertFixtureInventory(SNAPSHOT_DIR, ['ui.expected.md'])
   }, scaledTimeout(60_000))
-
 })

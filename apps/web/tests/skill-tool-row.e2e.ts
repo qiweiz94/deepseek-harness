@@ -45,7 +45,6 @@ describe.skipIf(MODE === 'record')('web e2e: dedicated Skill tool row', () => {
     await page.locator('[data-tool="skill"]').waitFor({ timeout: scaledTimeout(15_000) })
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -74,7 +73,6 @@ describe.skipIf(MODE === 'record')('web e2e: dedicated Skill tool row', () => {
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
   }, scaledTimeout(60_000))
-
 
   it('keeps its snapshot inventory closed', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, ['ui.expected.md'])

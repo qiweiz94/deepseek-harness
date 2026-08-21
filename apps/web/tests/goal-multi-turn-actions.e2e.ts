@@ -138,7 +138,6 @@ describe('web e2e: Goal keeps one assistant action row per completed turn', () =
     const sessionId = await runGoal(scaledTimeout(360_000))
     await recordFixture(scaffold!, sessionId, FIXTURE)
   }, scaledTimeout(380_000))
-
   it.skipIf(MODE === 'record')('keeps actions on both completed Goal turn tails', async () => {
     const fixtureEvents = parseSessionLog(await readFile(FIXTURE, 'utf8'))
     expect(createdObjectives(fixtureEvents)).toEqual([PROMPT])
@@ -161,7 +160,6 @@ describe('web e2e: Goal keeps one assistant action row per completed turn', () =
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
   }, scaledTimeout(140_000))
-
 
   it.skipIf(MODE === 'record')('keeps a closed fixture inventory', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, ['replay.override.json', 'session.jsonl', 'ui.expected.md'])

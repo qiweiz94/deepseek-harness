@@ -87,7 +87,6 @@ describe('web e2e: whole-session stats survive history paging', () => {
     await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -121,7 +120,6 @@ describe('web e2e: whole-session stats survive history paging', () => {
     // that the strip is whole-log-scoped.
     expect(await page.locator('[data-chat-flow-key^="9:turn-tail"]').count()).toBe(TURNS)
   }, scaledTimeout(60_000))
-
 
   it('matches the paged-stats aria golden', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-stats-paged-aria'))

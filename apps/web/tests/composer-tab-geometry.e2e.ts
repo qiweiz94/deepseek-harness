@@ -319,7 +319,6 @@ describe('web e2e: input card position across view tabs', () => {
       .waitFor({ timeout: scaledTimeout(30_000) })
   }, scaledTimeout(180_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -356,7 +355,6 @@ describe('web e2e: input card position across view tabs', () => {
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
 
-
   it('holds the input card in place when the tab changes', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-composer-tab-geometry-wide'))
     await setMeasuredViewport(page, WIDE_VIEWPORT, false)
@@ -369,7 +367,6 @@ describe('web e2e: input card position across view tabs', () => {
     expect(comparison.widthShift).toBe(0)
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
-
 
   it('holds the input card in place at a viewport where it shrinks with the column', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-composer-tab-geometry-narrow'))
@@ -389,7 +386,6 @@ describe('web e2e: input card position across view tabs', () => {
     await setMeasuredViewport(page, WIDE_VIEWPORT, false)
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
-
 
   it('moves the card again once the seat compensation is removed in the page', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-composer-tab-geometry-control'))
@@ -412,7 +408,6 @@ describe('web e2e: input card position across view tabs', () => {
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
 
-
   it('matches the committed tab geometry golden', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-composer-tab-geometry-golden'))
     await setMeasuredViewport(page, WIDE_VIEWPORT, false)
@@ -424,7 +419,6 @@ describe('web e2e: input card position across view tabs', () => {
     await compareOrRefreshGolden(GEOMETRY_EXPECTED, renderGeometry(wide, narrow, control), MODE)
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
-
 
   it('commits exactly the fixtures it reads', async () => {
     // The seeded session is generated in-process, so the geometry golden is the

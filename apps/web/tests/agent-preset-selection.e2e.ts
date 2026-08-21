@@ -188,7 +188,6 @@ describe('web e2e: agent-preset selection', () => {
     await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -269,7 +268,6 @@ describe('web e2e: agent-preset selection', () => {
     expect(onStandard.some(option => option.startsWith('plan'))).toBe(true)
     await composer.fill('')
   }, scaledTimeout(90_000))
-
 
   it('labels a resumed session with the preset it was created under', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-agent-preset-header'))

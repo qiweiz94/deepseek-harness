@@ -37,7 +37,6 @@ describe('web e2e: plugin configuration section', () => {
     await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -89,7 +88,6 @@ describe('web e2e: plugin configuration section', () => {
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
 
-
   it('stages an edit and writes it only when saved', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-plugin-config-write'))
     const dialog = await openPlugins()
@@ -120,7 +118,6 @@ describe('web e2e: plugin configuration section', () => {
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
 
-
   it('drops a staged edit on discard without touching the document', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-plugin-config-discard'))
     const dialog = await openPlugins()
@@ -135,7 +132,6 @@ describe('web e2e: plugin configuration section', () => {
     expect(await settingsDocument()).toContain('timeoutMs: 12000')
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
-
 
   it('refuses to save a draft that is not a number', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-plugin-config-invalid'))
@@ -152,7 +148,6 @@ describe('web e2e: plugin configuration section', () => {
     await dialog.getByRole('button', { name: '放弃修改' }).click()
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
-
 
   it('clears the field back to the composed default on reset', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-plugin-config-reset'))
@@ -176,7 +171,6 @@ describe('web e2e: plugin configuration section', () => {
     expect(await dialog.getByText('已覆盖').count()).toBe(0)
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
-
 
   it.skipIf(MODE === 'record')('keeps the fixture inventory closed', async () => {
     expect(tripwire.warnings).toEqual([])

@@ -62,7 +62,6 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -165,7 +164,6 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
     ).toBe(0)
   }, scaledTimeout(90_000))
 
-
   it('rebuilds the terminal record from history after reload', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-workflow-run-history'))
     await page.reload({ waitUntil: 'load' })
@@ -184,7 +182,6 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
     const snapshot = await captureStableAria(page, '[data-chat-flow]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(UI_EXPECTED, snapshot, MODE)
   }, scaledTimeout(60_000))
-
 
   it('stays clean and owns only its one golden', async () => {
     expect(tripwire.pageErrors).toEqual([])

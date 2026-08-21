@@ -39,7 +39,6 @@ describe('web e2e: Full access confirmation', () => {
     await connectFreshWorkspaceZh(page, scaffold.workspaceCwd)
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -73,7 +72,6 @@ describe('web e2e: Full access confirmation', () => {
     expect(await dialog.count()).toBe(0)
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
-
 
   it('keeps its snapshot inventory closed', async () => {
     expect(tripwire.warnings).toEqual([])

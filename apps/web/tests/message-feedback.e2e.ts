@@ -36,7 +36,6 @@ describe('web e2e: durable per-message feedback', () => {
     await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -114,7 +113,6 @@ describe('web e2e: durable per-message feedback', () => {
     ).toBe('false')
     await expect.poll(() => page.getByText(NOTE, { exact: true }).count(), { timeout: scaledTimeout(10_000) }).toBe(0)
   }, scaledTimeout(90_000))
-
 
   it.skipIf(MODE === 'record')('kept the console clean', () => {
     expect(tripwire.pageErrors).toEqual([])

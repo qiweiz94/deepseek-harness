@@ -84,7 +84,6 @@ describe.skipIf(MODE === 'record')('web e2e: user-explicit skill invocation thro
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     const failures: unknown[] = []
     await browser?.close().catch((error: unknown) => failures.push(error))
@@ -144,7 +143,6 @@ describe.skipIf(MODE === 'record')('web e2e: user-explicit skill invocation thro
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
   }, scaledTimeout(60_000))
-
 
   it('keeps its snapshot inventory closed', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, ['ui.expected.md'])

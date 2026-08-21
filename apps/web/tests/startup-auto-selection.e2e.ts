@@ -60,7 +60,6 @@ describe('web e2e: startup auto-selection', () => {
     await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
   }, scaledTimeout(180_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -115,7 +114,6 @@ describe('web e2e: startup auto-selection', () => {
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(120_000))
 
-
   it('keeps the hero and the composer on screen while the auto-selected blank session opens', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-startup-auto-selection'))
     // Runs before any page script on the reload below, so the first phase the
@@ -167,5 +165,4 @@ describe('web e2e: startup auto-selection', () => {
     expect(await recordedPhases(page)).toEqual(['hero'])
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(120_000))
-
 })

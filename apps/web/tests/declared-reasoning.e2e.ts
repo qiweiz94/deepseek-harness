@@ -56,7 +56,6 @@ describe.skipIf(MODE === 'record')('web e2e: declared reasoning efforts reach th
     await connectFreshWorkspaceZh(page, scaffold.workspaceCwd)
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -89,7 +88,6 @@ describe.skipIf(MODE === 'record')('web e2e: declared reasoning efforts reach th
       .toBe('选择模型，当前 Acme Think，推理等级 High')
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
-
 
   it('keeps its snapshot inventory closed', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, ['ui.expected.md'])

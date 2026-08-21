@@ -59,7 +59,6 @@ describe.skipIf(MODE === 'record' || !HAS_PWSH)('web e2e: pwsh calls use the bas
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -100,7 +99,6 @@ describe.skipIf(MODE === 'record' || !HAS_PWSH)('web e2e: pwsh calls use the bas
       .split(SEED_ID).join('{{seededId}}')
     await compareOrRefreshGolden(TERMINAL_EXPECTED, snapshot, MODE)
   }, scaledTimeout(60_000))
-
 
   it('guards the lane fixture inventory', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, ['seed.jsonl', 'terminal-card.expected.md'])

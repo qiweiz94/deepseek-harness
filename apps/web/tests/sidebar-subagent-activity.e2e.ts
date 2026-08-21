@@ -119,7 +119,6 @@ describe('web e2e: sidebar subagent activity', () => {
     await workspace.attachSession(parentHandle.agent.session.id)
   }, scaledTimeout(60_000))
 
-
   afterAll(async () => {
     const failures: unknown[] = []
     const child = childId === undefined ? undefined : scaffold?.ctx.agents.get(childId)

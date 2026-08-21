@@ -234,7 +234,6 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
     acknowledgeReloadConnectionLoss(tripwire, warningStart)
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     const failures: unknown[] = []
     await browser?.close().catch((error: unknown) => failures.push(error))
@@ -354,7 +353,6 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
         off()
         reject(new Error('subagent follow-up did not reach turn/end'))
       }, scaledTimeout(30_000))
-
       const off = scaffold.ctx.on('session/event', (session: { id: SessionId }, event: SessionEvent) => {
         if (session.id !== childId || event.type !== 'turn/end') return
         clearTimeout(timer)

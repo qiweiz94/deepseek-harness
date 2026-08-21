@@ -127,7 +127,6 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -148,7 +147,6 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     expect(titles.slice(0, 2)).toEqual(['beta-ws', 'alpha-ws'])
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(90_000))
-
 
   it('renames a workspace over the wire with a duplicate-name pre-check', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-ws-rename'))
@@ -179,7 +177,6 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await expect.poll(() => page.getByText('gamma-ws', { exact: true }).count(), { timeout: scaledTimeout(15_000) }).toBeGreaterThanOrEqual(1)
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(90_000))
-
 
   it('deletes only the Workspace registration and keeps its current Session, folder, and log', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-ws-delete'))
@@ -318,7 +315,6 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(90_000))
 
-
   it('reuses a deleted title for a different new directory without any transient error surface', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-ws-reuse-title'))
     const title = 'same-name'
@@ -371,7 +367,6 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(90_000))
 
-
   it('switches to the flat "In one list" view and persists the preference', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-ws-flat'))
     // Grouped default: workspace group rows render (the seeded session sits
@@ -397,7 +392,6 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: scaledTimeout(10_000) }).toBeGreaterThanOrEqual(1)
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(90_000))
-
 
   it('matches the directory-browser dialog aria golden at a staged directory', async () => {
     // A staged subtree under the scaffold cwd keeps the listing deterministic
@@ -428,7 +422,6 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     }
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
-
 
   it('walks the panes with the typed path: deeper past a separator, back up on erase, whole on a miss', async () => {
     // The panes must track the draft without leaving the editor, so the
@@ -466,7 +459,6 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await dialog.waitFor({ state: 'hidden', timeout: scaledTimeout(10_000) })
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
-
 
   /**
    * Expand Ungrouped and return its seeded session row. The only visible child
@@ -526,7 +518,6 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
 
-
   it('keeps an open row menu up while the pointer moves between trigger and list', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-ws-row-menu'))
     const sessionRow = await seededSessionRow()
@@ -556,7 +547,6 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await expect.poll(() => page.getByRole('menuitem', { name: 'Rename' }).count(), { timeout: scaledTimeout(5_000) }).toBe(0)
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
-
 
   it('archives the seeded session from its row menu, hiding it durably across reload', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-ws-archive'))
@@ -606,7 +596,6 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(90_000))
 
-
   it('opens folders with identical basenames as distinct workspaces', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-ws-duplicate-basename'))
     const firstPath = join(scaffold.workspaceCwd, 'same-basename-a', 'xx')
@@ -627,7 +616,6 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     ).toBe(2)
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(90_000))
-
 
   it.skipIf(MODE === 'record')('issued zero model calls and stayed clean', async () => {
     expect(tripwire.warnings).toEqual([])

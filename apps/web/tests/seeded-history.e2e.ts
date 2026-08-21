@@ -208,7 +208,6 @@ describe('web e2e: seeded history renders through cold resume', () => {
     await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -224,7 +223,6 @@ describe('web e2e: seeded history renders through cold resume', () => {
     const sessionId = await settled
     await recordFixture(scaffold, sessionId, SEED)
   }, scaledTimeout(200_000))
-
 
   it.skipIf(MODE === 'record')('serves the projections baseline on the real composition tail page', async () => {
     // Composition regression tripwire: the projection registry must be a row
@@ -320,7 +318,6 @@ describe('web e2e: seeded history renders through cold resume', () => {
     await page.getByRole('button', { name: 'Context injection AGENTS.md', exact: true })
       .waitFor({ timeout: scaledTimeout(10_000) })
   }, scaledTimeout(60_000))
-
 
   it.skipIf(MODE === 'record')('matches the historical conversation aria golden', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-seeded-aria'))
@@ -443,7 +440,6 @@ describe('web e2e: seeded history renders through cold resume', () => {
     await compareOrRefreshGolden(COMMAND_ROW_EXPECTED, snapshot, MODE)
   }, scaledTimeout(60_000))
 
-
   it.skipIf(MODE === 'record')('reports full feedback correlation ids in an expandable two-line row', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-seeded-feedback-row'))
     const previousDshHome = process.env.DSH_HOME
@@ -481,7 +477,6 @@ describe('web e2e: seeded history renders through cold resume', () => {
       else process.env.DSH_HOME = previousDshHome
     }
   }, scaledTimeout(60_000))
-
 
   it.skipIf(MODE === 'record')('fits short logged context without a scrollport', async () => {
     const agent = scaffold.ctx.agents.get(SessionId(SEED_ID))

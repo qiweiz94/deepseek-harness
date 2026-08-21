@@ -56,7 +56,6 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -195,7 +194,6 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
     }
   }, scaledTimeout(200_000))
 
-
   it.skipIf(MODE === 'record')('materialized a real Workspace and Session over the wire', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-lifecycle-materialize'))
     // Browser: the sidebar tree now carries the auto-created workspace group
@@ -219,7 +217,6 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
     expect((turnEnds[0] as SessionEvent & { data: { reason: { kind: string } } }).data.reason.kind).toBe('completed')
   }, scaledTimeout(60_000))
 
-
   it.skipIf(MODE === 'record')('recovers the whole surface across a reload from the log alone', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-lifecycle-reload'))
     const warningStart = tripwire.warnings.length
@@ -238,7 +235,6 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
     await compareOrRefreshGolden(RELOADED_EXPECTED, snapshot, MODE)
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(90_000))
-
 
   it.skipIf(MODE === 'record')('cascades the dark theme from the body attribute to painted surfaces', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-lifecycle-dark'))
@@ -271,7 +267,6 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
     expect(restored).toEqual(light)
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
-
 
   it.skipIf(MODE === 'record')('keeps the fixture inventory closed', async () => {
     expect(tripwire.warnings).toEqual([])

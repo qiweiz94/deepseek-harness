@@ -38,7 +38,6 @@ describe('web e2e: /goal human transcript presentation', () => {
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -96,7 +95,6 @@ describe('web e2e: /goal human transcript presentation', () => {
     await compareOrRefreshGolden(UI_EXPECTED, snapshot, MODE)
   }, scaledTimeout(60_000))
 
-
   it('reloads the same bubble and result from the persisted command lifecycle', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-goal-command-presentation-reload'))
     const warningStart = tripwire.warnings.length
@@ -122,5 +120,4 @@ describe('web e2e: /goal human transcript presentation', () => {
     expect(tripwire.warnings).toEqual([])
     await assertFixtureInventory(SNAPSHOT_DIR, ['ui.expected.md'])
   }, scaledTimeout(90_000))
-
 })

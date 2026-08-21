@@ -57,7 +57,6 @@ function waitForAbortedTurn(scaffold: WebScaffold, childId: SessionId): Promise<
       off()
       reject(new Error('interrupt did not reach an aborted turn/end'))
     }, scaledTimeout(30_000))
-
     const off = scaffold.ctx.on('session/event', (session: { id: SessionId }, event: SessionEvent) => {
       if (session.id !== childId || event.type !== 'turn/end') return
       clearTimeout(timer)
@@ -170,7 +169,6 @@ describe.skipIf(MODE === 'record')('web e2e: composer interrupt for a running co
     expect(scaffold.ctx.agents.get(childId)?.status).toBe('running')
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     const failures: unknown[] = []
     await browser?.close().catch((error: unknown) => failures.push(error))
@@ -253,7 +251,6 @@ describe.skipIf(MODE === 'record')('web e2e: composer interrupt for a running co
     }
   }, scaledTimeout(60_000))
 
-
   it('interrupts through subagent.interrupt, parks the follow-up, and resumes it FIFO', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-subagent-interrupt-flow'))
     // Reselect the child with the truthful catalog: parent available again.
@@ -315,7 +312,6 @@ describe.skipIf(MODE === 'record')('web e2e: composer interrupt for a running co
     expect(turnEndKinds).toEqual(['aborted', 'aborted', 'completed', 'completed', 'completed'])
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(120_000))
-
 
   it('keeps its snapshot inventory closed', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, ['offline-composer.expected.md'])

@@ -160,7 +160,6 @@ describe('web e2e: long Chat interaction contract', () => {
     await openSeed(page)
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     const failures: unknown[] = []
     await browser?.close().catch((error: unknown) => failures.push(error))
@@ -293,5 +292,4 @@ describe('web e2e: long Chat interaction contract', () => {
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
   }, scaledTimeout(180_000))
-
 })

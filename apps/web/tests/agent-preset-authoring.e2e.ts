@@ -75,7 +75,6 @@ describe('web e2e: agent-preset authoring is a host-side copy', () => {
     await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -103,7 +102,6 @@ describe('web e2e: agent-preset authoring is a host-side copy', () => {
     expect(snapshot).not.toContain('打开目录')
   }, scaledTimeout(60_000))
 
-
   it('views a shipped composition read-only instead of editing it', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-preset-authoring-view'))
     const dialog = settingsDialog()
@@ -121,7 +119,6 @@ describe('web e2e: agent-preset authoring is a host-side copy', () => {
     await viewer.getByRole('button', { name: '关闭' }).last().click()
     await viewer.waitFor({ state: 'detached', timeout: scaledTimeout(10_000) })
   }, scaledTimeout(60_000))
-
 
   it('copies 极简模式 whole under a new id and lands in its files', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-preset-authoring-copy'))
@@ -168,7 +165,6 @@ describe('web e2e: agent-preset authoring is a host-side copy', () => {
     expect(metadata).not.toContain('order:')
   }, scaledTimeout(60_000))
 
-
   it('deletes the copy after confirmation and reclaims the roster', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-preset-authoring-delete'))
     const dialog = settingsDialog()
@@ -186,7 +182,6 @@ describe('web e2e: agent-preset authoring is a host-side copy', () => {
     expect(await dialog.getByRole('button', { name: '用「创造模式」创作自定义预设' }).count()).toBe(1)
     expect(await dialog.getByText('标准模式').count()).toBeGreaterThan(0)
   }, scaledTimeout(60_000))
-
 
   it('marks damaged presets broken and clears a ghost through delete', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-preset-authoring-damaged'))
@@ -245,7 +240,6 @@ describe('web e2e: agent-preset authoring is a host-side copy', () => {
     await rm(join(userRoot, 'broken-yaml'), { recursive: true, force: true })
   }, scaledTimeout(60_000))
 
-
   it('starts a creator-mode session from the section', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-preset-authoring-creator'))
     // Without a workspace the flow only stages (there is no session to land
@@ -278,7 +272,6 @@ describe('web e2e: agent-preset authoring is a host-side copy', () => {
       return JSON.stringify(body.result.value?.sessions ?? body.result)
     }, { timeout: scaledTimeout(15_000) }).toContain('"agentPreset":"cordis"')
   }, scaledTimeout(60_000))
-
 
   it('drove every surface without a page error or a stream warning', () => {
     expect(tripwire.pageErrors).toEqual([])

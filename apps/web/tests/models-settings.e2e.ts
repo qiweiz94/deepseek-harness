@@ -50,7 +50,6 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -82,7 +81,6 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     await compareOrRefreshGolden(EMPTY_EXPECTED, snapshot, MODE)
   }, scaledTimeout(60_000))
 
-
   it('refuses a key no HTTP header can carry before anything is written', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-models-illegal-key'))
     const dialog = page.getByRole('dialog', { name: '设置' })
@@ -103,7 +101,6 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     expect(await dialog.getByText('该 API 密钥格式错误，请检查。').count()).toBe(0)
   }, scaledTimeout(60_000))
 
-
   it('saves a blank key as a reference-free provider-native profile', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-models-native-auth'))
     const dialog = page.getByRole('dialog', { name: '设置' })
@@ -117,7 +114,6 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     expect(document).toContain('minimax-cn: {}')
     expect(document).not.toContain('MINIMAX_CN_API_KEY')
   }, scaledTimeout(60_000))
-
 
   it('describes reference-free deletion without claiming a credential exists', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-models-native-delete'))
@@ -133,7 +129,6 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     await compareOrRefreshGolden(NATIVE_DELETE_EXPECTED, snapshot, MODE)
     await deleteDialog.getByRole('button', { name: '取消', exact: true }).click()
   }, scaledTimeout(60_000))
-
 
   it('stores the key under the derived reference and keeps the route live', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-models-add'))
@@ -162,7 +157,6 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     expect(await page.content()).not.toContain('sk-e2e-minimax')
   }, scaledTimeout(60_000))
 
-
   it('applies a customized-settings field as a merge patch', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-models-customized'))
     const dialog = page.getByRole('dialog', { name: '设置' })
@@ -183,7 +177,6 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     await compareOrRefreshGolden(CONFIGURED_EXPECTED, snapshot, MODE)
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
-
 
   it('declares a route the adapter does not ship', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-models-declare'))
@@ -217,7 +210,6 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     await compareOrRefreshGolden(DECLARED_EXPECTED, snapshot, MODE)
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
-
 
   it('reopens the name and protocol a declared route was created with', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-models-declared-identity'))
@@ -253,7 +245,6 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
 
-
   it('confirms an identified provider deletion before removing its profile and key', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-models-delete'))
     const settingsDialog = page.getByRole('dialog', { name: '设置' })
@@ -285,7 +276,6 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     await page.keyboard.press('Escape')
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
-
 
   it.skipIf(MODE === 'record')('keeps the fixture inventory closed', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, [

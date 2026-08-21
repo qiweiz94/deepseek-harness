@@ -89,7 +89,6 @@ describe('web e2e: the composer model switch is the default for later sessions',
     await connectFreshWorkspaceZh(page, scaffold.workspaceCwd)
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -129,7 +128,6 @@ describe('web e2e: the composer model switch is the default for later sessions',
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
 
-
   it('goes inert when the route the default names stops being served', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-default-model-blocked'))
     const box = page.locator('textarea[data-input-phase], textarea').first()
@@ -166,5 +164,4 @@ describe('web e2e: the composer model switch is the default for later sessions',
     await expect.poll(async () => box.isEnabled(), { timeout: scaledTimeout(15_000) }).toBe(true)
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
-
 })

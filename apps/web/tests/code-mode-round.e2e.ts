@@ -52,7 +52,6 @@ describe('web e2e: Code Mode round renders nested sub-calls', () => {
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -74,7 +73,6 @@ describe('web e2e: Code Mode round renders nested sub-calls', () => {
       await recordFixture(scaffold, sessionId, FIXTURE)
     }
   }, scaledTimeout(200_000))
-
 
   it.skipIf(MODE === 'record')('the durable log carries run_code with full-content sub-dispatches', () => {
     // Wire discipline: code mode collapsed the call surface to run_code.
@@ -119,7 +117,6 @@ describe('web e2e: Code Mode round renders nested sub-calls', () => {
     // row wears (the recorded program tolerates a read of missing.txt).
     expect(await nest.locator('[data-state="error"]').count()).toBeGreaterThanOrEqual(1)
   }, scaledTimeout(60_000))
-
 
   it.skipIf(MODE === 'record')('a bash sub-row click leaves the default details panel closed', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-code-mode-details'))

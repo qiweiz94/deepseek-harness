@@ -368,7 +368,6 @@ describe.skipIf(MODE === 'record')('web e2e: conversational reminders', () => {
     await expect(scaffold.ctx.sessions.flush(atHandle.agent.session)).resolves.toBe(true)
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     const failures: unknown[] = []
     await browser?.close().catch((error: unknown) => failures.push(error))
@@ -400,7 +399,6 @@ describe.skipIf(MODE === 'record')('web e2e: conversational reminders', () => {
     )
     expect(await page.locator('[data-schedule-reminder]').count()).toBe(0)
   }, scaledTimeout(60_000))
-
 
   it('batches one latest occurrence per overdue Every record into an ordinary follow-up', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-schedule-every'))
@@ -462,7 +460,6 @@ describe.skipIf(MODE === 'record')('web e2e: conversational reminders', () => {
     )
     expect(await page.locator('[data-schedule-reminder]').count()).toBe(0)
   }, scaledTimeout(60_000))
-
 
   it('uses request-local browser context to create an explicit local At reminder', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-schedule-at'))
@@ -537,7 +534,6 @@ describe.skipIf(MODE === 'record')('web e2e: conversational reminders', () => {
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
   }, scaledTimeout(60_000))
-
 
   it('keeps the fixture inventory closed', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, [

@@ -131,7 +131,6 @@ describe('web e2e: inline-code mentions of produced files', () => {
     await page.waitForSelector('[class*="frame"]', { timeout: scaledTimeout(30_000) })
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -160,5 +159,4 @@ describe('web e2e: inline-code mentions of produced files', () => {
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
   }, scaledTimeout(90_000))
-
 })

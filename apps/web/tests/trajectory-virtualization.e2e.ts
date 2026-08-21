@@ -203,7 +203,6 @@ describe('web e2e: Trajectory virtualization over tail-paged history', () => {
     await page.getByText('Ungrouped', { exact: true }).waitFor({ timeout: scaledTimeout(30_000) })
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -344,5 +343,4 @@ describe('web e2e: Trajectory virtualization over tail-paged history', () => {
       await page.unroute('**/api/session.history')
     }
   }, scaledTimeout(180_000))
-
 })

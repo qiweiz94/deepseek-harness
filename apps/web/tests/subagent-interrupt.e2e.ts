@@ -111,7 +111,6 @@ describe.skipIf(MODE === 'record')('web e2e: subagent.interrupt over the real co
     await waitFor(() => existsSync(readyFile), 'the held child turn to open')
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     const failures: unknown[] = []
     await scaffold?.close().catch((error: unknown) => failures.push(error))
@@ -175,5 +174,4 @@ describe.skipIf(MODE === 'record')('web e2e: subagent.interrupt over the real co
       .map(event => (event).data.reason.kind)
     expect(turnEndKinds).toEqual(['aborted', 'completed', 'completed'])
   }, scaledTimeout(120_000))
-
 })

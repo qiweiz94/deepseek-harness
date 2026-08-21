@@ -404,7 +404,6 @@ describe('web e2e: sidebar session list scrollbar (reserved gutter / themed thum
     await pointAt(page, 'list')
   }, scaledTimeout(180_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -443,7 +442,6 @@ describe('web e2e: sidebar session list scrollbar (reserved gutter / themed thum
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
 
-
   it('draws no thumb until the pointer is over the column, and lingers on the way out', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-sidebar-scrollbar-pointer'))
     const revealed = await resolveThumb(page)
@@ -472,7 +470,6 @@ describe('web e2e: sidebar session list scrollbar (reserved gutter / themed thum
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
 
-
   it('keeps the row background inset when overflow disappears', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-sidebar-scrollbar-stable-inset'))
     expect(await measureRowInset(page)).toEqual({ overflows: true, rowEdgeInset: 12 })
@@ -486,7 +483,6 @@ describe('web e2e: sidebar session list scrollbar (reserved gutter / themed thum
     }
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
-
 
   it('renders the themed thumb through the WebKit path in both palettes', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-sidebar-scrollbar-theme'))
@@ -523,7 +519,6 @@ describe('web e2e: sidebar session list scrollbar (reserved gutter / themed thum
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
 
-
   it('matches the committed scrollbar geometry golden in both palettes', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-sidebar-scrollbar-golden'))
     const light = await measurePalette(page)
@@ -533,7 +528,6 @@ describe('web e2e: sidebar session list scrollbar (reserved gutter / themed thum
     await compareOrRefreshGolden(GEOMETRY_EXPECTED, renderGeometry(light, dark), MODE)
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
-
 
   it('commits exactly the fixtures it reads', async () => {
     // The scenario borrows seeded-history's seed.jsonl rather than committing a

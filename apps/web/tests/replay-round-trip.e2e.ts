@@ -55,7 +55,6 @@ describe('web e2e: fresh round trip through the real assembly', () => {
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -79,7 +78,6 @@ describe('web e2e: fresh round trip through the real assembly', () => {
       await recordFixture(scaffold, sessionId, FIXTURE)
     }
   }, scaledTimeout(200_000))
-
 
   it('records the Web surface, source checkout, and session cwd in the request header', async () => {
     if (settledSessionId === undefined) throw new Error('the drive turn did not publish a session id')
@@ -137,7 +135,6 @@ describe('web e2e: fresh round trip through the real assembly', () => {
     // The persisted chunk events are the authoritative incrementality proof.
     expect(sessionEvents.filter(e => e.type === 'assistant/chunk').length).toBeGreaterThan(10)
   }, scaledTimeout(60_000))
-
 
   it.skipIf(MODE === 'record')('matches the conversation aria golden with stable anchors', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-round-trip-aria'))

@@ -75,7 +75,6 @@ describe.skipIf(MODE === 'record')('web e2e: background job list', () => {
     agent = await liveAgent(scaffold, SessionId(SEED_ID))
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -113,7 +112,6 @@ describe.skipIf(MODE === 'record')('web e2e: background job list', () => {
     expect(tripwire.warnings).toEqual([])
   }, scaledTimeout(60_000))
 
-
   it('flips the open list to the cancelled outcome when the registry settles it', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-background-job-settled'))
     expect(scaffold.ctx.jobs.kill(jobId, agent, 'web e2e cancellation')).toBe('requested')
@@ -128,7 +126,6 @@ describe.skipIf(MODE === 'record')('web e2e: background job list', () => {
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
   }, scaledTimeout(60_000))
-
 
   it('keeps its snapshot inventory closed', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, ['running.expected.md', 'settled.expected.md'])

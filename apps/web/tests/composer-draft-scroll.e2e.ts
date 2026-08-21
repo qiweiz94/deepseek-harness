@@ -262,7 +262,6 @@ describe('web e2e: composer draft scrolling', () => {
     await page.locator('textarea:enabled').first().fill(DRAFT)
   }, scaledTimeout(180_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -294,7 +293,6 @@ describe('web e2e: composer draft scrolling', () => {
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
 
-
   it('lays out all three text layers at one wrap width', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-composer-draft-scroll-wrap-width'))
     // A layer that breaks lines somewhere else puts the words under the wrong
@@ -312,7 +310,6 @@ describe('web e2e: composer draft scrolling', () => {
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
 
-
   it('the glyphs cannot lag the caret: one task moves both', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-composer-draft-scroll-lag'))
     // The reported symptom, isolated. A scroll offset changes and the caret's
@@ -325,7 +322,6 @@ describe('web e2e: composer draft scrolling', () => {
     expect(metrics.gapShiftOnScroll).toBe(0)
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
-
 
   it('a wheel gesture over a long draft moves the words, not only the caret', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-composer-draft-scroll-wheel'))
@@ -349,7 +345,6 @@ describe('web e2e: composer draft scrolling', () => {
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
 
-
   it('typing at the end of a scrolled draft brings the caret back into view', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-composer-draft-scroll-edit'))
     // The other way the box moves, and the one that depends on the browser: the
@@ -369,7 +364,6 @@ describe('web e2e: composer draft scrolling', () => {
     expect(metrics.lastLineOffset).toBeLessThan(metrics.clientHeight)
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
-
 
   it('pasting a long block scrolls to the caret it leaves at the end', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-composer-draft-scroll-paste'))
@@ -405,7 +399,6 @@ describe('web e2e: composer draft scrolling', () => {
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
 
-
   it('a draft ending in a newline scrolls to its true end, not a line above it', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-composer-draft-scroll-trailing-newline'))
     // The layers reserve a final line box on different terms, so the trailing-newline case is
@@ -428,7 +421,6 @@ describe('web e2e: composer draft scrolling', () => {
     expect(bottom.lastLineOffset).toBeLessThan(bottom.clientHeight)
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
-
 
   it('matches the committed composer scroll geometry golden', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-composer-draft-scroll-golden'))
@@ -471,7 +463,6 @@ describe('web e2e: composer draft scrolling', () => {
     await compareOrRefreshGolden(GEOMETRY_EXPECTED, renderGeometry(top, bottom, trailingNewline, pasted), MODE)
     expect(tripwire.pageErrors).toEqual([])
   }, scaledTimeout(60_000))
-
 
   it('commits exactly the fixtures it reads', async () => {
     // Zero model calls, so the scenario records no session fixture: the geometry

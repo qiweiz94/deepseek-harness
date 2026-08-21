@@ -143,7 +143,6 @@ describe('web e2e: shipped default web search', () => {
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -172,7 +171,6 @@ describe('web e2e: shipped default web search', () => {
     const sessionId = await settled
     if (MODE === 'record') await recordFixture(scaffold, sessionId, FIXTURE)
   }, scaledTimeout(200_000))
-
 
   it.skipIf(MODE === 'record')('uses the real provider and persists the capped structured result', () => {
     expect(searchRequests).toHaveLength(1)

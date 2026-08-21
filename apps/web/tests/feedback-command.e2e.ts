@@ -51,7 +51,6 @@ describe('web e2e: /feedback command acknowledgement', () => {
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -76,7 +75,6 @@ describe('web e2e: /feedback command acknowledgement', () => {
     }
   }, scaledTimeout(60_000))
 
-
   it.skipIf(MODE === 'record')('records feedback and renders the acknowledgement with session id and sharing status', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-feedback-command'))
     // The drive test settled the recorded turn: the transcript is active (a
@@ -96,7 +94,6 @@ describe('web e2e: /feedback command acknowledgement', () => {
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
   }, scaledTimeout(60_000))
-
 
   it.skipIf(MODE === 'record')('keeps the fixture inventory closed', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, ['session.jsonl', 'ack.expected.md'])

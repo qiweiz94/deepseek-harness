@@ -85,7 +85,6 @@ describe('web e2e: Cordis tools use their owned cards', () => {
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -125,7 +124,6 @@ describe('web e2e: Cordis tools use their owned cards', () => {
       await recordFixture(scaffold, sessionId, FIXTURE)
     }
   }, scaledTimeout(200_000))
-
 
   it.skipIf(MODE === 'record')('the durable log carries one complete Cordis lifecycle', () => {
     assertCompleteCordisLifecycle(sessionEvents)

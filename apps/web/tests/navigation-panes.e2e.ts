@@ -102,7 +102,6 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     browser = await chromium.launch()
   }, scaledTimeout(120_000))
 
-
   beforeEach(async () => {
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
@@ -132,7 +131,6 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     // counts; the Ungrouped bucket row is the barrier).
     await page.getByText('Ungrouped', { exact: true }).waitFor({ timeout: scaledTimeout(30_000) })
   }, scaledTimeout(120_000))
-
 
   afterEach(async () => {
     const failures: unknown[] = []
@@ -184,7 +182,6 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     expect(calls.map(e => e.data.name).sort()).toEqual(['bash', 'read', 'read'])
   }, scaledTimeout(400_000))
 
-
   it.skipIf(MODE === 'record')('finds an unopened seeded session by message content and opens it', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-navigation-search'))
     // The API baselines can settle before React commits their projection. The
@@ -225,7 +222,6 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     await expect.poll(() => search.inputValue(), { timeout: scaledTimeout(5_000) }).toBe('')
     await expect.poll(() => page.locator('[role="treeitem"]').count(), { timeout: scaledTimeout(10_000) }).toBeGreaterThanOrEqual(1)
   }, scaledTimeout(90_000))
-
 
   it.skipIf(MODE === 'record')('renders the trajectory ledger and opens its local record inspector', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-navigation-trajectory'))
@@ -291,7 +287,6 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     await compareOrRefreshGolden(TRAJECTORY_EXPECTED, snapshot, MODE)
     await details.getByRole('button', { name: 'Close details' }).click()
   }, scaledTimeout(60_000))
-
 
   it.skipIf(MODE === 'record')('downloads through the Session Header and /export with one dialog', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-navigation-export'))
@@ -382,7 +377,6 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     }
   }, scaledTimeout(120_000))
 
-
   it.skipIf(MODE === 'record')('focuses the ledger by dragging an overview interval', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-navigation-timeline'))
     await ensureSeedOpen(page)
@@ -402,7 +396,6 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     await plot.click({ button: 'right' })
     await expect.poll(() => page.locator('tr[data-timeline-focus]').count(), { timeout: scaledTimeout(10_000) }).toBe(0)
   }, scaledTimeout(60_000))
-
 
   it.skipIf(MODE === 'record')('bash and file-path rows leave the default details column closed', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-navigation-details'))
@@ -425,7 +418,6 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     await fileLink.click()
     await expect.poll(() => frame.getAttribute('data-details-collapsed'), { timeout: scaledTimeout(5_000) }).toBe('true')
   }, scaledTimeout(60_000))
-
 
   it.skipIf(MODE === 'record')('renders the bash row as a terminal card in the real browser', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-navigation-terminal'))
@@ -511,7 +503,6 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
       .toBe('Copied')
     expect(await page.evaluate(() => navigator.clipboard.readText())).toContain('NAVIGATION_OK')
   }, scaledTimeout(60_000))
-
 
   it.skipIf(MODE === 'record')('keeps the recorded fixture inventory exact', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, [

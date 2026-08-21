@@ -83,7 +83,6 @@ describe.skipIf(MODE === 'record')('web e2e: details panel follows the current S
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
   }, scaledTimeout(120_000))
 
-
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
@@ -150,5 +149,4 @@ describe.skipIf(MODE === 'record')('web e2e: details panel follows the current S
     expect(tripwire.warnings).toEqual([])
     await assertFixtureInventory(SNAPSHOT_DIR, ['handles.expected.md'])
   }, scaledTimeout(90_000))
-
 })
