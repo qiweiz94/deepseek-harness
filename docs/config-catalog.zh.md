@@ -742,9 +742,21 @@ export interface Config {
    * `.claude/hooks.json`. Read and parsed once per session at first hook use;
    * its groups run after the process-level groups on each point. Unset ⇒ no
    * discovery. A workspace without the file has no session hooks; an unreadable
-   * or invalid file logs a warning and contributes nothing.
+   * or invalid file logs a warning and contributes nothing. Discovery runs a
+   * workspace's hooks only when the workspace is listed in
+   * {@link trustedWorkspaceRoots}; an untrusted workspace contributes nothing.
    */
   sessionConfigFile?: string
+  /**
+   * Workspace roots the deployment trusts to supply project-local hooks
+   * (absolute, or relative to the process launch cwd). A session whose cwd is
+   * one of these roots, or nested under one, may run its `sessionConfigFile`
+   * hooks; every other workspace is denied. Empty/unset ⇒ no workspace is
+   * trusted, so `sessionConfigFile` discovery never runs a command — a freshly
+   * cloned untrusted repo cannot plant a hook that executes before any user
+   * action.
+   */
+  trustedWorkspaceRoots?: string[]
   /**
    * Replaces `${CLAUDE_PLUGIN_ROOT}` in command strings (the plugin's root dir).
    */
@@ -770,7 +782,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/hooks/hooks-claude-code/src/index.ts:53`](../packages/hooks/hooks-claude-code/src/index.ts)
+来源：[`packages/hooks/hooks-claude-code/src/index.ts:54`](../packages/hooks/hooks-claude-code/src/index.ts)
 
 <a id="deepseek-aidsh-hooks-codex"></a>
 
@@ -793,9 +805,20 @@ export interface Config {
    * `.codex/hooks.json`. Read and parsed once per session at first hook use;
    * its groups run after the process-level groups on each point. Unset ⇒ no
    * discovery. A workspace without the file has no session hooks; an unreadable
-   * or invalid file logs a warning and contributes nothing.
+   * or invalid file logs a warning and contributes nothing. Discovery runs a
+   * workspace's hooks only when the workspace is listed in
+   * {@link trustedWorkspaceRoots}; an untrusted workspace contributes nothing.
    */
   sessionConfigFile?: string
+  /**
+   * Workspace roots the deployment trusts to supply project-local hooks
+   * (absolute, or relative to the process launch cwd). A session whose cwd is
+   * one of these roots, or nested under one, may run its `sessionConfigFile`
+   * hooks; every other workspace is denied. Empty/unset ⇒ no workspace is
+   * trusted, so `sessionConfigFile` discovery never runs a command — a freshly
+   * cloned untrusted repo cannot plant a hook that executes before any user action.
+   */
+  trustedWorkspaceRoots?: string[]
   /** The model name stamped on every payload (Codex includes `model` on each event). */
   model?: string
   /** Default per-hook timeout in ms when a hook sets none (Codex default: 600000). */
@@ -811,7 +834,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/hooks/hooks-codex/src/index.ts:52`](../packages/hooks/hooks-codex/src/index.ts)
+来源：[`packages/hooks/hooks-codex/src/index.ts:53`](../packages/hooks/hooks-codex/src/index.ts)
 
 <a id="deepseek-aidsh-host-apiproxy"></a>
 

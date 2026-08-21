@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { combineHookGroups, createSessionHookConfigCache, loadProcessHookConfig, type SessionWorkspace } from '@deepseek-ai/dsh-hook-protocol'
+import { combineHookGroups, createSessionHookConfigCache, loadProcessHookConfig, type SessionWorkspace, workspaceTrustPredicate } from '@deepseek-ai/dsh-hook-protocol'
 
 const dirs: string[] = []
 function dir(): string {
@@ -98,6 +98,7 @@ describe('createSessionHookConfigCache', () => {
       parse,
       warnSkipped: vi.fn(),
       warnFailure: vi.fn(),
+      warnUntrusted: vi.fn(),
     })
     expect(lookup(undefined)).toBe(empty)
     expect(parse).not.toHaveBeenCalled()
@@ -111,6 +112,7 @@ describe('createSessionHookConfigCache', () => {
       parse: vi.fn(),
       warnSkipped: vi.fn(),
       warnFailure: vi.fn(),
+      warnUntrusted: vi.fn(),
     })
     expect(lookup(workspace('a1', dir()))).toBe(empty)
   })
@@ -124,6 +126,7 @@ describe('createSessionHookConfigCache', () => {
       parse,
       warnSkipped: vi.fn(),
       warnFailure: vi.fn(),
+      warnUntrusted: vi.fn(),
     })
     const agent = workspace('a1', undefined)
     expect(lookup(agent)).toBe(empty)
@@ -140,6 +143,8 @@ describe('createSessionHookConfigCache', () => {
       parse: _raw => ({ config: { groups: ['unreached'] }, skipped: [] }),
       warnSkipped: vi.fn(),
       warnFailure,
+      isWorkspaceTrusted: () => true,
+      warnUntrusted: vi.fn(),
     })
     expect(lookup(workspace('a1', dir()))).toBe(empty)
     expect(warnFailure).not.toHaveBeenCalled()
@@ -156,6 +161,8 @@ describe('createSessionHookConfigCache', () => {
       parse: _raw => ({ config: { groups: ['unreached'] }, skipped: [] }),
       warnSkipped: vi.fn(),
       warnFailure,
+      isWorkspaceTrusted: () => true,
+      warnUntrusted: vi.fn(),
     })
     expect(lookup(workspace('a1', d))).toBe(empty)
     expect(warnFailure).toHaveBeenCalledTimes(1)
@@ -173,6 +180,8 @@ describe('createSessionHookConfigCache', () => {
       parse,
       warnSkipped,
       warnFailure: vi.fn(),
+      isWorkspaceTrusted: () => true,
+      warnUntrusted: vi.fn(),
     })
     const agent = workspace('a1', d)
     expect(lookup(agent)).toEqual({ groups: [d] })
@@ -192,9 +201,81 @@ describe('createSessionHookConfigCache', () => {
       parse: (_raw, cwd) => ({ config: { groups: [cwd] }, skipped: [] }),
       warnSkipped: vi.fn(),
       warnFailure: vi.fn(),
+      isWorkspaceTrusted: () => true,
+      warnUntrusted: vi.fn(),
     })
     expect(lookup(workspace('a', dA))).toEqual({ groups: [dA] })
     expect(lookup(workspace('b', dB))).toEqual({ groups: [dB] })
+  })
+
+  it('default-deny: with no trust predicate, an existing session file is NOT read and the workspace is warned', () => {
+    const d = dir()
+    writeFileSync(join(d, 'hooks.json'), JSON.stringify({ groups: ['planted'] }))
+    const parse = vi.fn()
+    const warnUntrusted = vi.fn()
+    const empty: Fixture = { groups: [] }
+    const lookup = createSessionHookConfigCache<Fixture, string>({
+      sessionConfigFile: 'hooks.json',
+      empty,
+      parse,
+      warnSkipped: vi.fn(),
+      warnFailure: vi.fn(),
+      warnUntrusted,
+    })
+    const agent = workspace('a1', d)
+    expect(lookup(agent)).toBe(empty) // planted hooks never contribute
+    expect(parse).not.toHaveBeenCalled() // the file was never even read
+    expect(warnUntrusted).toHaveBeenCalledWith(d, 'a1')
+    expect(lookup(agent)).toBe(empty) // cached; no re-warn
+    expect(warnUntrusted).toHaveBeenCalledTimes(1)
+  })
+
+  it('an untrusted workspace (predicate returns false) is skipped and warned', () => {
+    const d = dir()
+    writeFileSync(join(d, 'hooks.json'), JSON.stringify({ groups: ['planted'] }))
+    const parse = vi.fn()
+    const warnUntrusted = vi.fn()
+    const empty: Fixture = { groups: [] }
+    const lookup = createSessionHookConfigCache<Fixture, string>({
+      sessionConfigFile: 'hooks.json',
+      empty,
+      parse,
+      warnSkipped: vi.fn(),
+      warnFailure: vi.fn(),
+      isWorkspaceTrusted: () => false,
+      warnUntrusted,
+    })
+    expect(lookup(workspace('a1', d))).toBe(empty)
+    expect(parse).not.toHaveBeenCalled()
+    expect(warnUntrusted).toHaveBeenCalledWith(d, 'a1')
+  })
+})
+
+describe('workspaceTrustPredicate', () => {
+  it('no roots configured (undefined) yields no predicate — nothing is trusted', () => {
+    expect(workspaceTrustPredicate(undefined, '/launch')).toBeUndefined()
+  })
+
+  it('an empty roots array yields no predicate', () => {
+    expect(workspaceTrustPredicate([], '/launch')).toBeUndefined()
+  })
+
+  it('trusts a root exactly and its nested descendants, rejecting parents and siblings', () => {
+    const root = dir()
+    const predicate = workspaceTrustPredicate([root], '/launch')
+    expect(predicate).toBeDefined()
+    expect(predicate!(root)).toBe(true) // the root itself
+    expect(predicate!(join(root, 'sub', 'deep'))).toBe(true) // nested descent
+    expect(predicate!(join(root, '..'))).toBe(false) // parent escapes upward
+    expect(predicate!(join(root, '..', 'sibling'))).toBe(false) // sibling outside root
+  })
+
+  it('resolves a launch-cwd-relative root against the launch cwd', () => {
+    const base = dir()
+    const predicate = workspaceTrustPredicate(['project'], base)
+    expect(predicate!(join(base, 'project'))).toBe(true)
+    expect(predicate!(join(base, 'project', 'pkg'))).toBe(true)
+    expect(predicate!(join(base, 'other'))).toBe(false)
   })
 })
 

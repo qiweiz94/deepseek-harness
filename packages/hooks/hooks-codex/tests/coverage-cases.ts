@@ -27,7 +27,13 @@ function hooks(d: string, h: unknown): string {
   writeFileSync(join(d, 'hooks.json'), JSON.stringify({ hooks: h })); return join(d, 'hooks.json')
 }
 
-type HarnessOpts = { stderrSummaryMaxChars?: number; sessionRoot?: string; sessionConfigFile?: string; maxConsecutiveStopBlocks?: number }
+type HarnessOpts = {
+  stderrSummaryMaxChars?: number
+  sessionRoot?: string
+  sessionConfigFile?: string
+  trustedWorkspaceRoots?: string[]
+  maxConsecutiveStopBlocks?: number
+}
 async function harness(configPath: string, adapter: MockAdapter, opts: HarnessOpts = {}): Promise<Context> {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
@@ -656,7 +662,7 @@ export function defineCoverageCases(groups: CoverageGroup | readonly CoverageGro
       await ctx.plugin(AgentLoop, { agents: [] })
       await ctx.plugin(LocalSubprocessRuntime)
       await ctx.plugin(LocalBashExecutor, { timeoutMs: 10_000 })
-      await ctx.plugin(HooksCodex, { configPath: join(d, 'missing.json'), model: 'm', sessionConfigFile: '.codex-hooks.json' })
+      await ctx.plugin(HooksCodex, { configPath: join(d, 'missing.json'), model: 'm', sessionConfigFile: '.codex-hooks.json', trustedWorkspaceRoots: [sessionDir] })
       ctx.llm.registerAdapter(['mock'], adapter)
       ctx.tools.register(defineContentToolFixture({ name: 'Bash', description: 'b', parameters: { command: { type: 'string' } }, async execute() { return [{ type: 'text', text: 'ok' }] } }))
       const handle = await ctx.agents.create({ sessionId: SessionId('s1'), meta: { cwd: sessionDir }, agentOptions: { provider: 'mock', model: 'mock' } })
@@ -675,7 +681,7 @@ export function defineCoverageCases(groups: CoverageGroup | readonly CoverageGro
       writeFileSync(join(sessionDir, '.codex-hooks.json'), JSON.stringify({ hooks: { PreToolUse: [{ hooks: [{ type: 'command', command: s }] }] } }))
       const processPath = hooks(d, {}) // an empty but valid process-level config
       const adapter = new MockAdapter([toolCallResponse('c1', 'Bash', { command: 'x' }), textResponse('done')])
-      const ctx = await harness(processPath, adapter, { sessionConfigFile: '.codex-hooks.json' })
+      const ctx = await harness(processPath, adapter, { sessionConfigFile: '.codex-hooks.json', trustedWorkspaceRoots: [sessionDir] })
       ctx.tools.register(defineContentToolFixture({ name: 'Bash', description: 'b', parameters: { command: { type: 'string' } }, async execute() { return [{ type: 'text', text: 'ok' }] } }))
       const handle = await ctx.agents.create({ sessionId: SessionId('s2'), meta: { cwd: sessionDir }, agentOptions: { provider: 'mock', model: 'mock' } })
       handle.agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
@@ -691,12 +697,32 @@ export function defineCoverageCases(groups: CoverageGroup | readonly CoverageGro
       const processPath = hooks(d, {})
       const warn = vi.fn()
       const adapter = new MockAdapter([textResponse('ok')])
-      const ctx = await harness(processPath, adapter, { sessionConfigFile: '.codex-hooks.json' })
+      const ctx = await harness(processPath, adapter, { sessionConfigFile: '.codex-hooks.json', trustedWorkspaceRoots: [sessionDir] })
       ctx.logger.warn = warn as never
       const handle = await ctx.agents.create({ sessionId: SessionId('s3'), meta: { cwd: sessionDir }, agentOptions: { provider: 'mock', model: 'mock' } })
       handle.agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
       await waitForIdle(ctx, handle.agent)
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('could not load session hook config'))
+      await handle.dispose()
+    })
+
+    it('an UNTRUSTED workspace (cwd not under trustedWorkspaceRoots) does NOT run its planted session hook and warns', async () => {
+      const d = dir()
+      const sessionDir = dir() // NOT listed in trustedWorkspaceRoots below
+      const marker = join(sessionDir, 'ran')
+      const s = sh(sessionDir, 's.sh', `#!/usr/bin/env bash\ntouch "${marker}"\n`)
+      writeFileSync(join(sessionDir, '.codex-hooks.json'), JSON.stringify({ hooks: { PreToolUse: [{ hooks: [{ type: 'command', command: s }] }] } }))
+      const processPath = hooks(d, {})
+      const warn = vi.fn()
+      const adapter = new MockAdapter([toolCallResponse('c1', 'Bash', { command: 'x' }), textResponse('done')])
+      const ctx = await harness(processPath, adapter, { sessionConfigFile: '.codex-hooks.json', trustedWorkspaceRoots: [dir()] })
+      ctx.logger.warn = warn as never
+      ctx.tools.register(defineContentToolFixture({ name: 'Bash', description: 'b', parameters: { command: { type: 'string' } }, async execute() { return [{ type: 'text', text: 'ok' }] } }))
+      const handle = await ctx.agents.create({ sessionId: SessionId('s4'), meta: { cwd: sessionDir }, agentOptions: { provider: 'mock', model: 'mock' } })
+      handle.agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+      await waitForIdle(ctx, handle.agent)
+      expect(existsSync(marker)).toBe(false) // the planted hook never ran
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('not a trusted workspace root'))
       await handle.dispose()
     })
   })

@@ -43,6 +43,7 @@ type HarnessOpts = {
   stderrSummaryMaxChars?: number
   sessionRoot?: string
   sessionConfigFile?: string
+  trustedWorkspaceRoots?: string[]
   maxConsecutiveStopBlocks?: number
 }
 async function harness(configPath: string, adapter: MockAdapter, opts: HarnessOpts = {}): Promise<Context> {
@@ -784,7 +785,7 @@ export function defineCoverageCases(group: CoverageGroup): void {
       await ctx.plugin(LocalSubprocessRuntime)
       await ctx.plugin(LocalBashExecutor, { timeoutMs: 10_000 })
       // The process configPath does not exist at all.
-      await ctx.plugin(HooksClaude, { configPath: join(d, 'missing.json'), sessionConfigFile: '.claude-hooks.json' })
+      await ctx.plugin(HooksClaude, { configPath: join(d, 'missing.json'), sessionConfigFile: '.claude-hooks.json', trustedWorkspaceRoots: [sessionDir] })
       ctx.llm.registerAdapter(['mock'], adapter)
       ctx.tools.register(defineContentToolFixture({ name: 'echo', description: 'e', parameters: {}, async execute() { return [{ type: 'text', text: 'ok' }] } }))
       const handle = await ctx.agents.create({ sessionId: SessionId('s1'), meta: { cwd: sessionDir }, agentOptions: { provider: 'mock', model: 'mock' } })
@@ -805,7 +806,7 @@ export function defineCoverageCases(group: CoverageGroup): void {
       writeFileSync(join(sessionDir, '.claude-hooks.json'), JSON.stringify({ hooks: { PreToolUse: [{ hooks: [{ type: 'command', command: '${CLAUDE_PLUGIN_ROOT}/s.sh' }] }] } }))
       const processPath = hooks(d, {}) // an empty process-level config (still parses fine)
       const adapter = new MockAdapter([toolCallResponse('c1', 'echo', {}), textResponse('done')])
-      const ctx = await harness(processPath, adapter, { pluginRoot: pluginDir, sessionConfigFile: '.claude-hooks.json' })
+      const ctx = await harness(processPath, adapter, { pluginRoot: pluginDir, sessionConfigFile: '.claude-hooks.json', trustedWorkspaceRoots: [sessionDir] })
       ctx.tools.register(defineContentToolFixture({ name: 'echo', description: 'e', parameters: {}, async execute() { return [{ type: 'text', text: 'ok' }] } }))
       const handle = await ctx.agents.create({ sessionId: SessionId('s2'), meta: { cwd: sessionDir }, agentOptions: { provider: 'mock', model: 'mock' } })
       handle.agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
@@ -824,7 +825,7 @@ export function defineCoverageCases(group: CoverageGroup): void {
       writeFileSync(join(sessionDir, '.claude-hooks.json'), JSON.stringify({ hooks: { PreToolUse: [{ hooks: [{ type: 'command', command: s }] }] } }))
       const processPath = hooks(d, {})
       const adapter = new MockAdapter([toolCallResponse('c1', 'echo', {}), textResponse('done')])
-      const ctx = await harness(processPath, adapter, { projectDir: explicitProjectDir, sessionConfigFile: '.claude-hooks.json' })
+      const ctx = await harness(processPath, adapter, { projectDir: explicitProjectDir, sessionConfigFile: '.claude-hooks.json', trustedWorkspaceRoots: [sessionDir] })
       ctx.tools.register(defineContentToolFixture({ name: 'echo', description: 'e', parameters: {}, async execute() { return [{ type: 'text', text: 'ok' }] } }))
       const handle = await ctx.agents.create({ sessionId: SessionId('s3'), meta: { cwd: sessionDir }, agentOptions: { provider: 'mock', model: 'mock' } })
       handle.agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
@@ -841,12 +842,34 @@ export function defineCoverageCases(group: CoverageGroup): void {
       const processPath = hooks(d, {})
       const warn = vi.fn()
       const adapter = new MockAdapter([textResponse('ok')])
-      const ctx = await harness(processPath, adapter, { sessionConfigFile: '.claude-hooks.json' })
+      const ctx = await harness(processPath, adapter, { sessionConfigFile: '.claude-hooks.json', trustedWorkspaceRoots: [sessionDir] })
       ctx.logger.warn = warn as never
       const handle = await ctx.agents.create({ sessionId: SessionId('s4'), meta: { cwd: sessionDir }, agentOptions: { provider: 'mock', model: 'mock' } })
       handle.agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
       await waitForIdle(ctx, handle.agent)
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('could not load session hook config'))
+      await handle.dispose()
+    })
+
+    it('an UNTRUSTED workspace (cwd not under trustedWorkspaceRoots) does NOT run its planted session hook and warns', async () => {
+      const d = dir()
+      const sessionDir = dir() // NOT listed in trustedWorkspaceRoots below
+      const marker = join(sessionDir, 'ran')
+      sh(sessionDir, 's.sh', `#!/usr/bin/env bash\ntouch "${marker}"\n`)
+      writeFileSync(join(sessionDir, '.claude-hooks.json'), JSON.stringify({ hooks: { PreToolUse: [{ hooks: [{ type: 'command', command: join(sessionDir, 's.sh') }] }] } }))
+      const processPath = hooks(d, {})
+      const warn = vi.fn()
+      const adapter = new MockAdapter([toolCallResponse('c1', 'echo', {}), textResponse('done')])
+      // A trusted root is configured, but it is a DIFFERENT tree — the session's
+      // planted hooks.json must not execute.
+      const ctx = await harness(processPath, adapter, { sessionConfigFile: '.claude-hooks.json', trustedWorkspaceRoots: [dir()] })
+      ctx.logger.warn = warn as never
+      ctx.tools.register(defineContentToolFixture({ name: 'echo', description: 'e', parameters: {}, async execute() { return [{ type: 'text', text: 'ok' }] } }))
+      const handle = await ctx.agents.create({ sessionId: SessionId('s5'), meta: { cwd: sessionDir }, agentOptions: { provider: 'mock', model: 'mock' } })
+      handle.agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+      await waitForIdle(ctx, handle.agent)
+      expect(existsSync(marker)).toBe(false) // the planted hook never ran
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('not a trusted workspace root'))
       await handle.dispose()
     })
   })

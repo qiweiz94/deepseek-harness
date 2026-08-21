@@ -11,7 +11,7 @@
  */
 
 import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { isAbsolute, relative, resolve } from 'node:path'
 
 /**
  * The minimal session-workspace shape this module needs from an `Agent`, kept
@@ -76,6 +76,17 @@ export function createSessionHookConfigCache<T, S>(opts: {
   parse: (raw: unknown, cwd: string) => { config: T; skipped: S[] }
   warnSkipped: (skipped: S[]) => void
   warnFailure: (path: string, agentId: string, error: unknown) => void
+  /**
+   * Trust gate: a project-local hook config is discovered and its commands run
+   * ONLY for a workspace this returns `true` for. A workspace's `hooks.json`
+   * runs arbitrary shell before any user action, so an untrusted (e.g. freshly
+   * cloned) repo must not be able to plant one. Absent ⇒ no workspace is
+   * trusted, so discovery contributes nothing even when `sessionConfigFile` is
+   * set; the deployment opts a workspace in explicitly.
+   */
+  isWorkspaceTrusted?: (cwd: string) => boolean
+  /** Warn (once per workspace) that an untrusted workspace's session hooks were skipped. */
+  warnUntrusted: (cwd: string, agentId: string) => void
 }): (agent: SessionWorkspace | undefined) => T {
   const cache = new WeakMap<SessionWorkspace, T>()
   return (agent: SessionWorkspace | undefined): T => {
@@ -85,6 +96,12 @@ export function createSessionHookConfigCache<T, S>(opts: {
     if (cached !== undefined) return cached
     let discovered = opts.empty
     const cwd = agent.session.header.cwd
+    if (cwd !== undefined && (opts.isWorkspaceTrusted === undefined || !opts.isWorkspaceTrusted(cwd))) {
+      // Default-deny: never execute an untrusted workspace's planted hooks.
+      opts.warnUntrusted(cwd, agent.id)
+      cache.set(agent, discovered)
+      return discovered
+    }
     if (cwd !== undefined) {
       const path = resolve(cwd, file)
       try {
@@ -100,6 +117,36 @@ export function createSessionHookConfigCache<T, S>(opts: {
     }
     cache.set(agent, discovered)
     return discovered
+  }
+}
+
+/**
+ * Build the workspace-trust predicate a bridge passes to
+ * {@link createSessionHookConfigCache}: a workspace `cwd` is trusted when it
+ * equals, or is nested under, one of the deployment-configured trusted roots
+ * (each resolved against the process launch cwd). No roots ⇒ trust nothing, so
+ * project-local hook discovery runs no commands until the deployment vouches
+ * for a workspace.
+ * @param roots - configured trusted workspace roots (absolute or launch-cwd-relative), or undefined.
+ * @param launchCwd - the process launch cwd the relative roots resolve against.
+ * @returns a predicate over an agent session's absolute cwd, or undefined when no roots are configured.
+ */
+export function workspaceTrustPredicate(
+  roots: readonly string[] | undefined,
+  launchCwd: string,
+): ((cwd: string) => boolean) | undefined {
+  if (roots === undefined || roots.length === 0) return undefined
+  const absoluteRoots = roots.map(root => resolve(launchCwd, root))
+  return (cwd: string): boolean => {
+    const target = resolve(cwd)
+    return absoluteRoots.some((root) => {
+      const rel = relative(root, target)
+      if (rel === '') return true // target is the root itself
+      if (rel.startsWith('..')) return false // target escapes upward, outside root
+      /* v8 ignore next -- a non-'..' absolute rel means a different Windows drive; posix relative() never returns one */
+      if (isAbsolute(rel)) return false
+      return true // a relative descent: target is nested under root
+    })
   }
 }
 
