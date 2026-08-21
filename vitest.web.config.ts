@@ -1,6 +1,6 @@
 import tsconfigPaths from 'vite-tsconfig-paths'
 import { defineConfig } from 'vitest/config'
-import { standardDecoratorPlugin, vitestExecArgv } from './vitest.shared.ts'
+import { scaledTimeout, standardDecoratorPlugin, vitestExecArgv } from './vitest.shared.ts'
 
 // Web browser lane: real host entry points, built-client interaction snapshots,
 // and replayed keyless e2e scenarios outside the unit/e2e includes. Linux PR CI
@@ -28,8 +28,11 @@ export default defineConfig({
       'apps/web/tests/**/*.snapshot.ts',
     ],
     // Browser boot + real-model turns are slow; files share one browser, run serial.
-    testTimeout: 180_000,
-    hookTimeout: 120_000,
+    // Scale the outer per-test/hook envelope by DSH_TEST_TIMEOUT_FACTOR too, so a
+    // test with no explicit per-test override still gets a slow runner's headroom
+    // rather than hitting this flat bound before its scaled inner locator waits fire.
+    testTimeout: scaledTimeout(180_000),
+    hookTimeout: scaledTimeout(120_000),
     fileParallelism: false,
   },
 })
