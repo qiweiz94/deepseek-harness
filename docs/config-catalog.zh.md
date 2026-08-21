@@ -1536,6 +1536,26 @@ export interface Config {
 
 来源：[`packages/plugins/plugin-diagnostic-sifter/src/index.ts:25`](../packages/plugins/plugin-diagnostic-sifter/src/index.ts)
 
+<a id="deepseek-aidsh-plugin-doc-sync-automator"></a>
+
+## `@deepseek-ai/dsh-plugin-doc-sync-automator`
+
+依赖：`tools`
+
+```ts config-catalog
+/** Runtime configuration for the doc-sync tool. */
+export interface Config {
+  /** Repository root every path resolves against; defaults to the process cwd. */
+  root?: string
+  /** Repo-relative path to the doc budgets manifest; defaults to `scripts/doc-budgets.manifest.json`. */
+  budgetManifestPath?: string
+  /** Model-facing tool name; defaults to `sync_bilingual_pair`. */
+  toolName?: string
+}
+```
+
+来源：[`packages/plugins/plugin-doc-sync-automator/src/index.ts:20`](../packages/plugins/plugin-doc-sync-automator/src/index.ts)
+
 <a id="deepseek-aidsh-plugin-pinned-scratchpad"></a>
 
 ## `@deepseek-ai/dsh-plugin-pinned-scratchpad`

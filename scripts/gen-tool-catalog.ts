@@ -55,6 +55,7 @@ import * as ToolSchedule from '@deepseek-ai/dsh-schedule'
 import Lsp from '@deepseek-ai/dsh-lsp'
 import * as ToolAstContext from '@deepseek-ai/dsh-plugin-ast-context'
 import * as ToolArchGuard from '@deepseek-ai/dsh-plugin-arch-guard'
+import * as ToolDocSyncAutomator from '@deepseek-ai/dsh-plugin-doc-sync-automator'
 import * as ToolDiagnosticSifter from '@deepseek-ai/dsh-plugin-diagnostic-sifter'
 import * as ToolPinnedScratchpad from '@deepseek-ai/dsh-plugin-pinned-scratchpad'
 import * as ToolTelemetryRecorder from '@deepseek-ai/dsh-plugin-telemetry-recorder'
@@ -291,6 +292,18 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'check_module_boundary judges whether one package importing another is legal under the monorepo layering rules (tier direction, the plugins-do-not-import-each-other rule, acyclicity, exports map); the workspace graph is scanned once at mount.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-plugin-doc-sync-automator',
+    dir: 'plugin-doc-sync-automator',
+    source: 'packages/plugins/plugin-doc-sync-automator/src/index.ts',
+    requires: ['ctx.tools'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(ToolDocSyncAutomator, { root })
+    },
+    note:
+      'sync_bilingual_pair splices a changed English doc section into its .zh.md mirror, updates the .i18n.yaml consistency record, and reports whether the mirror stays within its doc budget; the mirror then carries NEEDS-TRANSLATION debt for the spliced section.',
   },
   {
     pkg: '@deepseek-ai/dsh-plugin-diagnostic-sifter',

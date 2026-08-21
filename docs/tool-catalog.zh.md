@@ -22,6 +22,7 @@
 | `@deepseek-ai/dsh-plugin-telemetry-recorder` | `get_session_telemetry` | `ctx.tools` | `tool/call`, `tool/result` | - | get_session_telemetry folds the calling session's own operating figures — token velocity, prompt-cache hit rate, context headroom, turn latency, subagent counts — over a rolling window of closed turns from the durable log; it registers no session events of its own. |
 | `@deepseek-ai/dsh-plugin-subagent-router` | `subagent` | `ctx.tools`, `ctx.subagents` | `tool/call`, `tool/result`, `child session events through the chosen provider` | - | A single delegation entry routes a task to a capable subagent provider selected by config-owned policy; the model names only the task (description + prompt), never a provider or transport. |
 | `@deepseek-ai/dsh-plugin-arch-guard` | `check_module_boundary` | `ctx.tools` | `tool/call`, `tool/result` | - | check_module_boundary judges whether one package importing another is legal under the monorepo layering rules (tier direction, the plugins-do-not-import-each-other rule, acyclicity, exports map); the workspace graph is scanned once at mount. |
+| `@deepseek-ai/dsh-plugin-doc-sync-automator` | `sync_bilingual_pair` | `ctx.tools` | `tool/call`, `tool/result` | - | sync_bilingual_pair splices a changed English doc section into its .zh.md mirror, updates the .i18n.yaml consistency record, and reports whether the mirror stays within its doc budget; the mirror then carries NEEDS-TRANSLATION debt for the spliced section. |
 | `@deepseek-ai/dsh-plugin-diagnostic-sifter` | `run_diagnostic_check` | `ctx.tools`, `ctx.subprocess` | `tool/call`, `tool/result` | - | run_diagnostic_check runs the repository typecheck or a scoped vitest suite, suppresses downstream import cascades and passing noise, and returns a bounded root-cause list with the suppressed-cascade count. |
 | `@deepseek-ai/dsh-plugin-worktree-sandbox` | `sandbox_exec` | `ctx.tools`, `ctx.subprocess` | `tool/call`, `tool/result`, `a disposable git worktree under .dsh/worktrees` | - | sandbox_exec runs a command in an isolated detached git worktree and returns the bounded structured diff and exit status; the worktree is removed after the call. |
 | `@deepseek-ai/dsh-tool-ask-user` | `ask_user_question` | `ctx.tools`, `ctx.userQuestions` | `tool/call`, `tool/result after a UI/provider answers the question` | - | ask_user_question pauses the tool call until the active UI provider returns a human answer. |
@@ -356,6 +357,48 @@ get_session_telemetry 从持久日志中，在最近若干已结束转轮的滚�
 来源：[`packages/plugins/plugin-arch-guard/src/index.ts`](../packages/plugins/plugin-arch-guard/src/index.ts)
 
 check_module_boundary 判断一个包导入另一个包在 monorepo 分层规则下是否合法（层级方向、插件互不导入规则、无环性、exports 映射）；工作区图在挂载时扫描一次。
+
+<a id="deepseek-aidsh-plugin-doc-sync-automator"></a>
+
+## `@deepseek-ai/dsh-plugin-doc-sync-automator`
+
+### `sync_bilingual_pair`
+
+把英文 Markdown 文档中被改动的一节传播到其配对的简体中文镜像（.zh.md 对应文件），同时保持双语对结构有效。该工具不做翻译：拼接进去的内容是被 NEEDS-TRANSLATION 标记包裹的原样英文文本，并重写该对的 .i18n.yaml 一致性记录，使 `pnpm run verify-translation-pairing` 接受结果而非标记为不同步。在编辑完一个英文文档（docs/、.agents/notes/ 或某个包 README）后立即调用它，让镜像不再悄然漂移；稍后由人工译者替换被标记的英文文本。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "docPath": {
+      "type": "string",
+      "description": "Repository-relative path to the English Markdown source, e.g. \"docs/architecture.md\" or \"packages/plugins/plugin-foo/README.md\". Must end in .md and not .zh.md."
+    },
+    "updatedSection": {
+      "type": "object",
+      "description": "Identifies which section of docPath changed.",
+      "additionalProperties": false,
+      "properties": {
+        "heading": {
+          "type": "string",
+          "description": "Exact heading text (without leading #s) of the changed section in docPath, e.g. \"Configuration\"."
+        }
+      },
+      "required": [
+        "heading"
+      ]
+    }
+  },
+  "required": [
+    "docPath",
+    "updatedSection"
+  ]
+}
+```
+
+来源：[`packages/plugins/plugin-doc-sync-automator/src/index.ts`](../packages/plugins/plugin-doc-sync-automator/src/index.ts)
+
+sync_bilingual_pair 把英文文档中被改动的一节拼接进其 .zh.md 镜像，更新 .i18n.yaml 一致性记录，并报告镜像是否仍在其文档预算内；镜像随后为被拼接的一节携带 NEEDS-TRANSLATION 债务。
 
 <a id="deepseek-aidsh-plugin-diagnostic-sifter"></a>
 

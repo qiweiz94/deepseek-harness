@@ -23,6 +23,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-plugin-telemetry-recorder` | `get_session_telemetry` | `ctx.tools` | `tool/call`, `tool/result` | - | get_session_telemetry folds the calling session's own operating figures — token velocity, prompt-cache hit rate, context headroom, turn latency, subagent counts — over a rolling window of closed turns from the durable log; it registers no session events of its own. |
 | `@deepseek-ai/dsh-plugin-subagent-router` | `subagent` | `ctx.tools`, `ctx.subagents` | `tool/call`, `tool/result`, `child session events through the chosen provider` | - | A single delegation entry routes a task to a capable subagent provider selected by config-owned policy; the model names only the task (description + prompt), never a provider or transport. |
 | `@deepseek-ai/dsh-plugin-arch-guard` | `check_module_boundary` | `ctx.tools` | `tool/call`, `tool/result` | - | check_module_boundary judges whether one package importing another is legal under the monorepo layering rules (tier direction, the plugins-do-not-import-each-other rule, acyclicity, exports map); the workspace graph is scanned once at mount. |
+| `@deepseek-ai/dsh-plugin-doc-sync-automator` | `sync_bilingual_pair` | `ctx.tools` | `tool/call`, `tool/result` | - | sync_bilingual_pair splices a changed English doc section into its .zh.md mirror, updates the .i18n.yaml consistency record, and reports whether the mirror stays within its doc budget; the mirror then carries NEEDS-TRANSLATION debt for the spliced section. |
 | `@deepseek-ai/dsh-plugin-diagnostic-sifter` | `run_diagnostic_check` | `ctx.tools`, `ctx.subprocess` | `tool/call`, `tool/result` | - | run_diagnostic_check runs the repository typecheck or a scoped vitest suite, suppresses downstream import cascades and passing noise, and returns a bounded root-cause list with the suppressed-cascade count. |
 | `@deepseek-ai/dsh-plugin-worktree-sandbox` | `sandbox_exec` | `ctx.tools`, `ctx.subprocess` | `tool/call`, `tool/result`, `a disposable git worktree under .dsh/worktrees` | - | sandbox_exec runs a command in an isolated detached git worktree and returns the bounded structured diff and exit status; the worktree is removed after the call. |
 | `@deepseek-ai/dsh-tool-bash` | `bash` | `ctx.tools`, `ctx.shell`, `ctx.systemPrompt`, `ctx.shellEnv`, `ctx.jobs at call time for run_in_background` | `tool/call`, `tool/result` | - | The bash tool is the model-facing consumer of the bash executor seam. A `run_in_background` run registers with the generic `ctx.jobs` runtime and is collected/stopped through the `job_*` tools from `@deepseek-ai/dsh-tool-jobs`; the `enableRunInBackground` config (default true) removes the parameter entirely when disabled. |
@@ -354,6 +355,48 @@ Check whether importing targetImport from sourcePath is legal under the monorepo
 Source: [`packages/plugins/plugin-arch-guard/src/index.ts`](../packages/plugins/plugin-arch-guard/src/index.ts)
 
 check_module_boundary judges whether one package importing another is legal under the monorepo layering rules (tier direction, the plugins-do-not-import-each-other rule, acyclicity, exports map); the workspace graph is scanned once at mount.
+
+<a id="deepseek-aidsh-plugin-doc-sync-automator"></a>
+
+## `@deepseek-ai/dsh-plugin-doc-sync-automator`
+
+### `sync_bilingual_pair`
+
+Propagate a changed section of an English Markdown document into its paired Simplified Chinese mirror (the .zh.md counterpart), keeping the bilingual pair structurally valid. This tool does NOT translate: the spliced content is the exact English text wrapped in NEEDS-TRANSLATION markers, and the pair's .i18n.yaml consistency record is rewritten so `pnpm run verify-translation-pairing` accepts the result instead of flagging it out-of-sync. Call it right after editing an English doc (docs/, .agents/notes/, or a package README) so the mirror stops silently drifting; a human translator later replaces the marked English text.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "docPath": {
+      "type": "string",
+      "description": "Repository-relative path to the English Markdown source, e.g. \"docs/architecture.md\" or \"packages/plugins/plugin-foo/README.md\". Must end in .md and not .zh.md."
+    },
+    "updatedSection": {
+      "type": "object",
+      "description": "Identifies which section of docPath changed.",
+      "additionalProperties": false,
+      "properties": {
+        "heading": {
+          "type": "string",
+          "description": "Exact heading text (without leading #s) of the changed section in docPath, e.g. \"Configuration\"."
+        }
+      },
+      "required": [
+        "heading"
+      ]
+    }
+  },
+  "required": [
+    "docPath",
+    "updatedSection"
+  ]
+}
+```
+
+Source: [`packages/plugins/plugin-doc-sync-automator/src/index.ts`](../packages/plugins/plugin-doc-sync-automator/src/index.ts)
+
+sync_bilingual_pair splices a changed English doc section into its .zh.md mirror, updates the .i18n.yaml consistency record, and reports whether the mirror stays within its doc budget; the mirror then carries NEEDS-TRANSLATION debt for the spliced section.
 
 <a id="deepseek-aidsh-plugin-diagnostic-sifter"></a>
 

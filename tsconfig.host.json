@@ -278,6 +278,7 @@
     { "path": "./packages/extensions/cordis-host-runner" },
     { "path": "./packages/extensions/tool-cordis" },
     { "path": "./packages/plugins/plugin-arch-guard" },
+    { "path": "./packages/plugins/plugin-doc-sync-automator" },
     { "path": "./packages/plugins/plugin-ast-context" },
     { "path": "./packages/guard/budget-governor" },
     { "path": "./packages/plugins/plugin-diagnostic-sifter" },
