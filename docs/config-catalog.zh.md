@@ -1319,6 +1319,27 @@ export interface LspLocalServerConfig {
 
 来源：[`packages/lsp/lsp-stdio/src/index.ts:82`](../packages/lsp/lsp-stdio/src/index.ts)
 
+<a id="deepseek-aidsh-lsp-typescript-inprocess"></a>
+
+## `@deepseek-ai/dsh-lsp-typescript-inprocess`
+
+需要：`lsp`
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /**
+   * Root tsconfig whose transitive file set (its own files plus every project it
+   * reaches through `references`) defines the navigable TypeScript workspace.
+   * A deployment points this at a project inside the session workspace; a query
+   * for a file outside that project returns no results.
+   */
+  tsconfigPath: string
+}
+```
+
+来源：[`packages/lsp/lsp-typescript-inprocess/src/index.ts:30`](../packages/lsp/lsp-typescript-inprocess/src/index.ts)
+
 <a id="deepseek-aidsh-mcp-client"></a>
 
 ## `@deepseek-ai/dsh-mcp-client`
