@@ -404,14 +404,21 @@ export type Config = LocalConfig
  */
 export interface Config {
   /**
-   * Terminate a child run whose session measures above this many tokens
+   * What a tripped ceiling does. `enforce` (default) cancels the child run;
+   * `observe` only reports and warns, leaving the run to continue — a cautious
+   * deployment that wants the signal without the intervention. Both modes
+   * inject the same model-visible notice into the parent.
+   */
+  mode?: 'enforce' | 'observe'
+  /**
+   * Flag a child run whose session measures above this many tokens
    * (`ctx.tokenMeter.measure` — the model-visible request surface, not
    * provider-billed spend). Integer >= 1.
    */
   maxChildTokens?: number
-  /** Terminate a child run after this many consecutive failed tool calls. Integer >= 1. */
+  /** Flag a child run after this many consecutive failed tool calls. Integer >= 1. */
   maxConsecutiveToolFailures?: number
-  /** Terminate a child run that keeps re-editing one file (see {@link EditChurnConfig}). */
+  /** Flag a child run that keeps re-editing one file (see {@link EditChurnConfig}). */
   editChurn?: EditChurnConfig
 }
 
@@ -438,7 +445,7 @@ export interface EditToolSpec {
 }
 ```
 
-来源：[`packages/guard/budget-governor/src/index.ts:43`](../packages/guard/budget-governor/src/index.ts)
+来源：[`packages/guard/budget-governor/src/index.ts:46`](../packages/guard/budget-governor/src/index.ts)
 
 <a id="deepseek-aidsh-client-connection"></a>
 
