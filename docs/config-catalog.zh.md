@@ -1611,6 +1611,24 @@ export interface Config {
 
 来源：[`packages/plugins/plugin-pinned-scratchpad/src/index.ts:34`](../packages/plugins/plugin-pinned-scratchpad/src/index.ts)
 
+<a id="deepseek-aidsh-plugin-semantic-patcher"></a>
+
+## `@deepseek-ai/dsh-plugin-semantic-patcher`
+
+依赖：`tools`
+
+```ts config-catalog
+/** Configuration for the semantic patch tool. */
+export interface Config {
+  /** Repository root; a path resolving outside it is refused (default `process.cwd()`). */
+  cwd?: string
+  /** Refuse files larger than this many bytes (default 2 MiB). */
+  maxBytes?: number
+}
+```
+
+来源：[`packages/plugins/plugin-semantic-patcher/src/index.ts:22`](../packages/plugins/plugin-semantic-patcher/src/index.ts)
+
 <a id="deepseek-aidsh-plugin-subagent-router"></a>
 
 ## `@deepseek-ai/dsh-plugin-subagent-router`

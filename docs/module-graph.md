@@ -243,6 +243,7 @@ flowchart TD
     pkg_plugin_doc_sync_automator["plugin-doc-sync-automator"]
     pkg_plugin_impacted_tests["plugin-impacted-tests"]
     pkg_plugin_pinned_scratchpad["plugin-pinned-scratchpad"]
+    pkg_plugin_semantic_patcher["plugin-semantic-patcher"]
     pkg_plugin_subagent_router["plugin-subagent-router"]
     pkg_plugin_telemetry_recorder["plugin-telemetry-recorder"]
     pkg_plugin_worktree_sandbox["plugin-worktree-sandbox"]
@@ -920,6 +921,9 @@ flowchart TD
   pkg_plugin_pinned_scratchpad --> pkg_session
   pkg_plugin_pinned_scratchpad --> pkg_system_prompt
   pkg_plugin_pinned_scratchpad --> pkg_tools
+  pkg_plugin_semantic_patcher --> pkg_atomic_write
+  pkg_plugin_semantic_patcher --> pkg_invariants
+  pkg_plugin_semantic_patcher --> pkg_tools
   pkg_plugin_worktree_sandbox --> pkg_invariants
   pkg_plugin_worktree_sandbox --> pkg_output_retention
   pkg_plugin_worktree_sandbox --> pkg_subprocess
@@ -1637,6 +1641,7 @@ flowchart TD
 | [`plugin-doc-sync-automator`](../packages/plugins/plugin-doc-sync-automator) | `plugins` | [`invariants`](../packages/runtime-diagnostics/invariants), [`tools`](../packages/core/tools) |
 | [`plugin-impacted-tests`](../packages/plugins/plugin-impacted-tests) | `plugins` | [`invariants`](../packages/runtime-diagnostics/invariants), [`output-retention`](../packages/util/output-retention), [`subprocess`](../packages/subprocess/subprocess), [`tools`](../packages/core/tools) |
 | [`plugin-pinned-scratchpad`](../packages/plugins/plugin-pinned-scratchpad) | `plugins` | [`agent`](../packages/core/agent), [`invariants`](../packages/runtime-diagnostics/invariants), [`session`](../packages/core/session), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools) |
+| [`plugin-semantic-patcher`](../packages/plugins/plugin-semantic-patcher) | `plugins` | [`atomic-write`](../packages/util/atomic-write), [`invariants`](../packages/runtime-diagnostics/invariants), [`tools`](../packages/core/tools) |
 | [`plugin-worktree-sandbox`](../packages/plugins/plugin-worktree-sandbox) | `plugins` | [`invariants`](../packages/runtime-diagnostics/invariants), [`output-retention`](../packages/util/output-retention), [`subprocess`](../packages/subprocess/subprocess), [`tools`](../packages/core/tools) |
 | [`schedule`](../packages/schedule/schedule) | `schedule` | [`agent`](../packages/core/agent), [`brand`](../packages/util/brand), [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`session-persistence`](../packages/session/session-persistence), [`tools`](../packages/core/tools) |
 | [`session-checkpoint-policy`](../packages/session/session-checkpoint-policy) | `session` | [`agent`](../packages/core/agent), [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`session-persistence`](../packages/session/session-persistence), [`tools`](../packages/core/tools) |
