@@ -59,6 +59,7 @@ import * as ToolDocSyncAutomator from '@deepseek-ai/dsh-plugin-doc-sync-automato
 import * as ToolImpactedTests from '@deepseek-ai/dsh-plugin-impacted-tests'
 import * as ToolDiagnosticSifter from '@deepseek-ai/dsh-plugin-diagnostic-sifter'
 import * as ToolPinnedScratchpad from '@deepseek-ai/dsh-plugin-pinned-scratchpad'
+import * as ToolSemanticPatcher from '@deepseek-ai/dsh-plugin-semantic-patcher'
 import * as ToolTelemetryRecorder from '@deepseek-ai/dsh-plugin-telemetry-recorder'
 import * as ToolSubagentRouter from '@deepseek-ai/dsh-plugin-subagent-router'
 import * as ToolWorktreeSandbox from '@deepseek-ai/dsh-plugin-worktree-sandbox'
@@ -267,6 +268,18 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'get_session_telemetry folds the calling session\'s own operating figures — token velocity, prompt-cache hit rate, context headroom, turn latency, subagent counts — over a rolling window of closed turns from the durable log; it registers no session events of its own.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-plugin-semantic-patcher',
+    dir: 'plugin-semantic-patcher',
+    source: 'packages/plugins/plugin-semantic-patcher/src/index.ts',
+    requires: ['ctx.tools'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(ToolSemanticPatcher, { cwd: root })
+    },
+    note:
+      'patch_symbol_body replaces the body of one named TypeScript symbol in a repo-relative file, parsing to locate the exact span and writing atomically; a path resolving outside the repository root or a patch that does not parse is refused.',
   },
   {
     pkg: '@deepseek-ai/dsh-plugin-subagent-router',

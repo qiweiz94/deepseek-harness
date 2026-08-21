@@ -20,6 +20,7 @@
 | `@deepseek-ai/dsh-plugin-ast-context` | `get_directory_outline`, `get_file_outline` | `ctx.tools` | `tool/call`, `tool/result` | - | get_file_outline reads a repo-relative source file and returns its top-level TypeScript symbols; a parse failure or missing file surfaces as an error result rather than a partial outline. |
 | `@deepseek-ai/dsh-plugin-pinned-scratchpad` | `scratchpad_update` | `ctx.tools`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `scratchpad/write` | - | scratchpad_update upserts or deletes one key/value entry in the calling agent's per-session store; the scratchpad:pinned prompt section renders the current store into every request as a bounded <agent_scratchpad> block that survives context compaction. |
 | `@deepseek-ai/dsh-plugin-telemetry-recorder` | `get_session_telemetry` | `ctx.tools` | `tool/call`, `tool/result` | - | get_session_telemetry folds the calling session's own operating figures — token velocity, prompt-cache hit rate, context headroom, turn latency, subagent counts — over a rolling window of closed turns from the durable log; it registers no session events of its own. |
+| `@deepseek-ai/dsh-plugin-semantic-patcher` | `patch_symbol_body` | `ctx.tools` | `tool/call`, `tool/result` | - | patch_symbol_body replaces the body of one named TypeScript symbol in a repo-relative file, parsing to locate the exact span and writing atomically; a path resolving outside the repository root or a patch that does not parse is refused. |
 | `@deepseek-ai/dsh-plugin-subagent-router` | `subagent` | `ctx.tools`, `ctx.subagents` | `tool/call`, `tool/result`, `child session events through the chosen provider` | - | A single delegation entry routes a task to a capable subagent provider selected by config-owned policy; the model names only the task (description + prompt), never a provider or transport. |
 | `@deepseek-ai/dsh-plugin-arch-guard` | `check_module_boundary` | `ctx.tools` | `tool/call`, `tool/result` | - | check_module_boundary judges whether one package importing another is legal under the monorepo layering rules (tier direction, the plugins-do-not-import-each-other rule, acyclicity, exports map); the workspace graph is scanned once at mount. |
 | `@deepseek-ai/dsh-plugin-doc-sync-automator` | `sync_bilingual_pair` | `ctx.tools` | `tool/call`, `tool/result` | - | sync_bilingual_pair splices a changed English doc section into its .zh.md mirror, updates the .i18n.yaml consistency record, and reports whether the mirror stays within its doc budget; the mirror then carries NEEDS-TRANSLATION debt for the spliced section. |
@@ -294,6 +295,43 @@ scratchpad_update 在调用代理的会话级存储中插入、替换或删除�
 来源：[`packages/plugins/plugin-telemetry-recorder/src/index.ts`](../packages/plugins/plugin-telemetry-recorder/src/index.ts)
 
 get_session_telemetry 从持久日志中，在最近若干已结束转轮的滚动窗口上折叠出调用会话自身的运行数据——token 速率、提示词缓存命中率、上下文余量、转轮延迟、子代理数量；它本身不写入任何会话事件。
+
+<a id="deepseek-aidsh-plugin-semantic-patcher"></a>
+
+## `@deepseek-ai/dsh-plugin-semantic-patcher`
+
+### `patch_symbol_body`
+
+替换本地 TypeScript（.ts 或 .tsx）文件中某个具名符号的主体。该符号在解析后的语法树中定位，而非按文本匹配，因此编辑落在你指定的声明上。支持顶层函数、函数值绑定（箭头函数）与类成员；用 Class.method 形式命名成员以消歧。若名称匹配零个或多个符号，调用失败并列出候选而非猜测。替换在写入之前先解析：若结果无法解析，文件逐字节保持不变。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "Repo-relative path to a TypeScript (.ts or .tsx) file inside the repository root."
+    },
+    "symbol": {
+      "type": "string",
+      "description": "The symbol whose body to replace: a top-level name, or Class.method for a class member."
+    },
+    "newBody": {
+      "type": "string",
+      "description": "The replacement body source. Include the surrounding braces for a block body (for example \"{ return 1 }\"); for a concise arrow body, pass the expression alone."
+    }
+  },
+  "required": [
+    "path",
+    "symbol",
+    "newBody"
+  ]
+}
+```
+
+来源：[`packages/plugins/plugin-semantic-patcher/src/index.ts`](../packages/plugins/plugin-semantic-patcher/src/index.ts)
+
+patch_symbol_body 替换仓库相对文件中某个具名 TypeScript 符号的主体，通过解析定位精确 span 并原子写入；解析到仓库根之外的路径、或无法解析的补丁会被拒绝。
 
 <a id="deepseek-aidsh-plugin-subagent-router"></a>
 

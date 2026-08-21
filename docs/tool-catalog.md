@@ -21,6 +21,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-plugin-ast-context` | `get_directory_outline`, `get_file_outline` | `ctx.tools` | `tool/call`, `tool/result` | - | get_file_outline reads a repo-relative source file and returns its top-level TypeScript symbols; a parse failure or missing file surfaces as an error result rather than a partial outline. |
 | `@deepseek-ai/dsh-plugin-pinned-scratchpad` | `scratchpad_update` | `ctx.tools`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `scratchpad/write` | - | scratchpad_update upserts or deletes one key/value entry in the calling agent's per-session store; the scratchpad:pinned prompt section renders the current store into every request as a bounded <agent_scratchpad> block that survives context compaction. |
 | `@deepseek-ai/dsh-plugin-telemetry-recorder` | `get_session_telemetry` | `ctx.tools` | `tool/call`, `tool/result` | - | get_session_telemetry folds the calling session's own operating figures — token velocity, prompt-cache hit rate, context headroom, turn latency, subagent counts — over a rolling window of closed turns from the durable log; it registers no session events of its own. |
+| `@deepseek-ai/dsh-plugin-semantic-patcher` | `patch_symbol_body` | `ctx.tools` | `tool/call`, `tool/result` | - | patch_symbol_body replaces the body of one named TypeScript symbol in a repo-relative file, parsing to locate the exact span and writing atomically; a path resolving outside the repository root or a patch that does not parse is refused. |
 | `@deepseek-ai/dsh-plugin-subagent-router` | `subagent` | `ctx.tools`, `ctx.subagents` | `tool/call`, `tool/result`, `child session events through the chosen provider` | - | A single delegation entry routes a task to a capable subagent provider selected by config-owned policy; the model names only the task (description + prompt), never a provider or transport. |
 | `@deepseek-ai/dsh-plugin-arch-guard` | `check_module_boundary` | `ctx.tools` | `tool/call`, `tool/result` | - | check_module_boundary judges whether one package importing another is legal under the monorepo layering rules (tier direction, the plugins-do-not-import-each-other rule, acyclicity, exports map); the workspace graph is scanned once at mount. |
 | `@deepseek-ai/dsh-plugin-doc-sync-automator` | `sync_bilingual_pair` | `ctx.tools` | `tool/call`, `tool/result` | - | sync_bilingual_pair splices a changed English doc section into its .zh.md mirror, updates the .i18n.yaml consistency record, and reports whether the mirror stays within its doc budget; the mirror then carries NEEDS-TRANSLATION debt for the spliced section. |
@@ -292,6 +293,43 @@ Report this conversation's own operating figures: mean tokens per turn and turn 
 Source: [`packages/plugins/plugin-telemetry-recorder/src/index.ts`](../packages/plugins/plugin-telemetry-recorder/src/index.ts)
 
 get_session_telemetry folds the calling session's own operating figures — token velocity, prompt-cache hit rate, context headroom, turn latency, subagent counts — over a rolling window of closed turns from the durable log; it registers no session events of its own.
+
+<a id="deepseek-aidsh-plugin-semantic-patcher"></a>
+
+## `@deepseek-ai/dsh-plugin-semantic-patcher`
+
+### `patch_symbol_body`
+
+Replace the body of one named symbol in a local TypeScript (.ts or .tsx) file. The symbol is located in the parsed syntax tree, not by matching text, so the edit lands on the declaration you named. Supports top-level functions, function-valued bindings (arrow functions), and class members; name a member as Class.method to disambiguate. If the name matches no symbol or more than one, the call fails and lists the candidates instead of guessing. The replacement is parsed before anything is written: if the result would not parse, the file is left byte-for-byte unchanged.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "Repo-relative path to a TypeScript (.ts or .tsx) file inside the repository root."
+    },
+    "symbol": {
+      "type": "string",
+      "description": "The symbol whose body to replace: a top-level name, or Class.method for a class member."
+    },
+    "newBody": {
+      "type": "string",
+      "description": "The replacement body source. Include the surrounding braces for a block body (for example \"{ return 1 }\"); for a concise arrow body, pass the expression alone."
+    }
+  },
+  "required": [
+    "path",
+    "symbol",
+    "newBody"
+  ]
+}
+```
+
+Source: [`packages/plugins/plugin-semantic-patcher/src/index.ts`](../packages/plugins/plugin-semantic-patcher/src/index.ts)
+
+patch_symbol_body replaces the body of one named TypeScript symbol in a repo-relative file, parsing to locate the exact span and writing atomically; a path resolving outside the repository root or a patch that does not parse is refused.
 
 <a id="deepseek-aidsh-plugin-subagent-router"></a>
 
