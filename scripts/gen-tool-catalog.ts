@@ -56,6 +56,7 @@ import Lsp from '@deepseek-ai/dsh-lsp'
 import * as ToolAstContext from '@deepseek-ai/dsh-plugin-ast-context'
 import * as ToolArchGuard from '@deepseek-ai/dsh-plugin-arch-guard'
 import * as ToolDocSyncAutomator from '@deepseek-ai/dsh-plugin-doc-sync-automator'
+import * as ToolImpactedTests from '@deepseek-ai/dsh-plugin-impacted-tests'
 import * as ToolDiagnosticSifter from '@deepseek-ai/dsh-plugin-diagnostic-sifter'
 import * as ToolPinnedScratchpad from '@deepseek-ai/dsh-plugin-pinned-scratchpad'
 import * as ToolTelemetryRecorder from '@deepseek-ai/dsh-plugin-telemetry-recorder'
@@ -304,6 +305,19 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'sync_bilingual_pair splices a changed English doc section into its .zh.md mirror, updates the .i18n.yaml consistency record, and reports whether the mirror stays within its doc budget; the mirror then carries NEEDS-TRANSLATION debt for the spliced section.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-plugin-impacted-tests',
+    dir: 'plugin-impacted-tests',
+    source: 'packages/plugins/plugin-impacted-tests/src/index.ts',
+    requires: ['ctx.tools', 'ctx.subprocess'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(LocalSubprocessRuntime)
+      await ctx.plugin(ToolImpactedTests, { cwd: root })
+    },
+    note:
+      'run_impacted_tests selects the test suites reachable from a set of changed files through the workspace reverse import-DAG and runs exactly those through the configured vitest, returning the bounded runner output; the graph is derived from the tsconfig paths.',
   },
   {
     pkg: '@deepseek-ai/dsh-plugin-diagnostic-sifter',
