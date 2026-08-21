@@ -67,7 +67,18 @@ export default defineConfig({
     // and refresh stay serial: record spends real API quota per scenario, and
     // refresh write-back harvests volatile values from fixtures already on
     // disk, so concurrent writers would corrupt goldens.
-    testTimeout: 120_000,
+    // Suite-wide, not per-scenario: Scenario (packages/test-support/acp-snapshot/src/suite.ts)
+    // passes no third `timeout` argument to its per-scenario `it(...)`, so a heavy
+    // scenario — e.g. subagent-continuable-inheritance, which spawns multiple real
+    // agent subprocesses — can only be given headroom by raising this bound. Raised
+    // from 120s: that scenario hit the fixed 120s ceiling under 4-core CI contention.
+    // Note this value is NOT run through scaledTimeout/DSH_TEST_TIMEOUT_FACTOR (unlike
+    // vitest.config.ts's testTimeout), so the snapshot lane's factor never reached it;
+    // the harness's own per-wait persistence timeout is 10s * DSH_TEST_TIMEOUT_FACTOR
+    // (packages/test-support/acp-snapshot/src/harness.ts), so a scenario awaiting
+    // several sequential persistence events can exceed a 120s test-level bound while no
+    // single wait is near its own ceiling. 300s adds headroom above that.
+    testTimeout: 300_000,
     hookTimeout: 30_000,
     fileParallelism: (process.env.DSH_SNAPSHOT || 'replay') === 'replay' && snapshotMaxConcurrency > 1,
     maxConcurrency: snapshotMaxConcurrency,
