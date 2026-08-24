@@ -168,7 +168,10 @@ export async function* toStreamChunks(
         yield {
           type: 'tool-call-delta',
           index: event.contentIndex,
-          id: CallId(known?.id ?? ''),
+          // Never emit an empty call id: a missing id on a continuation delta
+          // would persist an empty callId into the session log and fail the
+          // tool-source validation on reload. Fall back to the content index.
+          id: CallId(known?.id && known.id.length > 0 ? known.id : `call-${event.contentIndex}`),
           ...known?.name !== undefined && known.name.length > 0 ? { name: known.name } : {},
           argumentsDelta: event.delta,
         }
@@ -180,7 +183,7 @@ export async function* toStreamChunks(
           index: event.contentIndex,
           block: {
             type: 'tool-call',
-            id: CallId(event.toolCall.id),
+            id: CallId(event.toolCall.id && event.toolCall.id.length > 0 ? event.toolCall.id : `call-${event.contentIndex}`),
             name: event.toolCall.name,
             // pi-ai hands back the PARSED arguments; the harness vocabulary
             // keeps the raw string.

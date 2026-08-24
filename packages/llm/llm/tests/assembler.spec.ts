@@ -110,6 +110,17 @@ describe('BlockAssembler', () => {
     ])
   })
 
+  it('treats an explicitly empty callId like a missing one (fallback id)', () => {
+    const assembler = new BlockAssembler()
+    // A lenient wire can stream an explicit empty-string id; it must not
+    // survive into the assembled block (empty ids persist into session logs
+    // and fail the tool-source validation on reload).
+    assembler.push({ type: 'tool-call-delta', index: 2, id: CallId(''), name: 'echo', argumentsDelta: '{}' } as StreamChunk)
+    expect(assembler.blocks()).toEqual([
+      { type: 'tool-call', id: CallId('call-2'), name: 'echo', arguments: '{}' },
+    ])
+  })
+
   it('exposes usage via the getter when a usage chunk was received', () => {
     const assembler = new BlockAssembler()
     assembler.push({ type: 'text-delta', index: 0, text: 'msg' })
