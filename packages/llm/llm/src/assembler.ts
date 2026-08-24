@@ -111,7 +111,11 @@ export class BlockAssembler {
       case 'reasoning': return { type: 'reasoning', text: partial.text }
       case 'tool-call': return {
         type: 'tool-call',
-        id: partial.toolCallId ?? CallId(`call-${index}`),
+        // `||` (not `??`): a provider that streamed an empty callId must not
+        // keep it — an empty id persists into the session log and later fails
+        // the tool-source validation on reload. The synthesized fallback id
+        // is per-message unique by index.
+        id: partial.toolCallId || CallId(`call-${index}`),
         name: partial.toolCallName ?? '',
         arguments: partial.toolCallArguments,
       }

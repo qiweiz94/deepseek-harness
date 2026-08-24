@@ -68,7 +68,10 @@ function closeBlock(block: OpenBlock): ContentBlock {
     case 'reasoning': return { type: 'reasoning', text: block.text }
     case 'tool-call': return {
       type: 'tool-call',
-      id: CallId(block.callId ?? ''),
+      // Never close with an empty callId (it would persist into the session
+      // log and fail the tool-source validation on reload); the wire index
+      // stands in as a non-empty, locally-unique fallback.
+      id: CallId(block.callId ?? `call-${block.index}`),
       name: block.name ?? '',
       arguments: block.text,
     }
@@ -156,14 +159,19 @@ export async function* translate(payloads: AsyncIterable<string>): AsyncGenerato
           toolBlocks.set(call.index, block)
           yield { type: 'block-start', index: block.index, blockType: 'tool-call' }
         }
-        if (call.id !== undefined) block.callId = call.id
-        if (call.function?.name !== undefined) block.name = call.function.name
+        if (typeof call.id === 'string' && call.id.length > 0) block.callId = call.id
+        if (typeof call.function?.name === 'string' && call.function.name.length > 0) block.name = call.function.name
         const fragment = call.function?.arguments ?? ''
         block.text += fragment
         yield {
           type: 'tool-call-delta',
           index: block.index,
-          id: CallId(block.callId ?? ''),
+          // A provider that omits (or nulls) the call id on continuation
+          // deltas must not degrade the first delta's captured identity to an
+          // empty callId: an empty id would persist into the session log and
+          // later fail the tool-source validation on reload. Fall back to the
+          // wire index so the id stays non-empty and locally unique.
+          id: CallId(block.callId ?? `call-${block.index}`),
           ...block.name !== undefined ? { name: block.name } : {},
           argumentsDelta: fragment,
         }

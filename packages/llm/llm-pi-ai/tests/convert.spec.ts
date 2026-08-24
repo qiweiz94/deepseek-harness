@@ -715,7 +715,7 @@ describe('toStreamChunks', () => {
       { type: 'toolcall_delta', contentIndex: 0, delta: '{}', partial: assistant() },
       { type: 'done', reason: 'stop', message: assistant() },
     )))
-    expect(chunks[1]).toEqual({ type: 'tool-call-delta', index: 0, id: '', argumentsDelta: '{}' })
+    expect(chunks[1]).toEqual({ type: 'tool-call-delta', index: 0, id: 'call-0', argumentsDelta: '{}' })
   })
 
   it('maps error events to error finish chunks (in-stream error style)', async () => {
@@ -903,6 +903,6 @@ describe('toStreamChunks defensive branches', () => {
       { type: 'toolcall_delta', contentIndex: 0, delta: '{}', partial: assistant() },
       { type: 'done', reason: 'stop', message: assistant() },
     )))
-    expect(chunks[0]).toEqual({ type: 'tool-call-delta', index: 0, id: '', argumentsDelta: '{}' })
+    expect(chunks[0]).toEqual({ type: 'tool-call-delta', index: 0, id: 'call-0', argumentsDelta: '{}' })
   })
 })

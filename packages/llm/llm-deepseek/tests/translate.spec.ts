@@ -320,10 +320,13 @@ describe('translate: defensive tool-call branches', () => {
       { choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
       DONE,
     )))
+    // A missing id must never degrade to an empty callId (that would persist
+    // into the session log and fail the tool-source validation on reload);
+    // the wire index stands in as a non-empty, locally-unique fallback.
     expect(chunks).toEqual([
       { type: 'block-start', index: 0, blockType: 'tool-call' },
-      { type: 'tool-call-delta', index: 0, id: '', argumentsDelta: '{}' },
-      { type: 'block-end', index: 0, block: { type: 'tool-call', id: '', name: '', arguments: '{}' } },
+      { type: 'tool-call-delta', index: 0, id: 'call-0', argumentsDelta: '{}' },
+      { type: 'block-end', index: 0, block: { type: 'tool-call', id: 'call-0', name: '', arguments: '{}' } },
       { type: 'finish', reason: { kind: 'tool-calls' } },
     ])
   })
